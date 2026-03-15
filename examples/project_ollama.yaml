@@ -1,0 +1,37 @@
+project_name: ExampleProject
+
+sources:
+  roots:
+    - src/
+  include:
+    - "**/*.py"
+    - "**/*.java"
+    - "**/*.c"
+    - "**/*.cc"
+    - "**/*.cpp"
+    - "**/*.h"
+    - "**/*.hpp"
+    - "**/*.js"
+    - "**/*.mjs"
+    - "**/*.cjs"
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.go"
+    - "**/*.rs"
+    - "**/*.cs"
+  exclude:
+    - "**/tests/**"
+
+sdd_template: ../templates/sdd_default.yaml
+
+llm:
+  provider: ollama
+  model_name: qwen2.5:14b-instruct-q4_K_M
+  temperature: 0.2
+
+generation:
+  max_files: 500
+  code_chunk_lines: 40
+  retrieval_top_k: 6
+
+output_dir: ../artifacts
