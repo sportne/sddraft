@@ -1,0 +1,28 @@
+document_type: sdd
+
+sections:
+  - id: "1"
+    title: "Scope"
+    instruction: "Describe the CSC and the purpose of this document."
+    evidence_kinds:
+      - csc_descriptor
+
+  - id: "2"
+    title: "Design Overview"
+    instruction: "Summarize the CSC responsibilities and dependencies."
+    evidence_kinds:
+      - code_summary
+      - dependencies
+
+  - id: "3"
+    title: "Interface Design"
+    instruction: "Describe provided and used interfaces based on evidence."
+    evidence_kinds:
+      - interfaces
+
+  - id: "4"
+    title: "Detailed Design"
+    instruction: "Document detailed behavior from available code evidence."
+    evidence_kinds:
+      - code_summary
+      - commit_impact

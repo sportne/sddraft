@@ -1,2 +1,58 @@
-# sddraft
-AI-assisted generator for Software Design Descriptions (SDDs) and commit-driven documentation updates.
+# SDDraft
+
+SDDraft is a deterministic Python CLI that helps teams generate and maintain
+MIL-STD-498-style Software Design Description (SDD) documents.
+
+It supports:
+- Initial SDD draft generation from repository evidence.
+- Commit-driven update proposals for impacted SDD sections.
+- Grounded project Q&A on the command line using generated docs and code chunks.
+
+## Commands
+
+- `sddraft generate`
+- `sddraft propose-updates`
+- `sddraft validate-config`
+- `sddraft inspect-diff`
+- `sddraft ask`
+
+## Quick Start
+
+1. Create a virtual environment and install dev dependencies:
+
+```bash
+make setup-venv
+make install-dev
+```
+
+2. Validate configuration:
+
+```bash
+sddraft validate-config --project-config examples/project.yaml --csc examples/csc_nav_ctrl.yaml
+```
+
+3. Generate an initial SDD:
+
+```bash
+sddraft generate --project-config examples/project.yaml --csc examples/csc_nav_ctrl.yaml --repo-root . --provider mock
+```
+
+4. Ask grounded questions:
+
+```bash
+sddraft ask --index-path artifacts/NAV_CTRL/retrieval_index.json --question "What interfaces are exposed?" --provider mock
+```
+
+## Quality Gates
+
+The project includes `kleuw`-style quality infrastructure:
+- `black` + `isort` formatting
+- `ruff` linting
+- `mypy` type checking
+- `pytest` + `pytest-cov` with coverage threshold
+
+Run all checks with:
+
+```bash
+make ci
+```

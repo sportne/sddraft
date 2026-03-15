@@ -1,0 +1,357 @@
+# SDDraft Architecture
+
+This document describes the internal architecture of SDDraft.
+
+It explains how the system is organized internally and how the major subsystems interact.
+
+Functional requirements are defined in `SPEC.md`.
+Development rules are defined in `AGENTS.md`.
+
+---
+
+# 1. System Overview
+
+SDDraft is a documentation generation pipeline.
+
+It converts repository state plus configuration into SDD documentation artifacts.
+
+The pipeline has two modes:
+
+1. Initial SDD generation
+2. Commit-based update proposals
+
+The system intentionally performs deterministic analysis first and LLM generation second.
+
+---
+
+# 2. Core Pipeline Model
+
+All workflows follow the same high-level pipeline:
+
+```text
+Config + CSC Descriptor
+↓
+Repository Analysis
+↓
+Evidence Construction
+↓
+Prompt Construction
+↓
+LLM Generation
+↓
+Document Rendering
+```
+
+Each stage is implemented by a separate subsystem.
+
+---
+
+# 3. Subsystems
+
+## 3.1 Config System
+
+Loads and validates all user-supplied configuration.
+
+Inputs:
+
+* project configuration
+* CSC descriptors
+* SDD templates
+
+Outputs:
+
+* validated configuration objects
+
+Responsibilities:
+
+* schema validation
+* default values
+* normalization
+
+This subsystem performs no repository inspection and no generation logic.
+
+---
+
+## 3.2 Repository Analysis
+
+Extracts structured information from the repository.
+
+Inputs:
+
+* source roots
+* include/exclude rules
+* commit references
+
+Outputs:
+
+* source file inventory
+* code summaries
+* interface summaries
+* dependency summaries
+* diff results
+
+The goal of this subsystem is to convert raw repository data into structured facts.
+
+This subsystem must not perform documentation generation.
+
+---
+
+## 3.3 Commit Impact Analyzer
+
+Converts raw diff data into a higher-level change model.
+
+Input:
+
+* git diff
+* file summaries
+
+Output:
+
+* `CommitImpact` model
+
+The impact model classifies changes such as:
+
+* interface changes
+* logic changes
+* dependency changes
+* documentation-only changes
+
+It also maps changes to candidate SDD sections.
+
+---
+
+## 3.4 Evidence Builder
+
+Constructs section-scoped evidence packs.
+
+Evidence packs are the primary input to generation.
+
+Each evidence pack contains:
+
+* CSC metadata
+* section specification
+* relevant code summaries
+* interface summaries
+* dependency summaries
+* commit impact summary, if applicable
+* existing section text, if applicable
+
+Evidence packs must be deterministic and inspectable.
+
+---
+
+## 3.5 Prompt Builder
+
+Transforms an evidence pack into an LLM prompt.
+
+The prompt builder is responsible for:
+
+* selecting the correct prompt template
+* injecting evidence data
+* attaching response schemas
+* producing a structured generation request
+
+The prompt builder must not call provider SDKs.
+
+---
+
+## 3.6 LLM Adapter
+
+Handles communication with language models.
+
+Responsibilities:
+
+* send structured generation requests
+* receive responses
+* validate structured outputs
+* perform retry logic if necessary
+
+The rest of the system interacts only with the abstract LLM interface.
+
+Concrete providers like Gemini and future providers are implemented behind that interface.
+
+---
+
+## 3.7 Workflow Orchestrators
+
+Two orchestrators exist:
+
+### Generate SDD
+
+Coordinates initial document generation.
+
+### Propose Updates
+
+Coordinates commit-based documentation updates.
+
+Orchestrators perform the pipeline sequence but do not contain heavy logic.
+
+---
+
+## 3.8 Renderers
+
+Convert structured results into user-facing outputs.
+
+Outputs include:
+
+* Markdown SDD documents
+* JSON review artifacts
+* update proposal reports
+
+Renderers must operate only on structured domain models.
+
+---
+
+# 4. Data Model Strategy
+
+The system uses structured domain models for all major artifacts.
+
+Important models include:
+
+* `CSCDescriptor`
+* `SDDTemplate`
+* `SDDSectionSpec`
+* `CodeUnitSummary`
+* `InterfaceSummary`
+* `CommitImpact`
+* `SectionEvidencePack`
+* `SectionDraft`
+* `SectionUpdateProposal`
+
+These models serve as the system's internal language.
+
+Modules communicate through these models rather than raw dictionaries.
+
+---
+
+# 5. Generation Strategy
+
+SDD generation is section-scoped.
+
+Instead of generating a full document in one model call, the system:
+
+1. builds evidence for one section
+2. generates the section
+3. stores structured output
+4. proceeds to the next section
+
+Advantages:
+
+* better prompt control
+* smaller context
+* easier debugging
+* safer generation
+
+---
+
+# 6. Update Strategy
+
+Update proposals are impact-driven.
+
+Instead of regenerating an entire document:
+
+1. analyze commit
+2. detect impacted sections
+3. generate updates only for those sections
+
+This reduces unnecessary changes and improves reviewability.
+
+---
+
+# 7. Dependency Rules
+
+Subsystem dependencies must follow this direction:
+
+```text
+CLI
+↓
+Workflows
+↓
+Config / Repo / Analysis / Prompts / LLM / Render
+↓
+Domain
+```
+
+Key constraints:
+
+* domain models have no dependencies on other modules
+* LLM providers are isolated
+* repo analysis does not call the LLM
+* renderers do not inspect repository data
+
+---
+
+# 8. Deterministic vs Generative Responsibilities
+
+The system separates deterministic and generative work.
+
+Deterministic:
+
+* repo scanning
+* code summary extraction
+* diff parsing
+* commit impact classification
+* evidence construction
+* section mapping
+
+Generative:
+
+* section drafting
+* design narrative
+* update text proposals
+
+This separation is essential for maintainability.
+
+---
+
+# 9. Error Handling Model
+
+Errors should be categorized by subsystem:
+
+| Subsystem  | Example Errors         |
+| ---------- | ---------------------- |
+| config     | invalid YAML           |
+| repo       | missing files          |
+| git        | invalid commit spec    |
+| analysis   | unsupported file       |
+| llm        | provider error         |
+| validation | schema mismatch        |
+| render     | invalid document model |
+
+Workflows should propagate errors with clear messages.
+
+---
+
+# 10. Extension Points
+
+The architecture is designed to allow:
+
+* additional LLM providers
+* richer language parsers
+* additional output formats
+* more advanced change detection
+* batch workflows
+* CI integration
+
+The key extension boundaries are:
+
+* `llm/`
+* `render/`
+* `repo/`
+* `analysis/section_mapper`
+
+---
+
+# 11. Architectural Priorities
+
+The system should prioritize:
+
+1. clarity
+2. testability
+3. modularity
+4. traceability
+5. conservative generation
+
+The goal is not to produce the most sophisticated AI pipeline.
+
+The goal is to produce a reliable documentation generation tool that engineers can trust and extend.

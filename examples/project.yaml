@@ -1,0 +1,23 @@
+project_name: ExampleProject
+
+sources:
+  roots:
+    - src/
+  include:
+    - "**/*.py"
+  exclude:
+    - "**/tests/**"
+
+sdd_template: ../templates/sdd_default.yaml
+
+llm:
+  provider: mock
+  model_name: mock-sddraft
+  temperature: 0.2
+
+generation:
+  max_files: 500
+  code_chunk_lines: 40
+  retrieval_top_k: 6
+
+output_dir: ../artifacts

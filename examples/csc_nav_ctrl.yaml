@@ -1,0 +1,18 @@
+csc_id: NAV_CTRL
+title: Navigation Control
+purpose: Executes route sequencing and navigation control.
+
+source_roots:
+  - ../src/
+
+key_files:
+  - ../src/sddraft/workflows/generate.py
+
+provided_interfaces:
+  - NavControlService
+
+used_interfaces:
+  - PositionProvider
+
+requirements:
+  - SYS-NAV-001
