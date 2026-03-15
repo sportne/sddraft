@@ -209,7 +209,9 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     assert generate_calls[0]["temperature"] == 0.73
 
     propose_calls: list[dict[str, object]] = []
-    fake_impact = CommitImpact(commit_range="HEAD~1..HEAD", changed_files=[], summary="s")
+    fake_impact = CommitImpact(
+        commit_range="HEAD~1..HEAD", changed_files=[], summary="s"
+    )
     monkeypatch.setattr(
         cli_module,
         "propose_updates",
@@ -251,7 +253,10 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     assert propose_calls
     assert propose_calls[0]["model_name"] == "override-model"
     assert propose_calls[0]["temperature"] == 0.73
-    assert created_clients == [("gemini", "override-model"), ("gemini", "override-model")]
+    assert created_clients == [
+        ("gemini", "override-model"),
+        ("gemini", "override-model"),
+    ]
 
 
 def test_cli_error_messages_for_runtime_paths(
