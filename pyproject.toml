@@ -15,6 +15,8 @@ authors = [
 dependencies = [
   "pydantic>=2.8,<3.0",
   "PyYAML>=6.0,<7.0",
+  "tree-sitter>=0.21,<0.22",
+  "tree-sitter-languages>=1.10,<2.0",
 ]
 
 [project.optional-dependencies]

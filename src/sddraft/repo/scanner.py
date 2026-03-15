@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
@@ -14,7 +13,9 @@ from sddraft.domain.models import (
     KnowledgeChunk,
     ProjectConfig,
     ScanResult,
+    SourceLanguage,
 )
+from sddraft.repo.language_analyzers import detect_language, get_analyzer_for_path
 
 
 def _matches_patterns(path: Path, include: list[str], exclude: list[str]) -> bool:
@@ -53,126 +54,6 @@ def discover_source_files(
     return deduplicated
 
 
-def _safe_parse_python(path: Path) -> ast.Module | None:
-    try:
-        return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (OSError, SyntaxError, UnicodeDecodeError):
-        return None
-
-
-def summarize_python_file(path: Path) -> CodeUnitSummary:
-    """Extract deterministic summary information from a Python file."""
-
-    module = _safe_parse_python(path)
-    if module is None:
-        raise AnalysisError(f"Failed to parse Python file: {path}")
-
-    functions: list[str] = []
-    classes: list[str] = []
-    docstrings: list[str] = []
-    imports: list[str] = []
-
-    module_docstring = ast.get_docstring(module)
-    if module_docstring:
-        docstrings.append(module_docstring)
-
-    for node in module.body:
-        if isinstance(node, ast.FunctionDef):
-            functions.append(node.name)
-            function_doc = ast.get_docstring(node)
-            if function_doc:
-                docstrings.append(function_doc)
-        elif isinstance(node, ast.ClassDef):
-            classes.append(node.name)
-            class_doc = ast.get_docstring(node)
-            if class_doc:
-                docstrings.append(class_doc)
-            for item in node.body:
-                if isinstance(item, ast.FunctionDef):
-                    function_doc = ast.get_docstring(item)
-                    if function_doc:
-                        docstrings.append(function_doc)
-        elif isinstance(node, ast.Import):
-            imports.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            module_name = node.module or ""
-            imported = ", ".join(alias.name for alias in node.names)
-            imports.append(f"{module_name}:{imported}")
-
-    return CodeUnitSummary(
-        path=path,
-        language="python",
-        functions=sorted(set(functions)),
-        classes=sorted(set(classes)),
-        docstrings=sorted(set(docstrings)),
-        imports=sorted(set(imports)),
-    )
-
-
-def _extract_interface_summaries(
-    path: Path, module: ast.Module
-) -> list[InterfaceSummary]:
-    interfaces: list[InterfaceSummary] = []
-
-    for node in module.body:
-        if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
-            members = [
-                item.name
-                for item in node.body
-                if isinstance(item, ast.FunctionDef) and not item.name.startswith("_")
-            ]
-            interfaces.append(
-                InterfaceSummary(
-                    name=node.name,
-                    kind="class",
-                    source_path=path,
-                    members=sorted(set(members)),
-                )
-            )
-
-        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_"):
-            interfaces.append(
-                InterfaceSummary(
-                    name=node.name,
-                    kind="function",
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-    if interfaces:
-        interfaces.append(
-            InterfaceSummary(
-                name=path.stem,
-                kind="module",
-                source_path=path,
-                members=sorted(
-                    {
-                        iface.name
-                        for iface in interfaces
-                        if iface.kind in {"class", "function"}
-                    }
-                ),
-            )
-        )
-
-    return interfaces
-
-
-def extract_interface_summaries(paths: Iterable[Path]) -> list[InterfaceSummary]:
-    """Extract public interfaces from source files where feasible."""
-
-    interfaces: list[InterfaceSummary] = []
-    for path in paths:
-        if path.suffix != ".py":
-            continue
-        module = _safe_parse_python(path)
-        if module is None:
-            continue
-        interfaces.extend(_extract_interface_summaries(path, module))
-    return interfaces
-
-
 def _build_chunk_id(source_path: Path, line_start: int, line_end: int) -> str:
     return f"code::{source_path.as_posix()}::{line_start}-{line_end}"
 
@@ -181,10 +62,15 @@ def build_code_chunks(
     paths: Iterable[Path],
     repo_root: Path,
     chunk_lines: int = 40,
+    language_by_path: dict[Path, SourceLanguage] | None = None,
+    symbol_count_by_path: dict[Path, int] | None = None,
 ) -> list[KnowledgeChunk]:
     """Split code files into deterministic line-based retrieval chunks."""
 
     chunks: list[KnowledgeChunk] = []
+    language_by_path = language_by_path or {}
+    symbol_count_by_path = symbol_count_by_path or {}
+
     for path in sorted(paths):
         try:
             content = path.read_text(encoding="utf-8")
@@ -194,6 +80,9 @@ def build_code_chunks(
         lines = content.splitlines()
         if not lines:
             continue
+
+        language = language_by_path.get(path, detect_language(path))
+        symbol_count = symbol_count_by_path.get(path, 0)
 
         start = 0
         while start < len(lines):
@@ -215,11 +104,30 @@ def build_code_chunks(
                         text=snippet,
                         line_start=start + 1,
                         line_end=end,
+                        metadata={
+                            "language": language,
+                            "symbol_count": str(symbol_count),
+                        },
                     )
                 )
             start = end
 
     return chunks
+
+
+def analyze_source_file(path: Path) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    """Analyze one source file with the registered language analyzer."""
+
+    analyzer = get_analyzer_for_path(path)
+    if analyzer.language == "unknown":
+        raise AnalysisError(f"Unsupported source language for '{path}'")
+
+    try:
+        source_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise AnalysisError(f"Failed to read source file '{path}': {exc}") from exc
+
+    return analyzer.analyze(path=path, source_text=source_text)
 
 
 def scan_repository(
@@ -241,14 +149,22 @@ def scan_repository(
         files = files[: project_config.generation.max_files]
 
     code_summaries: list[CodeUnitSummary] = []
-    for path in files:
-        if path.suffix == ".py":
-            try:
-                code_summaries.append(summarize_python_file(path))
-            except AnalysisError:
-                continue
+    interface_summaries: list[InterfaceSummary] = []
+    language_by_path: dict[Path, SourceLanguage] = {}
+    symbol_count_by_path: dict[Path, int] = {}
 
-    interface_summaries = extract_interface_summaries(files)
+    for path in files:
+        try:
+            summary, interfaces = analyze_source_file(path)
+        except AnalysisError:
+            continue
+
+        code_summaries.append(summary)
+        interface_summaries.extend(interfaces)
+
+        language_by_path[path] = summary.language
+        symbol_count_by_path[path] = len(summary.functions) + len(summary.classes)
+
     dependency_values: set[str] = set()
     for summary in code_summaries:
         dependency_values.update(summary.imports)
@@ -257,6 +173,8 @@ def scan_repository(
         files,
         repo_root=repo_root,
         chunk_lines=project_config.generation.code_chunk_lines,
+        language_by_path=language_by_path,
+        symbol_count_by_path=symbol_count_by_path,
     )
 
     return ScanResult(

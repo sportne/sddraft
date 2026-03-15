@@ -5,6 +5,12 @@ sources:
     - src/
   include:
     - "**/*.py"
+    - "**/*.java"
+    - "**/*.c"
+    - "**/*.cc"
+    - "**/*.cpp"
+    - "**/*.h"
+    - "**/*.hpp"
   exclude:
     - "**/tests/**"
 

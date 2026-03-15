@@ -7,6 +7,7 @@ It supports:
 - Initial SDD draft generation from repository evidence.
 - Commit-driven update proposals for impacted SDD sections.
 - Grounded project Q&A on the command line using generated docs and code chunks.
+- Multi-language repository analysis for Python, Java, and C++.
 
 ## Commands
 
@@ -15,6 +16,13 @@ It supports:
 - `sddraft validate-config`
 - `sddraft inspect-diff`
 - `sddraft ask`
+
+## Language Support
+
+- Supported source languages: Python, Java, and C++.
+- Supported extensions: `.py`, `.java`, `.c`, `.cc`, `.cpp`, `.h`, `.hpp`.
+- Parsing uses tree-sitter analyzers in the `repo` layer.
+- Unsupported extensions are ignored by language analysis unless included in future analyzers.
 
 ## Quick Start
 

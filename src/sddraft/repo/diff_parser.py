@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 
 from sddraft.domain.errors import GitError
 from sddraft.domain.models import FileDiffSummary
-
-_SIGNATURE_RE = re.compile(r"^\s*(def|class)\s+\w+")
-_IMPORT_RE = re.compile(
-    r"^\s*(from\s+\S+\s+import|import\s+\S+|#include\s+[<\"].+[>\"])"
-)
-_COMMENT_RE = re.compile(r"^\s*(#|//|/\*|\*|\*/)?\s*$")
+from sddraft.repo.language_analyzers import detect_language, get_analyzer_for_path
 
 
 def get_git_diff(commit_range: str, repo_root: Path) -> str:
@@ -39,13 +33,18 @@ def get_git_diff(commit_range: str, repo_root: Path) -> str:
 def _finalize_file_summary(
     path: str, changed_lines: list[str], added: int, removed: int
 ) -> FileDiffSummary:
-    signature_changes = [line for line in changed_lines if _SIGNATURE_RE.match(line)]
-    dependency_changes = [line for line in changed_lines if _IMPORT_RE.match(line)]
+    path_obj = Path(path)
+    analyzer = get_analyzer_for_path(path_obj)
+
+    signature_changes = analyzer.signature_changes(changed_lines)
+    dependency_changes = analyzer.dependency_changes(changed_lines)
     comment_only = bool(changed_lines) and all(
-        _COMMENT_RE.match(line) for line in changed_lines
+        analyzer.is_comment_line(line) for line in changed_lines
     )
+
     return FileDiffSummary(
-        path=Path(path),
+        path=path_obj,
+        language=detect_language(path_obj),
         added_lines=added,
         removed_lines=removed,
         signature_changes=signature_changes,

@@ -32,7 +32,7 @@ def test_scan_repository_extracts_summaries_and_chunks(
     summary = result.code_summaries[0]
     assert "plan_route" in summary.functions
     assert "NavService" in summary.classes
-    assert any(dep.startswith("os") for dep in summary.imports)
+    assert any("import os" in dep for dep in summary.imports)
 
     interface_names = {item.name for item in result.interface_summaries}
     assert "NavService" in interface_names
@@ -43,3 +43,4 @@ def test_scan_repository_extracts_summaries_and_chunks(
     assert first_chunk.source_type == "code"
     assert first_chunk.line_start == 1
     assert first_chunk.line_end is not None
+    assert first_chunk.metadata.get("language") == "python"

@@ -15,11 +15,24 @@ class DomainModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+SourceLanguage = Literal["python", "java", "cpp", "unknown"]
+
+
 class SourcesConfig(DomainModel):
     """Source selection configuration."""
 
     roots: list[Path] = Field(default_factory=list)
-    include: list[str] = Field(default_factory=lambda: ["**/*.py"])
+    include: list[str] = Field(
+        default_factory=lambda: [
+            "**/*.py",
+            "**/*.java",
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.hpp",
+        ]
+    )
     exclude: list[str] = Field(default_factory=list)
 
 
@@ -98,7 +111,7 @@ class CodeUnitSummary(DomainModel):
     """Structured summary of one source file."""
 
     path: Path
-    language: str
+    language: SourceLanguage
     functions: list[str] = Field(default_factory=list)
     classes: list[str] = Field(default_factory=list)
     docstrings: list[str] = Field(default_factory=list)
@@ -110,6 +123,7 @@ class InterfaceSummary(DomainModel):
 
     name: str
     kind: Literal["class", "function", "module"]
+    language: SourceLanguage
     source_path: Path
     members: list[str] = Field(default_factory=list)
 
@@ -118,6 +132,7 @@ class FileDiffSummary(DomainModel):
     """Normalized file-level diff summary."""
 
     path: Path
+    language: SourceLanguage = "unknown"
     added_lines: int = 0
     removed_lines: int = 0
     signature_changes: list[str] = Field(default_factory=list)

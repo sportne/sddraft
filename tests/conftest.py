@@ -70,7 +70,15 @@ def sample_project_config(tmp_path: Path) -> ProjectConfig:
         project_name="ExampleProject",
         sources=SourcesConfig(
             roots=[tmp_path / "src"],
-            include=["**/*.py"],
+            include=[
+                "**/*.py",
+                "**/*.java",
+                "**/*.c",
+                "**/*.cc",
+                "**/*.cpp",
+                "**/*.h",
+                "**/*.hpp",
+            ],
             exclude=["**/tests/**"],
         ),
         sdd_template=tmp_path / "templates" / "sdd_default.yaml",
