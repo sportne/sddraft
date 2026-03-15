@@ -5,39 +5,31 @@
 - Use one task format: `ID`, `Status`, `Outcome`, `Definition of Done`, `Verification Command(s)`.
 - Allowed statuses: `[ ]` not started, `[~]` in progress, `[x]` done.
 - Update task status in the same PR that changes implementation.
-- Keep `Now (V1 Gate)` focused on release hardening and stability.
+- Keep `Now (V1 Gate)` focused on SPEC acceptance criteria for v1.
 
 ## Now (V1 Gate)
 
-- [x] **T-001**  
-  `Outcome:` Add and standardize this repository task board; link it from README.  
-  `Definition of Done:` `TASKS.md` exists with fixed sections and task format; README points to it.  
-  `Verification Command(s):` `rg -n "Task Board|TASKS.md" README.md TASKS.md`
+- [x] **T-007**  
+  `Outcome:` Add explicit "Extending SDDraft" documentation for provider, language analyzer, and renderer extension paths.  
+  `Definition of Done:` README contains concrete extension steps with architecture boundary reminders.  
+  `Verification Command(s):` `rg -n "Extending SDDraft|Add an LLM provider|Add a language analyzer|Add a renderer" README.md`
 
-- [x] **T-002**  
-  `Outcome:` Make CLI LLM overrides fully consistent for `generate`, `propose-updates`, and `ask`.  
-  `Definition of Done:` Runtime `provider`/`model` overrides are propagated end-to-end in workflows.  
-  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_workflow_generate_and_ask.py tests/test_workflow_propose_updates.py`
+- [x] **T-008**  
+  `Outcome:` Add optional Gemini dependency surface and concise Gemini setup guidance.  
+  `Definition of Done:` `pyproject.toml` includes `project.optional-dependencies.gemini`; README documents install, API key, and expected error behavior.  
+  `Verification Command(s):` `rg -n "optional-dependencies|gemini|GEMINI_API_KEY" pyproject.toml README.md`
 
-- [x] **T-003**  
-  `Outcome:` Add `--temperature` parity for generation/update commands and honor resolved runtime values.  
-  `Definition of Done:` `generate` and `propose-updates` accept `--temperature` and pass it to structured requests.  
-  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_workflow_generate_and_ask.py tests/test_workflow_propose_updates.py`
+- [x] **T-009**  
+  `Outcome:` Add acceptance tests for required CLI commands and batch generation behavior.  
+  `Definition of Done:` Tests cover `validate-config`, `generate`, `propose-updates`, `inspect-diff`, and multi-CSC generation in offline/mock mode.  
+  `Verification Command(s):` `pytest tests/test_cli_acceptance_v1.py`
+  `Result:` `tests/test_cli_acceptance_v1.py` added and passing.
 
-- [x] **T-004**  
-  `Outcome:` Harden user-facing errors for missing files and invalid runtime inputs.  
-  `Definition of Done:` Missing existing-SDD path and missing retrieval index produce categorized, clear CLI errors.  
-  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_workflow_propose_updates.py`
-
-- [x] **T-005**  
-  `Outcome:` Update docs/examples to reflect current multi-language support and provider setup expectations.  
-  `Definition of Done:` README includes runtime override guidance and task-board reference.  
-  `Verification Command(s):` `rg -n "provider|model|temperature|Task Board" README.md`
-
-- [x] **T-006**  
-  `Outcome:` Add regression tests for override propagation and error paths while maintaining coverage >= 90%.  
-  `Definition of Done:` New tests cover override and error behavior; test suite remains above threshold.  
-  `Verification Command(s):` `pytest`
+- [x] **T-010**  
+  `Outcome:` Run final v1 acceptance checklist and record results in this task board.  
+  `Definition of Done:` `ruff`, `mypy`, and full `pytest` pass with coverage >= 90% and status updated to done.  
+  `Verification Command(s):` `ruff check src tests && mypy src && pytest`
+  `Result:` `ruff` passed, `mypy` passed, `pytest` passed (`54 passed`, `92.48%` coverage).
 
 ## Next
 
@@ -51,6 +43,12 @@
 
 ## Done
 
+- [x] **T-001** Add and standardize in-repo task board; link from README.
+- [x] **T-002** Align runtime `provider`/`model` override behavior across `generate`, `propose-updates`, and `ask`.
+- [x] **T-003** Add `--temperature` parity for generation/update workflows.
+- [x] **T-004** Harden user-facing error handling for missing files and invalid runtime inputs.
+- [x] **T-005** Update docs for runtime override behavior and board usage.
+- [x] **T-006** Add regression tests for override propagation and error paths while maintaining coverage >= 90%.
 - [x] Core deterministic pipeline for `generate`, `propose-updates`, `inspect-diff`, and `ask`.
 - [x] Tree-sitter multi-language analyzer coverage for Python, Java, C++, JavaScript, TypeScript, Go, Rust, and C#.
 
