@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sddraft.analysis.hierarchy import (
+    default_hierarchy_index_path,
+    expand_chunks_with_hierarchy,
+    load_hierarchy_index,
+)
 from sddraft.analysis.retrieval import BM25Retriever, load_retrieval_index, to_citations
+from sddraft.domain.errors import AnalysisError
 from sddraft.domain.models import (
     AskResult,
     QueryAnswer,
@@ -27,6 +33,32 @@ def answer_question(
     index = load_retrieval_index(index_path)
     retriever = BM25Retriever(index)
     chunks = retriever.search(request.question, top_k=request.top_k)
+
+    hierarchy_fallback_note: str | None = None
+    hierarchy_path = default_hierarchy_index_path(index_path)
+    if hierarchy_path.exists():
+        try:
+            if hierarchy_path.stat().st_mtime < index_path.stat().st_mtime:
+                hierarchy_fallback_note = (
+                    "Hierarchy index appears stale; used lexical evidence only."
+                )
+            else:
+                hierarchy_index = load_hierarchy_index(hierarchy_path)
+                chunks = expand_chunks_with_hierarchy(
+                    initial_chunks=chunks,
+                    retrieval_index=index,
+                    hierarchy_index=hierarchy_index,
+                    top_k=request.top_k,
+                )
+        except (AnalysisError, OSError):
+            hierarchy_fallback_note = (
+                "Hierarchy index unavailable or unreadable; used lexical evidence only."
+            )
+    else:
+        hierarchy_fallback_note = (
+            "Hierarchy index unavailable; used lexical evidence only."
+        )
+
     citations = to_citations(chunks)
 
     evidence_pack = QueryEvidencePack(
@@ -54,5 +86,10 @@ def answer_question(
         "TBD"
     ):
         answer = answer.model_copy(update={"missing_information": ["TBD"]})
+
+    if hierarchy_fallback_note and hierarchy_fallback_note not in answer.uncertainty:
+        answer = answer.model_copy(
+            update={"uncertainty": [*answer.uncertainty, hierarchy_fallback_note]}
+        )
 
     return AskResult(answer=answer, evidence_pack=evidence_pack)

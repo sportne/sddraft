@@ -207,6 +207,7 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     assert generate_calls
     assert generate_calls[0]["model_name"] == "override-model"
     assert generate_calls[0]["temperature"] == 0.73
+    assert generate_calls[0]["hierarchy_docs_enabled"] is True
 
     propose_calls: list[dict[str, object]] = []
     fake_impact = CommitImpact(
@@ -253,10 +254,31 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     assert propose_calls
     assert propose_calls[0]["model_name"] == "override-model"
     assert propose_calls[0]["temperature"] == 0.73
+    assert propose_calls[0]["hierarchy_docs_enabled"] is True
     assert created_clients == [
         ("gemini", "override-model"),
         ("gemini", "override-model"),
     ]
+
+    generate_calls.clear()
+    rc_generate_no_hierarchy = main(
+        [
+            "generate",
+            "--project-config",
+            str(tmp_path / "p.yaml"),
+            "--csc",
+            str(tmp_path / "c.yaml"),
+            "--provider",
+            "gemini",
+            "--model",
+            "override-model",
+            "--temperature",
+            "0.73",
+            "--no-hierarchy-docs",
+        ]
+    )
+    assert rc_generate_no_hierarchy == 0
+    assert generate_calls[0]["hierarchy_docs_enabled"] is False
 
 
 def test_cli_error_messages_for_runtime_paths(

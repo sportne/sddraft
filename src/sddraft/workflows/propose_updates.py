@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from json import JSONDecodeError
 from pathlib import Path
+
+from pydantic import ValidationError as PydanticValidationError
 
 from sddraft.analysis.commit_impact import build_commit_impact
 from sddraft.analysis.evidence_builder import build_update_evidence_packs
@@ -17,6 +20,7 @@ from sddraft.domain.models import (
     KnowledgeChunk,
     ProjectConfig,
     ProposeUpdatesResult,
+    RetrievalIndex,
     SDDTemplate,
     SectionUpdateProposal,
     UpdateProposalReport,
@@ -28,6 +32,11 @@ from sddraft.render.markdown import write_markdown
 from sddraft.render.reports import render_update_report_markdown
 from sddraft.repo.diff_parser import get_git_diff, parse_diff
 from sddraft.repo.scanner import scan_repository
+from sddraft.workflows.hierarchy_docs import (
+    build_hierarchy_artifact,
+    load_hierarchy_artifact,
+    persist_hierarchy_outputs,
+)
 
 
 def _parse_existing_sections(markdown_path: Path) -> dict[str, str]:
@@ -87,6 +96,7 @@ def propose_updates(
     repo_root: Path,
     model_name: str | None = None,
     temperature: float | None = None,
+    hierarchy_docs_enabled: bool = True,
 ) -> ProposeUpdatesResult:
     """Run commit-impact analysis and generate section update proposals."""
 
@@ -161,21 +171,66 @@ def propose_updates(
     report_markdown_path = output_root / "update_report.md"
     report_json_path = output_root / "update_proposals.json"
     retrieval_index_path = output_root / "retrieval_index.json"
+    hierarchy_json_path: Path | None = None
+    hierarchy_index_path: Path | None = None
+    hierarchy_chunks: list[KnowledgeChunk] = []
 
     write_markdown(report_markdown_path, render_update_report_markdown(report))
     write_json_model(report_json_path, report)
 
+    if hierarchy_docs_enabled:
+        existing_artifact = None
+        candidate_hierarchy_json_path = (
+            output_root / "hierarchy" / "hierarchy_artifact.json"
+        )
+        if candidate_hierarchy_json_path.exists():
+            try:
+                existing_artifact = load_hierarchy_artifact(
+                    candidate_hierarchy_json_path
+                )
+            except (OSError, JSONDecodeError, PydanticValidationError, ValueError):
+                existing_artifact = None
+
+        changed_paths = {item.path for item in impact.changed_files}
+        hierarchy_artifact = build_hierarchy_artifact(
+            csc_id=csc.csc_id,
+            repo_root=repo_root,
+            scan_result=scan_result,
+            llm_client=llm_client,
+            model_name=resolved_model,
+            temperature=resolved_temperature,
+            changed_paths=changed_paths,
+            existing_artifact=existing_artifact,
+        )
+        (
+            hierarchy_json_path,
+            hierarchy_index_path,
+            _,
+            hierarchy_chunks,
+        ) = persist_hierarchy_outputs(
+            artifact=hierarchy_artifact,
+            output_root=output_root,
+        )
+
     indexer = LexicalIndexer()
-    new_chunks = (
-        _proposal_chunks(report, report_markdown_path) + scan_result.code_chunks
-    )
+    new_chunks = _proposal_chunks(report, report_markdown_path) + hierarchy_chunks
+    new_chunks.extend(scan_result.code_chunks)
 
     if retrieval_index_path.exists():
         existing_index = load_retrieval_index(retrieval_index_path)
+        if not hierarchy_docs_enabled:
+            existing_index = RetrievalIndex(
+                chunks=[
+                    chunk
+                    for chunk in existing_index.chunks
+                    if chunk.source_type not in {"file_summary", "directory_summary"}
+                ]
+            )
         retrieval_index = indexer.update(existing=existing_index, new_chunks=new_chunks)
     else:
         retrieval_index = indexer.build(
-            document_chunks=_proposal_chunks(report, report_markdown_path),
+            document_chunks=_proposal_chunks(report, report_markdown_path)
+            + hierarchy_chunks,
             code_chunks=scan_result.code_chunks,
         )
 
@@ -188,4 +243,6 @@ def propose_updates(
         report_markdown_path=report_markdown_path,
         report_json_path=report_json_path,
         retrieval_index_path=retrieval_index_path,
+        hierarchy_json_path=hierarchy_json_path,
+        hierarchy_index_path=hierarchy_index_path,
     )

@@ -1,5 +1,10 @@
 """Rendering subsystem API."""
 
+from .hierarchy import (
+    render_directory_summary_markdown,
+    render_file_summary_markdown,
+    write_hierarchy_markdown,
+)
 from .json_artifacts import write_json_model
 from .markdown import render_sdd_markdown, write_markdown
 from .reports import render_query_answer_text, render_update_report_markdown
@@ -10,4 +15,7 @@ __all__ = [
     "write_json_model",
     "render_update_report_markdown",
     "render_query_answer_text",
+    "render_file_summary_markdown",
+    "render_directory_summary_markdown",
+    "write_hierarchy_markdown",
 ]

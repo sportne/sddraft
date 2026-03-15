@@ -4,8 +4,17 @@ from __future__ import annotations
 
 import json
 
-from sddraft.domain.models import QueryEvidencePack, SectionEvidencePack
+from sddraft.domain.models import (
+    CodeUnitSummary,
+    DirectorySummaryDoc,
+    FileSummaryDoc,
+    InterfaceSummary,
+    QueryEvidencePack,
+    SectionEvidencePack,
+)
 from sddraft.prompts.templates import (
+    DIRECTORY_SUMMARY_SYSTEM_PROMPT,
+    FILE_SUMMARY_SYSTEM_PROMPT,
     QUERY_SYSTEM_PROMPT,
     SECTION_SYSTEM_PROMPT,
     UPDATE_SYSTEM_PROMPT,
@@ -50,3 +59,37 @@ def build_query_prompt(pack: QueryEvidencePack) -> tuple[str, str]:
         f"Citations:\n{_json([citation.model_dump(mode='json') for citation in pack.citations])}\n"
     )
     return QUERY_SYSTEM_PROMPT, user_prompt
+
+
+def build_file_summary_prompt(
+    *,
+    code_summary: CodeUnitSummary,
+    interfaces: list[InterfaceSummary],
+    code_excerpt: str,
+) -> tuple[str, str]:
+    """Return system and user prompts for file summary generation."""
+
+    user_prompt = (
+        "Generate a concise summary for one source file.\n"
+        f"Code Summary:\n{_json(code_summary.model_dump(mode='json'))}\n\n"
+        f"Interfaces:\n{_json([item.model_dump(mode='json') for item in interfaces])}\n\n"
+        f"Code Excerpt:\n{code_excerpt or 'TBD'}\n"
+    )
+    return FILE_SUMMARY_SYSTEM_PROMPT, user_prompt
+
+
+def build_directory_summary_prompt(
+    *,
+    directory_path: str,
+    local_files: list[FileSummaryDoc],
+    child_directories: list[DirectorySummaryDoc],
+) -> tuple[str, str]:
+    """Return system and user prompts for bottom-up directory summary generation."""
+
+    user_prompt = (
+        "Generate a directory summary from direct evidence only.\n"
+        f"Directory Path:\n{directory_path}\n\n"
+        f"Local File Summaries:\n{_json([item.model_dump(mode='json') for item in local_files])}\n\n"
+        f"Child Directory Summaries:\n{_json([item.model_dump(mode='json') for item in child_directories])}\n"
+    )
+    return DIRECTORY_SUMMARY_SYSTEM_PROMPT, user_prompt

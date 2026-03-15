@@ -54,6 +54,10 @@ def compute_distance(x: float, y: float) -> float:
     assert result.markdown_path.exists()
     assert result.review_json_path.exists()
     assert result.retrieval_index_path.exists()
+    assert result.hierarchy_json_path is not None
+    assert result.hierarchy_index_path is not None
+    assert result.hierarchy_json_path.exists()
+    assert result.hierarchy_index_path.exists()
     assert result.document.sections
 
     ask_result = answer_question(
@@ -65,6 +69,77 @@ def compute_distance(x: float, y: float) -> float:
 
     assert ask_result.answer.answer
     assert ask_result.answer.citations
+
+
+def test_ask_uses_hierarchy_expansion_when_available(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    llm = MockLLMClient()
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+    )
+
+    ask_result = answer_question(
+        request=QueryRequest(question="compute_distance", top_k=1),
+        index_path=result.retrieval_index_path,
+        llm_client=llm,
+        model_name="mock-sddraft",
+    )
+
+    assert any(
+        chunk.source_type == "directory_summary"
+        for chunk in ask_result.evidence_pack.chunks
+    )
+
+
+def test_ask_fallback_when_hierarchy_index_missing(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    llm = MockLLMClient()
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+    )
+    assert result.hierarchy_index_path is not None
+    result.hierarchy_index_path.unlink()
+
+    ask_result = answer_question(
+        request=QueryRequest(question="compute_distance", top_k=1),
+        index_path=result.retrieval_index_path,
+        llm_client=llm,
+        model_name="mock-sddraft",
+    )
+
+    assert any(
+        "Hierarchy index unavailable" in item for item in ask_result.answer.uncertainty
+    )
 
 
 def test_generate_flow_honors_runtime_model_and_temperature(

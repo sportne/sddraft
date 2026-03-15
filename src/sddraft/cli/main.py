@@ -26,6 +26,7 @@ def _add_common_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--provider", type=str)
     parser.add_argument("--model", type=str)
     parser.add_argument("--temperature", type=float)
+    parser.add_argument("--no-hierarchy-docs", action="store_true")
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -105,6 +106,7 @@ def _run_generate(args: argparse.Namespace) -> int:
             repo_root=args.repo_root.resolve(),
             model_name=resolved_model,
             temperature=resolved_temperature,
+            hierarchy_docs_enabled=not args.no_hierarchy_docs,
         )
         print(
             f"Generated SDD for {csc.csc_id}: "
@@ -140,6 +142,7 @@ def _run_propose_updates(args: argparse.Namespace) -> int:
             repo_root=args.repo_root.resolve(),
             model_name=resolved_model,
             temperature=resolved_temperature,
+            hierarchy_docs_enabled=not args.no_hierarchy_docs,
         )
         print(
             f"Generated update proposals for {csc.csc_id}: "

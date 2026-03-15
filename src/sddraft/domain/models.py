@@ -247,11 +247,83 @@ class UpdateProposalReport(DomainModel):
     proposals: list[SectionUpdateProposal]
 
 
+class FileSummaryDoc(DomainModel):
+    """Generated summary for one source file in the hierarchy view."""
+
+    node_id: str
+    path: Path
+    language: SourceLanguage
+    summary: str
+    functions: list[str] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)
+    imports: list[str] = Field(default_factory=list)
+    evidence_refs: list[EvidenceReference] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    confidence: float = 0.5
+
+
+class DirectorySummaryDoc(DomainModel):
+    """Generated summary for one directory in the hierarchy view."""
+
+    node_id: str
+    path: Path
+    summary: str
+    local_files: list[Path] = Field(default_factory=list)
+    child_directories: list[Path] = Field(default_factory=list)
+    evidence_refs: list[EvidenceReference] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    confidence: float = 0.5
+
+
+class HierarchyDocArtifact(DomainModel):
+    """Structured hierarchy documentation artifact."""
+
+    csc_id: str
+    root: Path
+    file_summaries: list[FileSummaryDoc] = Field(default_factory=list)
+    directory_summaries: list[DirectorySummaryDoc] = Field(default_factory=list)
+
+
+class HierarchyIndexNode(DomainModel):
+    """Node entry in hierarchy index."""
+
+    node_id: str
+    kind: Literal["file", "directory"]
+    path: Path
+    parent_id: str | None = None
+    doc_path: Path
+    abstract: str
+    keywords: list[str] = Field(default_factory=list)
+
+
+class HierarchyIndexEdge(DomainModel):
+    """Directed hierarchy relation entry."""
+
+    parent_id: str
+    child_id: str
+    relation: Literal["contains"] = "contains"
+
+
+class HierarchyIndex(DomainModel):
+    """Machine-readable hierarchy index used for graph expansion in ask."""
+
+    csc_id: str
+    root: Path
+    nodes: list[HierarchyIndexNode] = Field(default_factory=list)
+    edges: list[HierarchyIndexEdge] = Field(default_factory=list)
+
+
 class KnowledgeChunk(DomainModel):
     """Deterministic retrieval unit."""
 
     chunk_id: str
-    source_type: Literal["code", "sdd_section", "review_artifact"]
+    source_type: Literal[
+        "code",
+        "sdd_section",
+        "review_artifact",
+        "file_summary",
+        "directory_summary",
+    ]
     source_path: Path
     text: str
     section_id: str | None = None
@@ -331,6 +403,8 @@ class GenerateResult(DomainModel):
     markdown_path: Path
     review_json_path: Path
     retrieval_index_path: Path
+    hierarchy_json_path: Path | None = None
+    hierarchy_index_path: Path | None = None
 
 
 class ProposeUpdatesResult(DomainModel):
@@ -342,6 +416,8 @@ class ProposeUpdatesResult(DomainModel):
     report_markdown_path: Path
     report_json_path: Path
     retrieval_index_path: Path
+    hierarchy_json_path: Path | None = None
+    hierarchy_index_path: Path | None = None
 
 
 class InspectDiffResult(DomainModel):

@@ -12,10 +12,13 @@ MODULES = (
     "sddraft.config.loader",
     "sddraft.repo.scanner",
     "sddraft.analysis.retrieval",
+    "sddraft.analysis.hierarchy",
     "sddraft.prompts.builders",
     "sddraft.llm.base",
     "sddraft.workflows.generate",
+    "sddraft.workflows.hierarchy_docs",
     "sddraft.render.markdown",
+    "sddraft.render.hierarchy",
     "sddraft.cli.main",
 )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sddraft.cli.main import main
@@ -111,3 +112,35 @@ def test_cli_validate_generate_and_ask(tmp_path: Path, monkeypatch) -> None:
         ]
     )
     assert ask_exit == 0
+
+
+def test_cli_generate_no_hierarchy_docs_flag(tmp_path: Path, monkeypatch) -> None:
+    project_path, csc_path, _ = _write_files(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    generate_exit = main(
+        [
+            "generate",
+            "--project-config",
+            str(project_path),
+            "--csc",
+            str(csc_path),
+            "--repo-root",
+            str(tmp_path),
+            "--provider",
+            "mock",
+            "--model",
+            "mock-sddraft",
+            "--no-hierarchy-docs",
+        ]
+    )
+    assert generate_exit == 0
+
+    hierarchy_dir = tmp_path / "artifacts" / "NAV_CTRL" / "hierarchy"
+    assert not hierarchy_dir.exists()
+
+    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval_index.json"
+    payload = json.loads(index_path.read_text(encoding="utf-8"))
+    source_types = {chunk["source_type"] for chunk in payload["chunks"]}
+    assert "file_summary" not in source_types
+    assert "directory_summary" not in source_types

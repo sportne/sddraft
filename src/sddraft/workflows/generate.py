@@ -13,6 +13,7 @@ from sddraft.analysis.retrieval import (
 from sddraft.domain.models import (
     CSCDescriptor,
     GenerateResult,
+    KnowledgeChunk,
     ProjectConfig,
     ReviewArtifact,
     SDDDocument,
@@ -25,6 +26,10 @@ from sddraft.prompts.builders import build_section_generation_prompt
 from sddraft.render.json_artifacts import write_json_model
 from sddraft.render.markdown import render_sdd_markdown, write_markdown
 from sddraft.repo.scanner import scan_repository
+from sddraft.workflows.hierarchy_docs import (
+    build_hierarchy_artifact,
+    persist_hierarchy_outputs,
+)
 
 
 def _ensure_section_defaults(
@@ -48,6 +53,7 @@ def generate_sdd(
     repo_root: Path,
     model_name: str | None = None,
     temperature: float | None = None,
+    hierarchy_docs_enabled: bool = True,
 ) -> GenerateResult:
     """Run the end-to-end initial SDD generation workflow."""
 
@@ -124,10 +130,33 @@ def generate_sdd(
         markdown_path=markdown_path,
         review_json_path=review_json_path,
     )
+    hierarchy_json_path: Path | None = None
+    hierarchy_index_path: Path | None = None
+    hierarchy_chunks: list[KnowledgeChunk] = []
+
+    if hierarchy_docs_enabled:
+        hierarchy_artifact = build_hierarchy_artifact(
+            csc_id=csc.csc_id,
+            repo_root=repo_root,
+            scan_result=scan_result,
+            llm_client=llm_client,
+            model_name=resolved_model,
+            temperature=resolved_temperature,
+        )
+        (
+            hierarchy_json_path,
+            hierarchy_index_path,
+            _,
+            hierarchy_chunks,
+        ) = persist_hierarchy_outputs(
+            artifact=hierarchy_artifact,
+            output_root=output_root,
+        )
 
     indexer = LexicalIndexer()
     retrieval_index = indexer.build(
-        document_chunks=document_chunks, code_chunks=scan_result.code_chunks
+        document_chunks=document_chunks + hierarchy_chunks,
+        code_chunks=scan_result.code_chunks,
     )
     save_retrieval_index(retrieval_index, retrieval_index_path)
 
@@ -138,4 +167,6 @@ def generate_sdd(
         markdown_path=markdown_path,
         review_json_path=review_json_path,
         retrieval_index_path=retrieval_index_path,
+        hierarchy_json_path=hierarchy_json_path,
+        hierarchy_index_path=hierarchy_index_path,
     )
