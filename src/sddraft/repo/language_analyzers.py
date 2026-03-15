@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -97,22 +97,22 @@ def _get_parser(parser_name: str) -> TSParser:
         return parser
 
     try:
-        from tree_sitter_languages import get_parser
+        from tree_sitter_language_pack import get_parser as get_language_pack_parser
     except Exception as exc:  # pragma: no cover - import-time environment
         raise AnalysisError(
-            "tree-sitter support requires 'tree-sitter-languages'. Install project dependencies first."
+            "tree-sitter support requires 'tree-sitter-language-pack'. Install project dependencies first."
         ) from exc
 
     try:
+        get_parser = cast(Callable[[str], TSParser], get_language_pack_parser)
         parser = get_parser(parser_name)
     except Exception as exc:
         raise AnalysisError(
             f"Failed to initialize tree-sitter parser for '{parser_name}': {exc}"
         ) from exc
 
-    typed_parser = cast(TSParser, parser)
-    _PARSER_CACHE[parser_name] = typed_parser
-    return typed_parser
+    _PARSER_CACHE[parser_name] = parser
+    return parser
 
 
 def _walk(node: TSNode) -> Iterable[TSNode]:
@@ -818,7 +818,7 @@ class CSharpAnalyzer(_BaseAnalyzer):
     """Tree-sitter analyzer for C# files."""
 
     language: SourceLanguage = "csharp"
-    parser_name = "c_sharp"
+    parser_name = "csharp"
     supported_suffixes: tuple[str, ...] = (".cs",)
 
     signature_patterns = (
