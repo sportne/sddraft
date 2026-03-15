@@ -4,6 +4,7 @@ from .base import LLMClient, StructuredGenerationRequest, StructuredGenerationRe
 from .factory import create_llm_client
 from .gemini import GeminiLLMClient
 from .mock import MockLLMClient
+from .ollama import OllamaLLMClient
 
 __all__ = [
     "LLMClient",
@@ -11,5 +12,6 @@ __all__ = [
     "StructuredGenerationResponse",
     "MockLLMClient",
     "GeminiLLMClient",
+    "OllamaLLMClient",
     "create_llm_client",
 ]

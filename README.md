@@ -78,6 +78,41 @@ sddraft generate --project-config examples/project.yaml --csc examples/csc_nav_c
 
 If Gemini dependencies are not installed or `GEMINI_API_KEY` is missing, the CLI exits with a clear `Error:` message.
 
+## Ollama Setup (Local, Optional)
+
+Ollama is supported through the same provider abstraction and uses the local
+HTTP API (`/api/chat`) with schema-constrained JSON output.
+
+1. Start Ollama:
+
+```bash
+ollama serve
+```
+
+2. Pull the recommended local model:
+
+```bash
+ollama pull qwen2.5:14b-instruct-q4_K_M
+```
+
+3. Run SDDraft commands with Ollama:
+
+```bash
+sddraft generate --project-config examples/project.yaml --csc examples/csc_nav_ctrl.yaml --repo-root . --provider ollama --model qwen2.5:14b-instruct-q4_K_M
+sddraft propose-updates --project-config examples/project.yaml --csc examples/csc_nav_ctrl.yaml --existing-sdd artifacts/NAV_CTRL/sdd.md --commit-range HEAD~1..HEAD --repo-root . --provider ollama --model qwen2.5:14b-instruct-q4_K_M
+sddraft ask --index-path artifacts/NAV_CTRL/retrieval_index.json --question "What interfaces are exposed?" --provider ollama --model qwen2.5:14b-instruct-q4_K_M
+```
+
+4. Optional endpoint override (default is `http://127.0.0.1:11434`):
+
+```bash
+export OLLAMA_BASE_URL="http://127.0.0.1:11434"
+```
+
+If Ollama is unreachable, the CLI exits with `Error: Cannot connect to Ollama ...`.
+
+Example Ollama config is provided in `examples/project_ollama.yaml`.
+
 ## Quality Gates
 
 The project includes `kleuw`-style quality infrastructure:

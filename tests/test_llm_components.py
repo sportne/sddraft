@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import urllib.error
 from dataclasses import dataclass
 
 import pytest
@@ -10,6 +12,7 @@ from pydantic import BaseModel
 from sddraft.domain.errors import LLMError, ValidationError
 from sddraft.domain.models import LLMConfig, QueryAnswer
 from sddraft.llm import gemini as gemini_module
+from sddraft.llm import ollama as ollama_module
 from sddraft.llm.base import (
     StructuredGenerationRequest,
     validate_json_text,
@@ -18,6 +21,7 @@ from sddraft.llm.base import (
 from sddraft.llm.factory import create_llm_client
 from sddraft.llm.gemini import GeminiLLMClient
 from sddraft.llm.mock import MockLLMClient
+from sddraft.llm.ollama import OllamaLLMClient
 
 
 class TinyModel(BaseModel):
@@ -54,6 +58,8 @@ def test_factory_and_mock_payload_paths() -> None:
     config = LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2)
     client = create_llm_client(config)
     assert isinstance(client, MockLLMClient)
+    ollama_client = create_llm_client(config, provider="ollama", model_name="qwen")
+    assert isinstance(ollama_client, OllamaLLMClient)
 
     with pytest.raises(LLMError):
         create_llm_client(config, provider="unsupported")
@@ -202,3 +208,126 @@ def test_mock_canned_query_answer() -> None:
     resp = mock.generate_structured(req)
     parsed = QueryAnswer.model_validate(resp.content.model_dump())
     assert parsed.answer == "Known"
+
+
+class _FakeHTTPResponse:
+    def __init__(self, body: str, status: int = 200) -> None:
+        self._body = body.encode("utf-8")
+        self.status = status
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def test_ollama_generate_structured_success(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["body"] = request.data.decode("utf-8")
+        captured["timeout"] = timeout
+        return _FakeHTTPResponse('{"message": {"content": "{\\"value\\": 5}"}}')
+
+    monkeypatch.setattr(ollama_module.request_lib, "urlopen", _fake_urlopen)
+    client = OllamaLLMClient(model_name="qwen", base_url="http://localhost:11434/api")
+
+    req = StructuredGenerationRequest(
+        system_prompt="sys",
+        user_prompt="user",
+        response_model=TinyModel,
+        model_name="qwen2.5:14b-instruct-q4_K_M",
+        temperature=0.33,
+    )
+    resp = client.generate_structured(req)
+
+    assert captured["url"] == "http://localhost:11434/api/chat"
+    request_body = captured["body"]
+    assert isinstance(request_body, str)
+    assert '"stream": false' in request_body
+    assert '"temperature": 0.33' in request_body
+    assert "qwen2.5:14b-instruct-q4_K_M" in request_body
+
+    parsed = TinyModel.model_validate(resp.content.model_dump())
+    assert parsed.value == 5
+
+
+def test_ollama_connection_and_http_error_branches(monkeypatch) -> None:
+    client = OllamaLLMClient(model_name="qwen")
+    req = StructuredGenerationRequest(
+        system_prompt="sys",
+        user_prompt="user",
+        response_model=TinyModel,
+        model_name="qwen",
+    )
+
+    def _raise_unreachable(*_args, **_kwargs):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(ollama_module.request_lib, "urlopen", _raise_unreachable)
+    with pytest.raises(LLMError, match="Cannot connect to Ollama"):
+        client.generate_structured(req)
+
+    def _raise_http_error(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            url="http://127.0.0.1:11434/api/chat",
+            code=503,
+            msg="Service Unavailable",
+            hdrs=None,
+            fp=io.BytesIO(b"backend unavailable"),
+        )
+
+    monkeypatch.setattr(ollama_module.request_lib, "urlopen", _raise_http_error)
+    with pytest.raises(LLMError, match="status 503"):
+        client.generate_structured(req)
+
+
+def test_ollama_malformed_and_missing_content_paths(monkeypatch) -> None:
+    client = OllamaLLMClient(model_name="qwen")
+    req = StructuredGenerationRequest(
+        system_prompt="sys",
+        user_prompt="user",
+        response_model=TinyModel,
+        model_name="qwen",
+    )
+
+    monkeypatch.setattr(
+        ollama_module.request_lib,
+        "urlopen",
+        lambda *_args, **_kwargs: _FakeHTTPResponse("not-json"),
+    )
+    with pytest.raises(LLMError, match="malformed JSON response"):
+        client.generate_structured(req)
+
+    monkeypatch.setattr(
+        ollama_module.request_lib,
+        "urlopen",
+        lambda *_args, **_kwargs: _FakeHTTPResponse('{"message": {}}'),
+    )
+    with pytest.raises(LLMError, match="missing 'message.content'"):
+        client.generate_structured(req)
+
+
+def test_ollama_invalid_model_payload_raises_validation(monkeypatch) -> None:
+    client = OllamaLLMClient(model_name="qwen")
+    req = StructuredGenerationRequest(
+        system_prompt="sys",
+        user_prompt="user",
+        response_model=TinyModel,
+        model_name="qwen",
+    )
+
+    monkeypatch.setattr(
+        ollama_module.request_lib,
+        "urlopen",
+        lambda *_args, **_kwargs: _FakeHTTPResponse(
+            '{"message": {"content": "not-json"}}'
+        ),
+    )
+    with pytest.raises(ValidationError):
+        client.generate_structured(req)

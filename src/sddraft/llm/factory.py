@@ -7,6 +7,7 @@ from sddraft.domain.models import LLMConfig
 from sddraft.llm.base import LLMClient
 from sddraft.llm.gemini import GeminiLLMClient
 from sddraft.llm.mock import MockLLMClient
+from sddraft.llm.ollama import OllamaLLMClient
 
 
 def create_llm_client(
@@ -23,5 +24,7 @@ def create_llm_client(
         return MockLLMClient(model_name=resolved_model)
     if resolved_provider == "gemini":
         return GeminiLLMClient(model_name=resolved_model)
+    if resolved_provider == "ollama":
+        return OllamaLLMClient(model_name=resolved_model)
 
     raise LLMError(f"Unsupported LLM provider '{resolved_provider}'")
