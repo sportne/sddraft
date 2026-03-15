@@ -15,7 +15,17 @@ class DomainModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-SourceLanguage = Literal["python", "java", "cpp", "unknown"]
+SourceLanguage = Literal[
+    "python",
+    "java",
+    "cpp",
+    "javascript",
+    "typescript",
+    "go",
+    "rust",
+    "csharp",
+    "unknown",
+]
 
 
 class SourcesConfig(DomainModel):
@@ -31,6 +41,14 @@ class SourcesConfig(DomainModel):
             "**/*.cpp",
             "**/*.h",
             "**/*.hpp",
+            "**/*.js",
+            "**/*.mjs",
+            "**/*.cjs",
+            "**/*.ts",
+            "**/*.tsx",
+            "**/*.go",
+            "**/*.rs",
+            "**/*.cs",
         ]
     )
     exclude: list[str] = Field(default_factory=list)

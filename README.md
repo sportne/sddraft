@@ -19,8 +19,8 @@ It supports:
 
 ## Language Support
 
-- Supported source languages: Python, Java, and C++.
-- Supported extensions: `.py`, `.java`, `.c`, `.cc`, `.cpp`, `.h`, `.hpp`.
+- Supported source languages: Python, Java, C++, JavaScript, TypeScript, Go, Rust, and C#.
+- Supported extensions: `.py`, `.java`, `.c`, `.cc`, `.cpp`, `.h`, `.hpp`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.go`, `.rs`, `.cs`.
 - Parsing uses tree-sitter analyzers in the `repo` layer.
 - Unsupported extensions are ignored by language analysis unless included in future analyzers.
 

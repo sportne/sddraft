@@ -27,18 +27,30 @@ def test_scan_repository_multilanguage(
         "#include <vector>\nclass Core {};\nint compute(int x) { return x; }\n",
         encoding="utf-8",
     )
+    (src_dir / "app.js").write_text(
+        "import lib from 'lib';\nclass JsApp {}\nfunction run() { return 1; }\n",
+        encoding="utf-8",
+    )
+    (src_dir / "main.go").write_text(
+        "package main\nimport \"fmt\"\ntype GoService struct{}\nfunc Run() {}\n",
+        encoding="utf-8",
+    )
 
     result = scan_repository(sample_project_config, sample_csc, repo_root=tmp_path)
 
     languages = {summary.language for summary in result.code_summaries}
-    assert {"python", "java", "cpp"}.issubset(languages)
+    assert {"python", "java", "cpp", "javascript", "go"}.issubset(languages)
 
     interface_names = {item.name for item in result.interface_summaries}
     assert "PyService" in interface_names
     assert "Main" in interface_names
     assert "Core" in interface_names
+    assert "JsApp" in interface_names
+    assert "GoService" in interface_names
 
     chunk_languages = {chunk.metadata.get("language") for chunk in result.code_chunks}
     assert "python" in chunk_languages
     assert "java" in chunk_languages
     assert "cpp" in chunk_languages
+    assert "javascript" in chunk_languages
+    assert "go" in chunk_languages

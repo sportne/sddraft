@@ -21,7 +21,7 @@ help:
 	@echo "  make lint         - Run ruff linting"
 	@echo "  make typecheck    - Run mypy static checks"
 	@echo "  make test         - Run tests"
-	@echo "  make coverage     - Run tests with coverage threshold"
+	@echo "  make coverage     - Run tests with 90% coverage threshold"
 	@echo "  make package      - Build source and wheel"
 	@echo "  make clean        - Remove build artifacts"
 	@echo "  make ci           - Run format-check, lint, typecheck, test, coverage"
@@ -51,7 +51,7 @@ test:
 	$(PYTHON) -m pytest
 
 coverage:
-	$(PYTHON) -m pytest --cov=$(PACKAGE) --cov-report=term-missing --cov-fail-under=80
+	$(PYTHON) -m pytest --cov=$(PACKAGE) --cov-report=term-missing --cov-fail-under=90
 
 package:
 	$(PYTHON) -m pip install --upgrade build

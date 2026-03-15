@@ -8,11 +8,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from sddraft.domain.errors import AnalysisError
-from sddraft.domain.models import (
-    CodeUnitSummary,
-    InterfaceSummary,
-    SourceLanguage,
-)
+from sddraft.domain.models import CodeUnitSummary, InterfaceSummary, SourceLanguage
 
 LANGUAGE_BY_SUFFIX: dict[str, SourceLanguage] = {
     ".py": "python",
@@ -22,6 +18,14 @@ LANGUAGE_BY_SUFFIX: dict[str, SourceLanguage] = {
     ".cpp": "cpp",
     ".h": "cpp",
     ".hpp": "cpp",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".go": "go",
+    ".rs": "rust",
+    ".cs": "csharp",
 }
 
 _IDENTIFIER_NODE_TYPES = {
@@ -30,6 +34,7 @@ _IDENTIFIER_NODE_TYPES = {
     "type_identifier",
     "qualified_identifier",
     "namespace_identifier",
+    "property_identifier",
 }
 
 
@@ -42,7 +47,9 @@ class LanguageAnalyzer(Protocol):
     def supports(self, path: Path) -> bool:
         """Return whether the analyzer supports this file extension."""
 
-    def analyze(self, path: Path, source_text: str) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    def analyze(
+        self, path: Path, source_text: str
+    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
         """Build deterministic code and interface summaries."""
 
     def signature_changes(self, changed_lines: list[str]) -> list[str]:
@@ -81,6 +88,7 @@ class TSParser(Protocol):
 
 
 _PARSER_CACHE: dict[str, TSParser] = {}
+_ANALYZER_CACHE: list[LanguageAnalyzer] | None = None
 
 
 def _get_parser(parser_name: str) -> TSParser:
@@ -137,6 +145,28 @@ def _first_identifier(source_bytes: bytes, node: TSNode) -> str | None:
             if value:
                 return value
     return None
+
+
+def _append_module_interface(
+    interfaces: list[InterfaceSummary],
+    path: Path,
+    language: SourceLanguage,
+    classes: set[str],
+    functions: set[str],
+) -> None:
+    members = sorted({*classes, *functions})
+    if not members:
+        return
+
+    interfaces.append(
+        InterfaceSummary(
+            name=path.stem,
+            kind="module",
+            language=language,
+            source_path=path,
+            members=members,
+        )
+    )
 
 
 def detect_language(path: Path) -> SourceLanguage:
@@ -196,9 +226,7 @@ class PythonAnalyzer(_BaseAnalyzer):
     parser_name = "python"
     supported_suffixes: tuple[str, ...] = (".py",)
 
-    signature_patterns = (
-        re.compile(r"^(def|class)\s+\w+"),
-    )
+    signature_patterns = (re.compile(r"^(def|class)\s+\w+"),)
     dependency_patterns = (
         re.compile(r"^(from\s+\S+\s+import\s+.+|import\s+.+)$"),
     )
@@ -217,17 +245,16 @@ class PythonAnalyzer(_BaseAnalyzer):
         class_nodes: list[TSNode] = []
 
         for node in _walk(tree.root_node):
-            node_type = node.type
-            if node_type == "function_definition":
+            if node.type == "function_definition":
                 name = _field_text(source_bytes, node, "name")
                 if name:
                     functions.add(name)
-            elif node_type == "class_definition":
+            elif node.type == "class_definition":
                 name = _field_text(source_bytes, node, "name")
                 if name:
                     classes.add(name)
                     class_nodes.append(node)
-            elif node_type in {"import_statement", "import_from_statement"}:
+            elif node.type in {"import_statement", "import_from_statement"}:
                 imports.add(_node_text(source_bytes, node).strip())
 
         summary = CodeUnitSummary(
@@ -240,7 +267,7 @@ class PythonAnalyzer(_BaseAnalyzer):
         )
 
         interfaces: list[InterfaceSummary] = []
-        public_functions = sorted(name for name in functions if not name.startswith("_"))
+        public_functions = {name for name in functions if not name.startswith("_")}
 
         for class_node in class_nodes:
             class_name = _field_text(source_bytes, class_node, "name")
@@ -264,7 +291,7 @@ class PythonAnalyzer(_BaseAnalyzer):
                 )
             )
 
-        for function_name in public_functions:
+        for function_name in sorted(public_functions):
             interfaces.append(
                 InterfaceSummary(
                     name=function_name,
@@ -275,17 +302,14 @@ class PythonAnalyzer(_BaseAnalyzer):
                 )
             )
 
-        module_members = sorted({*public_functions, *[item.name for item in interfaces if item.kind == "class"]})
-        if module_members:
-            interfaces.append(
-                InterfaceSummary(
-                    name=path.stem,
-                    kind="module",
-                    language=self.language,
-                    source_path=path,
-                    members=module_members,
-                )
-            )
+        public_classes = {item.name for item in interfaces if item.kind == "class"}
+        _append_module_interface(
+            interfaces,
+            path,
+            self.language,
+            public_classes,
+            public_functions,
+        )
 
         return summary, interfaces
 
@@ -304,9 +328,7 @@ class JavaAnalyzer(_BaseAnalyzer):
             r"[A-Za-z_][\w<>,\[\]\s]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(\{|throws|$)"
         ),
     )
-    dependency_patterns = (
-        re.compile(r"^(import|package)\s+[A-Za-z0-9_.*]+\s*;"),
-    )
+    dependency_patterns = (re.compile(r"^(import|package)\s+[A-Za-z0-9_.*]+\s*;"),)
 
     comment_prefixes = ("//", "/*", "*", "*/")
 
@@ -321,17 +343,20 @@ class JavaAnalyzer(_BaseAnalyzer):
         type_nodes: list[TSNode] = []
 
         for node in _walk(tree.root_node):
-            node_type = node.type
-            if node_type in {"class_declaration", "interface_declaration", "enum_declaration"}:
+            if node.type in {
+                "class_declaration",
+                "interface_declaration",
+                "enum_declaration",
+            }:
                 name = _field_text(source_bytes, node, "name")
                 if name:
                     classes.add(name)
                     type_nodes.append(node)
-            elif node_type in {"method_declaration", "constructor_declaration"}:
+            elif node.type in {"method_declaration", "constructor_declaration"}:
                 name = _field_text(source_bytes, node, "name")
                 if name:
                     functions.add(name)
-            elif node_type in {"import_declaration", "package_declaration"}:
+            elif node.type in {"import_declaration", "package_declaration"}:
                 imports.add(_node_text(source_bytes, node).strip())
 
         summary = CodeUnitSummary(
@@ -376,18 +401,7 @@ class JavaAnalyzer(_BaseAnalyzer):
                 )
             )
 
-        module_members = sorted({*classes, *functions})
-        if module_members:
-            interfaces.append(
-                InterfaceSummary(
-                    name=path.stem,
-                    kind="module",
-                    language=self.language,
-                    source_path=path,
-                    members=module_members,
-                )
-            )
-
+        _append_module_interface(interfaces, path, self.language, classes, functions)
         return summary, interfaces
 
 
@@ -426,20 +440,15 @@ class CppAnalyzer(_BaseAnalyzer):
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
-        type_nodes: list[TSNode] = []
 
         for node in _walk(tree.root_node):
-            node_type = node.type
-
-            if node_type in {"class_specifier", "struct_specifier"}:
+            if node.type in {"class_specifier", "struct_specifier"}:
                 name = _field_text(source_bytes, node, "name") or _first_identifier(
                     source_bytes, node
                 )
                 if name:
                     classes.add(name)
-                    type_nodes.append(node)
-
-            elif node_type == "function_definition":
+            elif node.type == "function_definition":
                 declarator = node.child_by_field_name("declarator")
                 declarator_text = (
                     _node_text(source_bytes, declarator)
@@ -449,8 +458,7 @@ class CppAnalyzer(_BaseAnalyzer):
                 name = self._extract_cpp_callable_name(declarator_text)
                 if name:
                     functions.add(name)
-
-            elif node_type == "preproc_include":
+            elif node.type == "preproc_include":
                 imports.add(_node_text(source_bytes, node).strip())
 
         summary = CodeUnitSummary(
@@ -485,18 +493,414 @@ class CppAnalyzer(_BaseAnalyzer):
                 )
             )
 
-        module_members = sorted({*classes, *functions})
-        if module_members:
+        _append_module_interface(interfaces, path, self.language, classes, functions)
+        return summary, interfaces
+
+
+class JavaScriptAnalyzer(_BaseAnalyzer):
+    """Tree-sitter analyzer for JavaScript files."""
+
+    language: SourceLanguage = "javascript"
+    parser_name = "javascript"
+    supported_suffixes: tuple[str, ...] = (".js", ".mjs", ".cjs")
+
+    signature_patterns = (
+        re.compile(r"^(export\s+)?(async\s+)?function\s+\w+"),
+        re.compile(r"^class\s+\w+"),
+        re.compile(r"^(const|let|var)\s+\w+\s*=\s*(async\s*)?\([^)]*\)\s*=>"),
+    )
+    dependency_patterns = (
+        re.compile(r"^import\s+.+\s+from\s+['\"].+['\"]"),
+        re.compile(r"^const\s+\w+\s*=\s*require\(['\"].+['\"]\)"),
+    )
+
+    comment_prefixes = ("//", "/*", "*", "*/")
+
+    def analyze(
+        self, path: Path, source_text: str
+    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+        tree, source_bytes = self._parse(source_text)
+
+        functions: set[str] = set()
+        classes: set[str] = set()
+        imports: set[str] = set()
+
+        for node in _walk(tree.root_node):
+            if node.type in {"function_declaration", "generator_function_declaration"}:
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    functions.add(name)
+            elif node.type == "class_declaration":
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    classes.add(name)
+            elif node.type == "method_definition":
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    functions.add(name)
+            elif node.type == "import_statement":
+                imports.add(_node_text(source_bytes, node).strip())
+
+        summary = CodeUnitSummary(
+            path=path,
+            language=self.language,
+            functions=sorted(functions),
+            classes=sorted(classes),
+            docstrings=[],
+            imports=sorted(item for item in imports if item),
+        )
+
+        interfaces: list[InterfaceSummary] = []
+        for class_name in sorted(classes):
             interfaces.append(
                 InterfaceSummary(
-                    name=path.stem,
-                    kind="module",
+                    name=class_name,
+                    kind="class",
                     language=self.language,
                     source_path=path,
-                    members=module_members,
+                    members=[],
                 )
             )
 
+        for function_name in sorted(functions):
+            interfaces.append(
+                InterfaceSummary(
+                    name=function_name,
+                    kind="function",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        _append_module_interface(interfaces, path, self.language, classes, functions)
+        return summary, interfaces
+
+
+class TypeScriptAnalyzer(_BaseAnalyzer):
+    """Tree-sitter analyzer for TypeScript files."""
+
+    language: SourceLanguage = "typescript"
+    parser_name = "typescript"
+    supported_suffixes: tuple[str, ...] = (".ts", ".tsx")
+
+    signature_patterns = (
+        re.compile(r"^(export\s+)?(async\s+)?function\s+\w+"),
+        re.compile(r"^(export\s+)?(class|interface|type)\s+\w+"),
+        re.compile(r"^(const|let|var)\s+\w+\s*:\s*.+="),
+    )
+    dependency_patterns = (
+        re.compile(r"^import\s+.+\s+from\s+['\"].+['\"]"),
+        re.compile(r"^export\s+.+\s+from\s+['\"].+['\"]"),
+    )
+
+    comment_prefixes = ("//", "/*", "*", "*/")
+
+    def analyze(
+        self, path: Path, source_text: str
+    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+        tree, source_bytes = self._parse(source_text)
+
+        functions: set[str] = set()
+        classes: set[str] = set()
+        imports: set[str] = set()
+
+        for node in _walk(tree.root_node):
+            if node.type in {
+                "function_declaration",
+                "method_definition",
+                "method_signature",
+            }:
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    functions.add(name)
+            elif node.type in {
+                "class_declaration",
+                "interface_declaration",
+                "type_alias_declaration",
+                "enum_declaration",
+            }:
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    classes.add(name)
+            elif node.type in {"import_statement", "export_statement"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
+        summary = CodeUnitSummary(
+            path=path,
+            language=self.language,
+            functions=sorted(functions),
+            classes=sorted(classes),
+            docstrings=[],
+            imports=sorted(item for item in imports if item),
+        )
+
+        interfaces: list[InterfaceSummary] = []
+        for class_name in sorted(classes):
+            interfaces.append(
+                InterfaceSummary(
+                    name=class_name,
+                    kind="class",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        for function_name in sorted(functions):
+            interfaces.append(
+                InterfaceSummary(
+                    name=function_name,
+                    kind="function",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        _append_module_interface(interfaces, path, self.language, classes, functions)
+        return summary, interfaces
+
+
+class GoAnalyzer(_BaseAnalyzer):
+    """Tree-sitter analyzer for Go files."""
+
+    language: SourceLanguage = "go"
+    parser_name = "go"
+    supported_suffixes: tuple[str, ...] = (".go",)
+
+    signature_patterns = (
+        re.compile(r"^func\s+\w+\s*\("),
+        re.compile(r"^func\s*\([^)]*\)\s*\w+\s*\("),
+        re.compile(r"^type\s+\w+\s+(struct|interface)\b"),
+    )
+    dependency_patterns = (
+        re.compile(r"^import\s+\("),
+        re.compile(r"^import\s+['\"].+['\"]"),
+    )
+
+    comment_prefixes = ("//", "/*", "*", "*/")
+
+    def analyze(
+        self, path: Path, source_text: str
+    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+        tree, source_bytes = self._parse(source_text)
+
+        functions: set[str] = set()
+        classes: set[str] = set()
+        imports: set[str] = set()
+
+        for node in _walk(tree.root_node):
+            if node.type in {"function_declaration", "method_declaration"}:
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    functions.add(name)
+            elif node.type == "type_spec":
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    classes.add(name)
+            elif node.type in {"import_declaration", "import_spec"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
+        summary = CodeUnitSummary(
+            path=path,
+            language=self.language,
+            functions=sorted(functions),
+            classes=sorted(classes),
+            docstrings=[],
+            imports=sorted(item for item in imports if item),
+        )
+
+        interfaces: list[InterfaceSummary] = []
+        for class_name in sorted(classes):
+            interfaces.append(
+                InterfaceSummary(
+                    name=class_name,
+                    kind="class",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        for function_name in sorted(functions):
+            interfaces.append(
+                InterfaceSummary(
+                    name=function_name,
+                    kind="function",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        _append_module_interface(interfaces, path, self.language, classes, functions)
+        return summary, interfaces
+
+
+class RustAnalyzer(_BaseAnalyzer):
+    """Tree-sitter analyzer for Rust files."""
+
+    language: SourceLanguage = "rust"
+    parser_name = "rust"
+    supported_suffixes: tuple[str, ...] = (".rs",)
+
+    signature_patterns = (
+        re.compile(r"^(pub\s+)?fn\s+\w+"),
+        re.compile(r"^(pub\s+)?(struct|enum|trait)\s+\w+"),
+        re.compile(r"^impl\s+"),
+    )
+    dependency_patterns = (
+        re.compile(r"^use\s+[A-Za-z0-9_:{}*,\s]+;"),
+        re.compile(r"^extern\s+crate\s+\w+;"),
+    )
+
+    comment_prefixes = ("//", "/*", "*", "*/")
+
+    def analyze(
+        self, path: Path, source_text: str
+    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+        tree, source_bytes = self._parse(source_text)
+
+        functions: set[str] = set()
+        classes: set[str] = set()
+        imports: set[str] = set()
+
+        for node in _walk(tree.root_node):
+            if node.type == "function_item":
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    functions.add(name)
+            elif node.type in {"struct_item", "enum_item", "trait_item", "impl_item"}:
+                name = _field_text(source_bytes, node, "name") or _first_identifier(
+                    source_bytes, node
+                )
+                if name:
+                    classes.add(name)
+            elif node.type in {"use_declaration", "extern_crate_declaration"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
+        summary = CodeUnitSummary(
+            path=path,
+            language=self.language,
+            functions=sorted(functions),
+            classes=sorted(classes),
+            docstrings=[],
+            imports=sorted(item for item in imports if item),
+        )
+
+        interfaces: list[InterfaceSummary] = []
+        for class_name in sorted(classes):
+            interfaces.append(
+                InterfaceSummary(
+                    name=class_name,
+                    kind="class",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        for function_name in sorted(functions):
+            interfaces.append(
+                InterfaceSummary(
+                    name=function_name,
+                    kind="function",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        _append_module_interface(interfaces, path, self.language, classes, functions)
+        return summary, interfaces
+
+
+class CSharpAnalyzer(_BaseAnalyzer):
+    """Tree-sitter analyzer for C# files."""
+
+    language: SourceLanguage = "csharp"
+    parser_name = "c_sharp"
+    supported_suffixes: tuple[str, ...] = (".cs",)
+
+    signature_patterns = (
+        re.compile(r"^(class|interface|struct|enum|record)\s+\w+"),
+        re.compile(
+            r"^(public|private|protected|internal|static|virtual|override|sealed|abstract|partial|\s)+"
+            r"[A-Za-z_][\w<>,\[\]\s]*\s+[A-Za-z_]\w*\s*\([^;]*\)\s*(\{|$)"
+        ),
+    )
+    dependency_patterns = (
+        re.compile(r"^(global\s+)?using\s+[A-Za-z0-9_.]+\s*;"),
+        re.compile(r"^extern\s+alias\s+\w+\s*;"),
+    )
+
+    comment_prefixes = ("//", "/*", "*", "*/")
+
+    def analyze(
+        self, path: Path, source_text: str
+    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+        tree, source_bytes = self._parse(source_text)
+
+        functions: set[str] = set()
+        classes: set[str] = set()
+        imports: set[str] = set()
+
+        for node in _walk(tree.root_node):
+            if node.type in {
+                "class_declaration",
+                "interface_declaration",
+                "struct_declaration",
+                "enum_declaration",
+                "record_declaration",
+            }:
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    classes.add(name)
+            elif node.type in {
+                "method_declaration",
+                "constructor_declaration",
+                "local_function_statement",
+            }:
+                name = _field_text(source_bytes, node, "name")
+                if name:
+                    functions.add(name)
+            elif node.type in {"using_directive", "extern_alias_directive"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
+        summary = CodeUnitSummary(
+            path=path,
+            language=self.language,
+            functions=sorted(functions),
+            classes=sorted(classes),
+            docstrings=[],
+            imports=sorted(item for item in imports if item),
+        )
+
+        interfaces: list[InterfaceSummary] = []
+        for class_name in sorted(classes):
+            interfaces.append(
+                InterfaceSummary(
+                    name=class_name,
+                    kind="class",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        for function_name in sorted(functions):
+            interfaces.append(
+                InterfaceSummary(
+                    name=function_name,
+                    kind="function",
+                    language=self.language,
+                    source_path=path,
+                    members=[],
+                )
+            )
+
+        _append_module_interface(interfaces, path, self.language, classes, functions)
         return summary, interfaces
 
 
@@ -507,10 +911,10 @@ class UnknownAnalyzer:
     supported_suffixes: tuple[str, ...] = ()
 
     _signature_patterns = (
-        re.compile(r"^(def|class|interface|enum|struct|template)\b"),
+        re.compile(r"^(def|class|interface|enum|struct|template|fn|func|impl)\b"),
     )
     _dependency_patterns = (
-        re.compile(r"^(import|from\s+\S+\s+import|#\s*include|package)\b"),
+        re.compile(r"^(import|from\s+\S+\s+import|#\s*include|package|using|use)\b"),
     )
 
     def supports(self, path: Path) -> bool:
@@ -545,7 +949,19 @@ class UnknownAnalyzer:
 def get_registered_analyzers() -> list[LanguageAnalyzer]:
     """Return concrete language analyzers supported by this project."""
 
-    return [PythonAnalyzer(), JavaAnalyzer(), CppAnalyzer()]
+    global _ANALYZER_CACHE
+    if _ANALYZER_CACHE is None:
+        _ANALYZER_CACHE = [
+            PythonAnalyzer(),
+            JavaAnalyzer(),
+            CppAnalyzer(),
+            JavaScriptAnalyzer(),
+            TypeScriptAnalyzer(),
+            GoAnalyzer(),
+            RustAnalyzer(),
+            CSharpAnalyzer(),
+        ]
+    return _ANALYZER_CACHE
 
 
 def get_analyzer_for_path(path: Path) -> LanguageAnalyzer:

@@ -101,7 +101,7 @@ disallow_incomplete_defs = false
 minversion = "7.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra --cov=sddraft --cov-report=term-missing --cov-fail-under=80"
+addopts = "-ra --cov=sddraft --cov-report=term-missing --cov-fail-under=90"
 
 [tool.coverage.run]
 source = ["sddraft"]
@@ -116,7 +116,7 @@ disable_warnings = [
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 80
+fail_under = 90
 
 [tool.setuptools.packages.find]
 where = ["src"]

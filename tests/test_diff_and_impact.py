@@ -56,13 +56,34 @@ index abc..def 100644
 +#include <map>
 -int run(int x) {
 +int run(int x, int y) {
+diff --git a/src/app.ts b/src/app.ts
+index abc..def 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,2 +1,3 @@
+-import {A} from './a';
++import {B} from './b';
+-export function run(x: number) {
++export function run(x: number, y: number) {
+diff --git a/src/main.go b/src/main.go
+index abc..def 100644
+--- a/src/main.go
++++ b/src/main.go
+@@ -1,2 +1,3 @@
+-import "fmt"
++import "os"
+-func run(x int) {
++func run(x int, y int) {
 """.strip()
 
     summaries = parse_diff(diff)
-    assert len(summaries) == 2
+    assert len(summaries) == 4
 
-    java_summary = summaries[0]
-    cpp_summary = summaries[1]
+    by_path = {item.path.as_posix(): item for item in summaries}
+    java_summary = by_path["src/Main.java"]
+    cpp_summary = by_path["src/core.cpp"]
+    ts_summary = by_path["src/app.ts"]
+    go_summary = by_path["src/main.go"]
 
     assert java_summary.language == "java"
     assert java_summary.signature_changes
@@ -71,3 +92,11 @@ index abc..def 100644
     assert cpp_summary.language == "cpp"
     assert cpp_summary.signature_changes
     assert cpp_summary.dependency_changes
+
+    assert ts_summary.language == "typescript"
+    assert ts_summary.signature_changes
+    assert ts_summary.dependency_changes
+
+    assert go_summary.language == "go"
+    assert go_summary.signature_changes
+    assert go_summary.dependency_changes
