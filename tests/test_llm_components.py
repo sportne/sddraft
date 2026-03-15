@@ -130,7 +130,9 @@ def test_gemini_init_and_generate_paths(monkeypatch) -> None:
         GeminiLLMClient(model_name="gemini")
 
     good_response = _FakeResponse(
-        candidates=[_FakeCandidate(content=_FakeContent(parts=[_FakePart('{"value": 1}')]))]
+        candidates=[
+            _FakeCandidate(content=_FakeContent(parts=[_FakePart('{"value": 1}')]))
+        ]
     )
     monkeypatch.setattr(gemini_module, "genai", _FakeGenAI(good_response))
     monkeypatch.setattr(gemini_module, "GenerateContentConfig", _FakeConfig)
@@ -165,7 +167,9 @@ def test_gemini_error_branches(monkeypatch) -> None:
     with pytest.raises(LLMError):
         client.generate_structured(req)
 
-    no_parts = _FakeResponse(candidates=[_FakeCandidate(content=_FakeContent(parts=[]))])
+    no_parts = _FakeResponse(
+        candidates=[_FakeCandidate(content=_FakeContent(parts=[]))]
+    )
     monkeypatch.setattr(gemini_module, "genai", _FakeGenAI(no_parts))
     client = GeminiLLMClient(model_name="gemini", api_key="abc")
     with pytest.raises(LLMError):

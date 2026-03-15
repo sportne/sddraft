@@ -10,8 +10,12 @@ from sddraft.domain.models import FileDiffSummary
 
 def test_build_commit_impact_covers_all_classification_paths() -> None:
     diffs = [
-        FileDiffSummary(path=Path("a.py"), signature_changes=["def x()"], language="python"),
-        FileDiffSummary(path=Path("b.py"), dependency_changes=["import os"], language="python"),
+        FileDiffSummary(
+            path=Path("a.py"), signature_changes=["def x()"], language="python"
+        ),
+        FileDiffSummary(
+            path=Path("b.py"), dependency_changes=["import os"], language="python"
+        ),
         FileDiffSummary(path=Path("c.py"), comment_only=True, language="python"),
         FileDiffSummary(path=Path("d.py"), added_lines=1, language="python"),
         FileDiffSummary(path=Path("e.py"), language="python"),

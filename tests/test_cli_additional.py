@@ -34,7 +34,9 @@ def _fake_bundle(tmp_path: Path) -> ConfigBundle:
         sources=SourcesConfig(roots=[tmp_path], include=["**/*.py"], exclude=[]),
         sdd_template=tmp_path / "t.yaml",
         llm=LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2),
-        generation=GenerationOptions(max_files=10, code_chunk_lines=10, retrieval_top_k=3),
+        generation=GenerationOptions(
+            max_files=10, code_chunk_lines=10, retrieval_top_k=3
+        ),
         output_dir=tmp_path / "artifacts",
     )
     csc = CSCDescriptor(csc_id="X", title="X", purpose="P")
@@ -44,7 +46,9 @@ def _fake_bundle(tmp_path: Path) -> ConfigBundle:
     return ConfigBundle(project=project, csc_descriptors=[csc], template=template)
 
 
-def test_cli_propose_updates_and_inspect_diff_paths(tmp_path: Path, monkeypatch) -> None:
+def test_cli_propose_updates_and_inspect_diff_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
     cli_module = importlib.import_module("sddraft.cli.main")
     bundle = _fake_bundle(tmp_path)
     monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
@@ -129,6 +133,7 @@ def test_cli_ask_interactive_and_error_path(tmp_path: Path, monkeypatch) -> None
     )
 
     rendered = []
+
     def _render_query(_answer: QueryAnswer) -> str:
         rendered.append(_answer.answer)
         return "ok"

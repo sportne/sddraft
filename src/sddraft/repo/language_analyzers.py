@@ -227,9 +227,7 @@ class PythonAnalyzer(_BaseAnalyzer):
     supported_suffixes: tuple[str, ...] = (".py",)
 
     signature_patterns = (re.compile(r"^(def|class)\s+\w+"),)
-    dependency_patterns = (
-        re.compile(r"^(from\s+\S+\s+import\s+.+|import\s+.+)$"),
-    )
+    dependency_patterns = (re.compile(r"^(from\s+\S+\s+import\s+.+|import\s+.+)$"),)
 
     comment_prefixes = ("#",)
 

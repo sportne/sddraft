@@ -110,7 +110,7 @@ def test_go_rust_and_csharp_analyzers_extract_symbols() -> None:
     go_analyzer = get_analyzer_for_path(Path("main.go"))
     go_summary, _ = go_analyzer.analyze(
         Path("main.go"),
-        "package main\nimport \"fmt\"\ntype Service struct{}\nfunc Run() {}\n",
+        'package main\nimport "fmt"\ntype Service struct{}\nfunc Run() {}\n',
     )
     assert go_summary.language == "go"
     assert "Service" in go_summary.classes

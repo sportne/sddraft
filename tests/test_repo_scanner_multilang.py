@@ -32,7 +32,7 @@ def test_scan_repository_multilanguage(
         encoding="utf-8",
     )
     (src_dir / "main.go").write_text(
-        "package main\nimport \"fmt\"\ntype GoService struct{}\nfunc Run() {}\n",
+        'package main\nimport "fmt"\ntype GoService struct{}\nfunc Run() {}\n',
         encoding="utf-8",
     )
 
