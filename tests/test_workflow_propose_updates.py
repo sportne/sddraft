@@ -216,3 +216,55 @@ def test_propose_updates_hierarchy_refresh_preserves_unaffected_file_summary(
         if item.path == Path("src/sub/worker.py")
     )
     assert worker_summary == "PRESERVE-WORKER-SUMMARY"
+
+
+def test_propose_updates_progress_callback_reports_stages(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+
+    file_path = src_dir / "module.py"
+    file_path.write_text(
+        "import os\n\n\ndef do_work(x):\n    return x\n", encoding="utf-8"
+    )
+
+    _run(["git", "init"], cwd=tmp_path)
+    _run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path)
+    _run(["git", "config", "user.name", "Test User"], cwd=tmp_path)
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "initial"], cwd=tmp_path)
+
+    file_path.write_text(
+        "import sys\n\n\ndef do_work(x, y):\n    return x + y\n",
+        encoding="utf-8",
+    )
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change signature"], cwd=tmp_path)
+
+    existing_sdd = tmp_path / "existing_sdd.md"
+    existing_sdd.write_text(
+        "# NAV_CTRL Software Design Description\n\n## 3 Interface Design\nOld text\n",
+        encoding="utf-8",
+    )
+
+    progress_messages: list[str] = []
+    llm = MockLLMClient()
+    propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+        progress_callback=progress_messages.append,
+    )
+
+    joined = "\n".join(progress_messages)
+    assert "Scanning repository" in joined
+    assert "Parsing commit range" in joined
+    assert "Refreshing hierarchy documentation" in joined

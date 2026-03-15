@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from json import JSONDecodeError
 from pathlib import Path
 
@@ -97,18 +98,28 @@ def propose_updates(
     model_name: str | None = None,
     temperature: float | None = None,
     hierarchy_docs_enabled: bool = True,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> ProposeUpdatesResult:
     """Run commit-impact analysis and generate section update proposals."""
+
+    def progress(message: str) -> None:
+        if progress_callback is not None:
+            progress_callback(message)
 
     if not existing_sdd_path.exists():
         raise ConfigError(f"Existing SDD file not found: {existing_sdd_path}")
     if not existing_sdd_path.is_file():
         raise ConfigError(f"Existing SDD path is not a file: {existing_sdd_path}")
 
+    progress(f"[{csc.csc_id}] Scanning repository...")
     scan_result = scan_repository(
         project_config=project_config, csc=csc, repo_root=repo_root
     )
+    progress(
+        f"[{csc.csc_id}] Scan complete: {len(scan_result.files)} files considered."
+    )
 
+    progress(f"[{csc.csc_id}] Parsing commit range {commit_range}...")
     raw_diff = get_git_diff(commit_range=commit_range, repo_root=repo_root)
     file_diffs = parse_diff(raw_diff)
     impact = build_commit_impact(commit_range=commit_range, file_diffs=file_diffs)
@@ -131,7 +142,12 @@ def propose_updates(
         project_config.llm.temperature if temperature is None else temperature
     )
 
-    for pack in evidence_packs:
+    total_sections = len(evidence_packs)
+    for idx, pack in enumerate(evidence_packs, start=1):
+        progress(
+            f"[{csc.csc_id}] Proposing section update {idx}/{total_sections}: "
+            f"{pack.section.id} {pack.section.title}"
+        )
         system_prompt, user_prompt = build_update_proposal_prompt(pack)
         response = llm_client.generate_structured(
             StructuredGenerationRequest(
@@ -177,8 +193,12 @@ def propose_updates(
 
     write_markdown(report_markdown_path, render_update_report_markdown(report))
     write_json_model(report_json_path, report)
+    progress(f"[{csc.csc_id}] Wrote update report artifacts.")
 
     if hierarchy_docs_enabled:
+        progress(
+            f"[{csc.csc_id}] Refreshing hierarchy documentation for impacted subtree..."
+        )
         existing_artifact = None
         candidate_hierarchy_json_path = (
             output_root / "hierarchy" / "hierarchy_artifact.json"
@@ -201,6 +221,7 @@ def propose_updates(
             temperature=resolved_temperature,
             changed_paths=changed_paths,
             existing_artifact=existing_artifact,
+            progress_callback=progress_callback,
         )
         (
             hierarchy_json_path,
@@ -210,6 +231,7 @@ def propose_updates(
         ) = persist_hierarchy_outputs(
             artifact=hierarchy_artifact,
             output_root=output_root,
+            progress_callback=progress_callback,
         )
 
     indexer = LexicalIndexer()
@@ -235,6 +257,7 @@ def propose_updates(
         )
 
     save_retrieval_index(retrieval_index, retrieval_index_path)
+    progress(f"[{csc.csc_id}] Wrote retrieval index.")
 
     return ProposeUpdatesResult(
         impact=impact,

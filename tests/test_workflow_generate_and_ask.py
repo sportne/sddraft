@@ -173,3 +173,75 @@ def test_generate_flow_honors_runtime_model_and_temperature(
     assert llm.requests
     assert all(request.model_name == override_model for request in llm.requests)
     assert all(request.temperature == override_temperature for request in llm.requests)
+
+
+def test_generate_reuses_existing_hierarchy_summaries(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    llm = RecordingMockLLMClient()
+    generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+    )
+    assert any(
+        request.response_model.__name__ == "_FileSummaryDraft"
+        for request in llm.requests
+    )
+    llm.requests.clear()
+
+    generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+    )
+
+    assert all(
+        request.response_model.__name__
+        not in {"_FileSummaryDraft", "_DirectorySummaryDraft"}
+        for request in llm.requests
+    )
+
+
+def test_generate_progress_callback_reports_stages(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    messages: list[str] = []
+    llm = MockLLMClient()
+    generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+        progress_callback=messages.append,
+    )
+
+    joined = "\n".join(messages)
+    assert "Scanning repository" in joined
+    assert "Generating section" in joined
+    assert "Hierarchy planning" in joined

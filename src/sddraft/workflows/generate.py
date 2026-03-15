@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from json import JSONDecodeError
 from pathlib import Path
+
+from pydantic import ValidationError as PydanticValidationError
 
 from sddraft.analysis.evidence_builder import build_generation_evidence_packs
 from sddraft.analysis.retrieval import (
@@ -28,6 +32,7 @@ from sddraft.render.markdown import render_sdd_markdown, write_markdown
 from sddraft.repo.scanner import scan_repository
 from sddraft.workflows.hierarchy_docs import (
     build_hierarchy_artifact,
+    load_hierarchy_artifact,
     persist_hierarchy_outputs,
 )
 
@@ -45,6 +50,18 @@ def _ensure_section_defaults(
     return section
 
 
+def _progress(progress_callback: Callable[[str], None] | None, message: str) -> None:
+    if progress_callback is not None:
+        progress_callback(message)
+
+
+def _to_relative(path: Path, repo_root: Path) -> Path:
+    try:
+        return path.resolve().relative_to(repo_root.resolve())
+    except ValueError:
+        return path
+
+
 def generate_sdd(
     project_config: ProjectConfig,
     csc: CSCDescriptor,
@@ -54,13 +71,22 @@ def generate_sdd(
     model_name: str | None = None,
     temperature: float | None = None,
     hierarchy_docs_enabled: bool = True,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> GenerateResult:
     """Run the end-to-end initial SDD generation workflow."""
 
+    _progress(progress_callback, f"[{csc.csc_id}] Scanning repository...")
     scan_result = scan_repository(
         project_config=project_config, csc=csc, repo_root=repo_root
     )
+    _progress(
+        progress_callback,
+        f"[{csc.csc_id}] Scan complete: {len(scan_result.files)} files considered.",
+    )
 
+    _progress(
+        progress_callback, f"[{csc.csc_id}] Building deterministic evidence packs..."
+    )
     evidence_packs = build_generation_evidence_packs(
         template=template,
         csc=csc,
@@ -75,7 +101,12 @@ def generate_sdd(
     )
 
     section_drafts: list[SectionDraft] = []
-    for pack in evidence_packs:
+    total_sections = len(evidence_packs)
+    for idx, pack in enumerate(evidence_packs, start=1):
+        _progress(
+            progress_callback,
+            f"[{csc.csc_id}] Generating section {idx}/{total_sections}: {pack.section.id} {pack.section.title}",
+        )
         system_prompt, user_prompt = build_section_generation_prompt(pack)
         response = llm_client.generate_structured(
             StructuredGenerationRequest(
@@ -123,6 +154,9 @@ def generate_sdd(
 
     write_markdown(markdown_path, render_sdd_markdown(document))
     write_json_model(review_json_path, review_artifact)
+    _progress(
+        progress_callback, f"[{csc.csc_id}] Wrote SDD markdown and review artifact."
+    )
 
     document_chunks = build_document_chunks(
         document=document,
@@ -135,6 +169,40 @@ def generate_sdd(
     hierarchy_chunks: list[KnowledgeChunk] = []
 
     if hierarchy_docs_enabled:
+        _progress(
+            progress_callback, f"[{csc.csc_id}] Preparing hierarchy documentation..."
+        )
+        existing_artifact = None
+        changed_paths: set[Path] | None = None
+        candidate_hierarchy_json_path = (
+            output_root / "hierarchy" / "hierarchy_artifact.json"
+        )
+        if candidate_hierarchy_json_path.exists():
+            try:
+                existing_artifact = load_hierarchy_artifact(
+                    candidate_hierarchy_json_path
+                )
+                artifact_mtime = candidate_hierarchy_json_path.stat().st_mtime
+                changed_paths = set()
+                for file_path in scan_result.files:
+                    relative_path = _to_relative(file_path, repo_root)
+                    try:
+                        if file_path.stat().st_mtime > artifact_mtime:
+                            changed_paths.add(relative_path)
+                    except OSError:
+                        changed_paths.add(relative_path)
+                _progress(
+                    progress_callback,
+                    f"[{csc.csc_id}] Found existing hierarchy artifact; {len(changed_paths)} changed file(s) detected.",
+                )
+            except (OSError, JSONDecodeError, PydanticValidationError, ValueError):
+                existing_artifact = None
+                changed_paths = None
+                _progress(
+                    progress_callback,
+                    f"[{csc.csc_id}] Existing hierarchy artifact unreadable; rebuilding hierarchy.",
+                )
+
         hierarchy_artifact = build_hierarchy_artifact(
             csc_id=csc.csc_id,
             repo_root=repo_root,
@@ -142,6 +210,9 @@ def generate_sdd(
             llm_client=llm_client,
             model_name=resolved_model,
             temperature=resolved_temperature,
+            changed_paths=changed_paths,
+            existing_artifact=existing_artifact,
+            progress_callback=progress_callback,
         )
         (
             hierarchy_json_path,
@@ -151,6 +222,7 @@ def generate_sdd(
         ) = persist_hierarchy_outputs(
             artifact=hierarchy_artifact,
             output_root=output_root,
+            progress_callback=progress_callback,
         )
 
     indexer = LexicalIndexer()
@@ -159,6 +231,7 @@ def generate_sdd(
         code_chunks=scan_result.code_chunks,
     )
     save_retrieval_index(retrieval_index, retrieval_index_path)
+    _progress(progress_callback, f"[{csc.csc_id}] Wrote retrieval index.")
 
     return GenerateResult(
         document=document,
