@@ -46,6 +46,8 @@ def generate_sdd(
     template: SDDTemplate,
     llm_client: LLMClient,
     repo_root: Path,
+    model_name: str | None = None,
+    temperature: float | None = None,
 ) -> GenerateResult:
     """Run the end-to-end initial SDD generation workflow."""
 
@@ -61,6 +63,11 @@ def generate_sdd(
         dependencies=scan_result.dependencies,
     )
 
+    resolved_model = model_name or project_config.llm.model_name
+    resolved_temperature = (
+        project_config.llm.temperature if temperature is None else temperature
+    )
+
     section_drafts: list[SectionDraft] = []
     for pack in evidence_packs:
         system_prompt, user_prompt = build_section_generation_prompt(pack)
@@ -69,8 +76,8 @@ def generate_sdd(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 response_model=SectionDraft,
-                model_name=project_config.llm.model_name,
-                temperature=project_config.llm.temperature,
+                model_name=resolved_model,
+                temperature=resolved_temperature,
             )
         )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 
 from sddraft.cli.main import main
 from sddraft.domain.models import (
@@ -156,3 +157,163 @@ def test_cli_ask_interactive_and_error_path(tmp_path: Path, monkeypatch) -> None
 
     rc2 = main(["ask", "--index-path", str(tmp_path / "i.json")])
     assert rc2 == 2
+
+
+def test_cli_generate_and_propose_apply_runtime_overrides(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cli_module = importlib.import_module("sddraft.cli.main")
+    bundle = _fake_bundle(tmp_path)
+    monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
+
+    created_clients: list[tuple[str | None, str | None]] = []
+
+    def _fake_create_llm_client(config, provider=None, model_name=None):
+        created_clients.append((provider, model_name))
+        return object()
+
+    monkeypatch.setattr(cli_module, "create_llm_client", _fake_create_llm_client)
+
+    generate_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        cli_module,
+        "generate_sdd",
+        lambda **kwargs: (
+            generate_calls.append(kwargs)
+            or SimpleNamespace(
+                markdown_path=tmp_path / "sdd.md",
+                review_json_path=tmp_path / "review.json",
+                retrieval_index_path=tmp_path / "index.json",
+            )
+        ),
+    )
+
+    rc_generate = main(
+        [
+            "generate",
+            "--project-config",
+            str(tmp_path / "p.yaml"),
+            "--csc",
+            str(tmp_path / "c.yaml"),
+            "--provider",
+            "gemini",
+            "--model",
+            "override-model",
+            "--temperature",
+            "0.73",
+        ]
+    )
+    assert rc_generate == 0
+    assert generate_calls
+    assert generate_calls[0]["model_name"] == "override-model"
+    assert generate_calls[0]["temperature"] == 0.73
+
+    propose_calls: list[dict[str, object]] = []
+    fake_impact = CommitImpact(commit_range="HEAD~1..HEAD", changed_files=[], summary="s")
+    monkeypatch.setattr(
+        cli_module,
+        "propose_updates",
+        lambda **kwargs: (
+            propose_calls.append(kwargs)
+            or ProposeUpdatesResult(
+                impact=fake_impact,
+                report=UpdateProposalReport(
+                    commit_range="HEAD~1..HEAD", impacted_sections=[], proposals=[]
+                ),
+                retrieval_index=RetrievalIndex(chunks=[]),
+                report_markdown_path=tmp_path / "r.md",
+                report_json_path=tmp_path / "r.json",
+                retrieval_index_path=tmp_path / "i.json",
+            )
+        ),
+    )
+
+    rc_propose = main(
+        [
+            "propose-updates",
+            "--project-config",
+            str(tmp_path / "p.yaml"),
+            "--csc",
+            str(tmp_path / "c.yaml"),
+            "--existing-sdd",
+            str(tmp_path / "sdd.md"),
+            "--commit-range",
+            "HEAD~1..HEAD",
+            "--provider",
+            "gemini",
+            "--model",
+            "override-model",
+            "--temperature",
+            "0.73",
+        ]
+    )
+    assert rc_propose == 0
+    assert propose_calls
+    assert propose_calls[0]["model_name"] == "override-model"
+    assert propose_calls[0]["temperature"] == 0.73
+    assert created_clients == [("gemini", "override-model"), ("gemini", "override-model")]
+
+
+def test_cli_error_messages_for_runtime_paths(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    temp_rc = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "missing_index.json"),
+            "--question",
+            "What changed?",
+            "--temperature",
+            "1.5",
+        ]
+    )
+    assert temp_rc == 2
+    assert "--temperature must be between 0.0 and 1.0" in capsys.readouterr().out
+
+    ask_rc = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "missing_index.json"),
+            "--question",
+            "What changed?",
+        ]
+    )
+    assert ask_rc == 2
+    assert "Retrieval index not found" in capsys.readouterr().out
+
+    cli_module = importlib.import_module("sddraft.cli.main")
+    bundle = _fake_bundle(tmp_path)
+    monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
+    monkeypatch.setattr(
+        cli_module, "create_llm_client", lambda *args, **kwargs: object()
+    )
+
+    propose_rc = main(
+        [
+            "propose-updates",
+            "--project-config",
+            str(tmp_path / "p.yaml"),
+            "--csc",
+            str(tmp_path / "c.yaml"),
+            "--existing-sdd",
+            str(tmp_path / "missing_sdd.md"),
+            "--commit-range",
+            "HEAD~1..HEAD",
+        ]
+    )
+    assert propose_rc == 2
+    assert "Existing SDD file not found" in capsys.readouterr().out
+
+    diff_rc = main(
+        [
+            "inspect-diff",
+            "--commit-range",
+            "HEAD~1..HEAD",
+            "--repo-root",
+            str(tmp_path),
+        ]
+    )
+    assert diff_rc == 2
+    assert "Failed to run git diff" in capsys.readouterr().out

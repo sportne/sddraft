@@ -11,6 +11,7 @@ from sddraft.analysis.retrieval import (
     load_retrieval_index,
     save_retrieval_index,
 )
+from sddraft.domain.errors import ConfigError
 from sddraft.domain.models import (
     CSCDescriptor,
     KnowledgeChunk,
@@ -84,8 +85,15 @@ def propose_updates(
     existing_sdd_path: Path,
     commit_range: str,
     repo_root: Path,
+    model_name: str | None = None,
+    temperature: float | None = None,
 ) -> ProposeUpdatesResult:
     """Run commit-impact analysis and generate section update proposals."""
+
+    if not existing_sdd_path.exists():
+        raise ConfigError(f"Existing SDD file not found: {existing_sdd_path}")
+    if not existing_sdd_path.is_file():
+        raise ConfigError(f"Existing SDD path is not a file: {existing_sdd_path}")
 
     scan_result = scan_repository(
         project_config=project_config, csc=csc, repo_root=repo_root
@@ -108,6 +116,11 @@ def propose_updates(
     )
 
     proposals: list[SectionUpdateProposal] = []
+    resolved_model = model_name or project_config.llm.model_name
+    resolved_temperature = (
+        project_config.llm.temperature if temperature is None else temperature
+    )
+
     for pack in evidence_packs:
         system_prompt, user_prompt = build_update_proposal_prompt(pack)
         response = llm_client.generate_structured(
@@ -115,8 +128,8 @@ def propose_updates(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 response_model=SectionUpdateProposal,
-                model_name=project_config.llm.model_name,
-                temperature=project_config.llm.temperature,
+                model_name=resolved_model,
+                temperature=resolved_temperature,
             )
         )
         proposal = SectionUpdateProposal.model_validate(

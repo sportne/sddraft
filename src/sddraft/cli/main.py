@@ -25,6 +25,7 @@ def _add_common_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--provider", type=str)
     parser.add_argument("--model", type=str)
+    parser.add_argument("--temperature", type=float)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -73,14 +74,26 @@ def _run_validate_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_temperature(raw_value: float | None, default: float) -> float:
+    resolved = default if raw_value is None else raw_value
+    if resolved < 0.0 or resolved > 1.0:
+        raise SDDraftError("--temperature must be between 0.0 and 1.0")
+    return resolved
+
+
 def _run_generate(args: argparse.Namespace) -> int:
     bundle = load_config_bundle(
         project_config_path=args.project_config,
         csc_paths=list(args.csc),
         template_path=args.template,
     )
+    resolved_model = args.model or bundle.project.llm.model_name
+    resolved_temperature = _resolve_temperature(
+        args.temperature, bundle.project.llm.temperature
+    )
+
     llm_client = create_llm_client(
-        bundle.project.llm, provider=args.provider, model_name=args.model
+        bundle.project.llm, provider=args.provider, model_name=resolved_model
     )
 
     for csc in bundle.csc_descriptors:
@@ -90,6 +103,8 @@ def _run_generate(args: argparse.Namespace) -> int:
             template=bundle.template,
             llm_client=llm_client,
             repo_root=args.repo_root.resolve(),
+            model_name=resolved_model,
+            temperature=resolved_temperature,
         )
         print(
             f"Generated SDD for {csc.csc_id}: "
@@ -105,8 +120,13 @@ def _run_propose_updates(args: argparse.Namespace) -> int:
         csc_paths=list(args.csc),
         template_path=args.template,
     )
+    resolved_model = args.model or bundle.project.llm.model_name
+    resolved_temperature = _resolve_temperature(
+        args.temperature, bundle.project.llm.temperature
+    )
+
     llm_client = create_llm_client(
-        bundle.project.llm, provider=args.provider, model_name=args.model
+        bundle.project.llm, provider=args.provider, model_name=resolved_model
     )
 
     for csc in bundle.csc_descriptors:
@@ -118,6 +138,8 @@ def _run_propose_updates(args: argparse.Namespace) -> int:
             existing_sdd_path=args.existing_sdd,
             commit_range=args.commit_range,
             repo_root=args.repo_root.resolve(),
+            model_name=resolved_model,
+            temperature=resolved_temperature,
         )
         print(
             f"Generated update proposals for {csc.csc_id}: "
@@ -138,9 +160,12 @@ def _run_inspect_diff(args: argparse.Namespace) -> int:
 def _run_ask(args: argparse.Namespace) -> int:
     from sddraft.domain.models import LLMConfig
 
+    resolved_temperature = _resolve_temperature(args.temperature, 0.2)
     llm_client = create_llm_client(
         LLMConfig(
-            provider=args.provider, model_name=args.model, temperature=args.temperature
+            provider=args.provider,
+            model_name=args.model,
+            temperature=resolved_temperature,
         )
     )
 
@@ -158,7 +183,7 @@ def _run_ask(args: argparse.Namespace) -> int:
                 index_path=args.index_path,
                 llm_client=llm_client,
                 model_name=args.model,
-                temperature=args.temperature,
+                temperature=resolved_temperature,
             )
             print(render_query_answer_text(result.answer))
             history.extend([f"Q: {question}", f"A: {result.answer.answer}"])
@@ -173,7 +198,7 @@ def _run_ask(args: argparse.Namespace) -> int:
         index_path=args.index_path,
         llm_client=llm_client,
         model_name=args.model,
-        temperature=args.temperature,
+        temperature=resolved_temperature,
     )
     print(render_query_answer_text(result.answer))
     return 0

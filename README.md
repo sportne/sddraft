@@ -17,6 +17,9 @@ It supports:
 - `sddraft inspect-diff`
 - `sddraft ask`
 
+Runtime LLM settings can be overridden per command via `--provider`, `--model`, and
+`--temperature` (for `generate`, `propose-updates`, and `ask`).
+
 ## Language Support
 
 - Supported source languages: Python, Java, C++, JavaScript, TypeScript, Go, Rust, and C#.
@@ -64,3 +67,7 @@ Run all checks with:
 ```bash
 make ci
 ```
+
+## Task Board
+
+In-repo implementation tracking is maintained in [`TASKS.md`](TASKS.md).

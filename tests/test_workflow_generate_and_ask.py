@@ -5,9 +5,22 @@ from __future__ import annotations
 from pathlib import Path
 
 from sddraft.domain.models import QueryRequest
+from sddraft.llm.base import StructuredGenerationRequest
 from sddraft.llm.mock import MockLLMClient
 from sddraft.workflows.ask import answer_question
 from sddraft.workflows.generate import generate_sdd
+
+
+class RecordingMockLLMClient(MockLLMClient):
+    """Mock client that records structured generation requests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.requests: list[StructuredGenerationRequest] = []
+
+    def generate_structured(self, request: StructuredGenerationRequest):
+        self.requests.append(request)
+        return super().generate_structured(request)
 
 
 def test_generate_and_ask_flow(
@@ -52,3 +65,36 @@ def compute_distance(x: float, y: float) -> float:
 
     assert ask_result.answer.answer
     assert ask_result.answer.citations
+
+
+def test_generate_flow_honors_runtime_model_and_temperature(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    llm = RecordingMockLLMClient()
+    override_model = "mock-override"
+    override_temperature = 0.61
+
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+        model_name=override_model,
+        temperature=override_temperature,
+    )
+
+    assert result.document.sections
+    assert llm.requests
+    assert all(request.model_name == override_model for request in llm.requests)
+    assert all(request.temperature == override_temperature for request in llm.requests)

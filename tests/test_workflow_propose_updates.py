@@ -5,12 +5,28 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from sddraft.domain.errors import ConfigError
+from sddraft.llm.base import StructuredGenerationRequest
 from sddraft.llm.mock import MockLLMClient
 from sddraft.workflows.propose_updates import propose_updates
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
     subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+
+
+class RecordingMockLLMClient(MockLLMClient):
+    """Mock client that records structured generation requests."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.requests: list[StructuredGenerationRequest] = []
+
+    def generate_structured(self, request: StructuredGenerationRequest):
+        self.requests.append(request)
+        return super().generate_structured(request)
 
 
 def test_propose_updates_flow(
@@ -46,7 +62,9 @@ def test_propose_updates_flow(
         encoding="utf-8",
     )
 
-    llm = MockLLMClient()
+    llm = RecordingMockLLMClient()
+    override_model = "mock-override"
+    override_temperature = 0.44
     result = propose_updates(
         project_config=sample_project_config,
         csc=sample_csc,
@@ -55,9 +73,34 @@ def test_propose_updates_flow(
         existing_sdd_path=existing_sdd,
         commit_range="HEAD~1..HEAD",
         repo_root=tmp_path,
+        model_name=override_model,
+        temperature=override_temperature,
     )
 
     assert result.report_markdown_path.exists()
     assert result.report_json_path.exists()
     assert result.retrieval_index_path.exists()
     assert result.impact.changed_files
+    assert llm.requests
+    assert all(request.model_name == override_model for request in llm.requests)
+    assert all(request.temperature == override_temperature for request in llm.requests)
+
+
+def test_propose_updates_requires_existing_sdd_file(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    missing_sdd = tmp_path / "missing.md"
+    llm = MockLLMClient()
+    with pytest.raises(ConfigError, match="Existing SDD file not found"):
+        propose_updates(
+            project_config=sample_project_config,
+            csc=sample_csc,
+            template=sample_template,
+            llm_client=llm,
+            existing_sdd_path=missing_sdd,
+            commit_range="HEAD~1..HEAD",
+            repo_root=tmp_path,
+        )
