@@ -78,6 +78,11 @@ class GenerationOptions(DomainModel):
     write_batch_size: int = 200
     max_in_memory_records: int = 2000
     index_shard_size: int = 1000
+    graph_enabled: bool = True
+    graph_depth: Literal[1, 2] = 1
+    graph_top_k: int = 12
+    vector_enabled: bool = False
+    vector_top_k: int = 8
 
     @field_validator(
         "max_files",
@@ -86,6 +91,8 @@ class GenerationOptions(DomainModel):
         "write_batch_size",
         "max_in_memory_records",
         "index_shard_size",
+        "graph_top_k",
+        "vector_top_k",
     )
     @classmethod
     def validate_positive_ints(cls, value: int) -> int:
@@ -484,6 +491,19 @@ class Citation(DomainModel):
     quote: str
 
 
+class ChunkInclusionReason(DomainModel):
+    """Score breakdown for why a chunk was selected for Q&A evidence."""
+
+    chunk_id: str
+    source: Literal["lexical", "hierarchy", "graph", "vector"] = "lexical"
+    lexical_score: float = 0.0
+    anchor_score: float = 0.0
+    graph_score: float = 0.0
+    type_bias: float = 0.0
+    final_score: float = 0.0
+    reason: str
+
+
 class QueryRequest(DomainModel):
     """Question request passed to query workflow."""
 
@@ -506,6 +526,11 @@ class QueryEvidencePack(DomainModel):
     request: QueryRequest
     chunks: list[KnowledgeChunk]
     citations: list[Citation]
+    primary_chunks: list[KnowledgeChunk] = Field(default_factory=list)
+    related_files: list[Path] = Field(default_factory=list)
+    related_symbols: list[str] = Field(default_factory=list)
+    related_sections: list[str] = Field(default_factory=list)
+    inclusion_reasons: list[ChunkInclusionReason] = Field(default_factory=list)
 
 
 class QueryAnswer(DomainModel):
@@ -540,6 +565,8 @@ class GenerateResult(DomainModel):
     run_metrics_path: Path
     hierarchy_manifest_path: Path | None = None
     hierarchy_store_path: Path | None = None
+    graph_manifest_path: Path | None = None
+    graph_store_path: Path | None = None
 
 
 class ProposeUpdatesResult(DomainModel):
@@ -554,6 +581,8 @@ class ProposeUpdatesResult(DomainModel):
     run_metrics_path: Path
     hierarchy_manifest_path: Path | None = None
     hierarchy_store_path: Path | None = None
+    graph_manifest_path: Path | None = None
+    graph_store_path: Path | None = None
 
 
 class InspectDiffResult(DomainModel):

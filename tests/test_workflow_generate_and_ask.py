@@ -56,8 +56,12 @@ def compute_distance(x: float, y: float) -> float:
     assert result.retrieval_index_path.exists()
     assert result.hierarchy_manifest_path is not None
     assert result.hierarchy_store_path is not None
+    assert result.graph_manifest_path is not None
+    assert result.graph_store_path is not None
     assert result.hierarchy_manifest_path.exists()
     assert result.hierarchy_store_path.exists()
+    assert result.graph_manifest_path.exists()
+    assert result.graph_store_path.exists()
     assert result.document.sections
 
     ask_result = answer_question(

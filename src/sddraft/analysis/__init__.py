@@ -5,6 +5,15 @@ from .evidence_builder import (
     build_generation_evidence_packs,
     build_update_evidence_packs,
 )
+from .graph_build import build_graph_store
+from .graph_index import default_graph_manifest_path, load_graph_store
+from .graph_retrieval import (
+    GraphExpansionCandidateSource,
+    LexicalCandidateSource,
+    VectorCandidateSource,
+    collect_graph_candidates,
+    rerank_evidence,
+)
 from .hierarchy import (
     build_hierarchy_index,
     default_hierarchy_index_path,
@@ -22,6 +31,7 @@ from .retrieval import (
     JsonlChunkSink,
     LexicalIndexer,
     RetrievalQueryEngine,
+    ScoredChunk,
     build_document_chunks,
     build_retrieval_store,
     default_retrieval_store_path,
@@ -40,6 +50,14 @@ __all__ = [
     "build_commit_impact",
     "build_generation_evidence_packs",
     "build_update_evidence_packs",
+    "build_graph_store",
+    "default_graph_manifest_path",
+    "load_graph_store",
+    "LexicalCandidateSource",
+    "GraphExpansionCandidateSource",
+    "VectorCandidateSource",
+    "collect_graph_candidates",
+    "rerank_evidence",
     "file_node_id",
     "directory_node_id",
     "build_hierarchy_index",
@@ -56,6 +74,7 @@ __all__ = [
     "JsonlChunkSink",
     "BM25Retriever",
     "RetrievalQueryEngine",
+    "ScoredChunk",
     "build_document_chunks",
     "default_retrieval_store_path",
     "build_retrieval_store",

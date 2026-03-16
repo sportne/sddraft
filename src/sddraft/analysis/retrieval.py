@@ -8,6 +8,7 @@ import math
 import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -32,6 +33,14 @@ _MANIFEST_FILENAME = "manifest.json"
 _DOCSTATS_FILENAME = "docstats.jsonl"
 _CHUNK_SHARD_PREFIX = "chunks"
 _POSTINGS_PREFIX = "postings"
+
+
+@dataclass(frozen=True, slots=True)
+class ScoredChunk:
+    """One retrieval result with an explicit lexical score."""
+
+    chunk: KnowledgeChunk
+    score: float
 
 
 def tokenize(text: str) -> list[str]:
@@ -76,6 +85,9 @@ class Retriever(Protocol):
 
     def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
         """Search for the most relevant chunks."""
+
+    def search_scored(self, query: str, top_k: int = 6) -> list[ScoredChunk]:
+        """Search for scored chunks."""
 
 
 class LexicalIndexer:
@@ -152,7 +164,7 @@ class BM25Retriever:
 
         return score
 
-    def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
+    def search_scored(self, query: str, top_k: int = 6) -> list[ScoredChunk]:
         query_terms = tokenize(query)
         scored: list[tuple[float, KnowledgeChunk]] = []
         for chunk, doc_len in zip(self._chunks, self._doc_lengths, strict=False):
@@ -171,7 +183,9 @@ class BM25Retriever:
             ),
         )
         if ranked:
-            return [chunk for _, chunk in ranked[:top_k]]
+            return [
+                ScoredChunk(chunk=chunk, score=score) for score, chunk in ranked[:top_k]
+            ]
 
         fallback = sorted(
             self._chunks,
@@ -181,7 +195,10 @@ class BM25Retriever:
                 item.chunk_id,
             ),
         )
-        return fallback[:top_k]
+        return [ScoredChunk(chunk=item, score=0.0) for item in fallback[:top_k]]
+
+    def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
+        return [item.chunk for item in self.search_scored(query, top_k=top_k)]
 
 
 class JsonlChunkSink:
@@ -418,12 +435,14 @@ class RetrievalQueryEngine:
                 smallest.pop()
         return smallest
 
-    def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
+    def search_scored(self, query: str, top_k: int = 6) -> list[ScoredChunk]:
         """Search chunks using BM25 scoring over postings shards."""
 
         query_terms = tokenize(query)
         if not query_terms:
-            return self._fallback(top_k)
+            return [
+                ScoredChunk(chunk=item, score=0.0) for item in self._fallback(top_k)
+            ]
 
         postings_by_term: dict[str, dict[str, int]] = {}
         candidate_ids: set[str] = set()
@@ -434,7 +453,9 @@ class RetrievalQueryEngine:
                 candidate_ids.update(postings)
 
         if not candidate_ids:
-            return self._fallback(top_k)
+            return [
+                ScoredChunk(chunk=item, score=0.0) for item in self._fallback(top_k)
+            ]
 
         doc_lengths = self._load_doc_lengths(candidate_ids)
         chunks_by_id = self._load_chunks(candidate_ids)
@@ -476,9 +497,14 @@ class RetrievalQueryEngine:
             ),
         )
         if ranked:
-            return [chunk for _, chunk in ranked[:top_k]]
+            return [
+                ScoredChunk(chunk=chunk, score=score) for score, chunk in ranked[:top_k]
+            ]
 
-        return self._fallback(top_k)
+        return [ScoredChunk(chunk=item, score=0.0) for item in self._fallback(top_k)]
+
+    def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
+        return [item.chunk for item in self.search_scored(query, top_k=top_k)]
 
     def load_chunks_by_node_ids(
         self, node_ids: set[str], *, limit: int | None = None
@@ -497,6 +523,58 @@ class RetrievalQueryEngine:
                 continue
             matches.append(chunk)
 
+        matches.sort(key=self._tie_break_key)
+        if limit is not None:
+            return matches[:limit]
+        return matches
+
+    def load_chunks_by_chunk_ids(
+        self, chunk_ids: set[str], *, limit: int | None = None
+    ) -> list[KnowledgeChunk]:
+        """Load chunks by retrieval chunk IDs."""
+
+        if not chunk_ids:
+            return []
+        matches: list[KnowledgeChunk] = []
+        for chunk in self.iter_chunks():
+            if chunk.chunk_id not in chunk_ids:
+                continue
+            matches.append(chunk)
+        matches.sort(key=self._tie_break_key)
+        if limit is not None:
+            return matches[:limit]
+        return matches
+
+    def load_chunks_by_source_paths(
+        self, source_paths: set[Path], *, limit: int | None = None
+    ) -> list[KnowledgeChunk]:
+        """Load chunks for a set of source paths."""
+
+        if not source_paths:
+            return []
+        matches: list[KnowledgeChunk] = []
+        normalized = {path.as_posix() for path in source_paths}
+        for chunk in self.iter_chunks():
+            if chunk.source_path.as_posix() not in normalized:
+                continue
+            matches.append(chunk)
+        matches.sort(key=self._tie_break_key)
+        if limit is not None:
+            return matches[:limit]
+        return matches
+
+    def load_chunks_by_section_ids(
+        self, section_ids: set[str], *, limit: int | None = None
+    ) -> list[KnowledgeChunk]:
+        """Load chunks for one-or-more section ids."""
+
+        if not section_ids:
+            return []
+        matches: list[KnowledgeChunk] = []
+        for chunk in self.iter_chunks():
+            if chunk.section_id not in section_ids:
+                continue
+            matches.append(chunk)
         matches.sort(key=self._tie_break_key)
         if limit is not None:
             return matches[:limit]

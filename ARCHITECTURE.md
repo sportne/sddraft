@@ -33,6 +33,8 @@ Config + CSC Descriptor
 ↓
 Repository Analysis
 ↓
+Retrieval + Hierarchy + Graph Artifact Build
+↓
 Evidence Construction
 ↓
 Prompt Construction
@@ -199,6 +201,73 @@ Outputs include:
 * update proposal reports
 
 Renderers must operate only on structured domain models.
+
+---
+
+## 3.9 Engineering Graph Layer
+
+SDDraft now builds a deterministic engineering/documentation graph that augments
+repository Q&A and traceability.
+
+Graph artifacts are file-backed and inspectable:
+
+* `artifacts/<CSC>/graph/manifest.json`
+* `artifacts/<CSC>/graph/nodes.jsonl`
+* `artifacts/<CSC>/graph/edges.jsonl`
+* `artifacts/<CSC>/graph/symbol_index.json`
+* `artifacts/<CSC>/graph/adjacency.json`
+
+Node types include:
+
+* `directory`
+* `file`
+* `symbol`
+* `chunk`
+* `sdd_section`
+* `commit`
+
+Edge types include:
+
+* `contains`
+* `defines`
+* `references`
+* `documents`
+* `parent_of`
+* `imports`
+* `changed_in`
+* `impacts_section`
+
+IDs are deterministic and stable for unchanged inputs.
+
+---
+
+## 3.10 Ask Retrieval Pipeline
+
+`ask` uses a deterministic multi-stage retrieval flow:
+
+1. lexical retrieval over the retrieval store
+2. optional hierarchy expansion
+3. graph anchor extraction from primary evidence
+4. bounded graph neighborhood expansion
+5. deterministic re-ranking
+6. structured evidence pack assembly
+7. grounded answer generation
+
+If hierarchy or graph artifacts are missing/corrupt, `ask` falls back to the
+available deterministic stages and adds an uncertainty note instead of failing.
+
+---
+
+## 3.11 Vector-Ready Candidate Sources
+
+Retrieval orchestration is structured around candidate sources:
+
+* lexical source (implemented)
+* graph expansion source (implemented)
+* vector source (interface placeholder)
+
+This keeps current behavior stable while allowing future vector retrieval
+integration without reworking workflow interfaces.
 
 ---
 

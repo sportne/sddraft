@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sddraft.analysis.commit_impact import build_commit_impact
 from sddraft.analysis.evidence_builder import build_update_evidence_pack
+from sddraft.analysis.graph_build import build_graph_store
 from sddraft.analysis.hierarchy import iter_hierarchy_chunks
 from sddraft.analysis.metrics import RunMetricsCollector
 from sddraft.analysis.retrieval import (
@@ -169,6 +170,7 @@ def propose_updates(
     model_name: str | None = None,
     temperature: float | None = None,
     hierarchy_docs_enabled: bool = True,
+    graph_enabled: bool = True,
     progress_callback: Callable[[str], None] | None = None,
 ) -> ProposeUpdatesResult:
     """Run commit-impact analysis and generate section update proposals."""
@@ -283,6 +285,8 @@ def propose_updates(
     report_json_path = output_root / "update_proposals.json"
     hierarchy_manifest_path: Path | None = None
     hierarchy_store_path: Path | None = None
+    graph_manifest_path: Path | None = None
+    graph_store_path: Path | None = None
     hierarchy_chunk_count = 0
 
     write_markdown(report_markdown_path, render_update_report_markdown(report))
@@ -296,17 +300,18 @@ def propose_updates(
         )
 
         changed_paths = {item.path for item in impact.changed_files}
+        scan_result = ScanResult(
+            files=scan_files,
+            code_summaries=code_summaries,
+            interface_summaries=interface_summaries,
+            dependencies=dependencies,
+            code_chunks=[],
+        )
         hierarchy_store = build_hierarchy_store(
             csc_id=csc.csc_id,
             repo_root=repo_root,
             output_root=output_root,
-            scan_result=ScanResult(
-                files=scan_files,
-                code_summaries=code_summaries,
-                interface_summaries=interface_summaries,
-                dependencies=dependencies,
-                code_chunks=[],
-            ),
+            scan_result=scan_result,
             llm_client=llm_client,
             model_name=resolved_model,
             temperature=resolved_temperature,
@@ -350,6 +355,33 @@ def propose_updates(
     write_json_model(run_metrics_path, metrics_collector.metrics)
     progress(f"[{csc.csc_id}] Wrote retrieval store and run metrics.")
 
+    if graph_enabled:
+        metrics_collector.start("build_graph")
+        progress(f"[{csc.csc_id}] Building engineering graph...")
+        scan_result_for_graph = ScanResult(
+            files=scan_files,
+            code_summaries=code_summaries,
+            interface_summaries=interface_summaries,
+            dependencies=dependencies,
+            code_chunks=[],
+        )
+        graph_result = build_graph_store(
+            csc_id=csc.csc_id,
+            repo_root=repo_root,
+            output_root=output_root,
+            retrieval_root=retrieval_index_path,
+            scan_result=scan_result_for_graph,
+            update_report=report,
+            commit_impact=impact,
+        )
+        graph_manifest_path = graph_result.manifest_path
+        graph_store_path = graph_result.store_root
+        metrics_collector.finish(
+            chunks_written=graph_result.node_count + graph_result.edge_count
+        )
+        write_json_model(run_metrics_path, metrics_collector.metrics)
+        progress(f"[{csc.csc_id}] Wrote engineering graph store.")
+
     return ProposeUpdatesResult(
         impact=impact,
         report=report,
@@ -360,4 +392,6 @@ def propose_updates(
         run_metrics_path=run_metrics_path,
         hierarchy_manifest_path=hierarchy_manifest_path,
         hierarchy_store_path=hierarchy_store_path,
+        graph_manifest_path=graph_manifest_path,
+        graph_store_path=graph_store_path,
     )

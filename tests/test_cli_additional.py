@@ -220,6 +220,7 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     assert generate_calls[0]["model_name"] == "override-model"
     assert generate_calls[0]["temperature"] == 0.73
     assert generate_calls[0]["hierarchy_docs_enabled"] is True
+    assert generate_calls[0]["graph_enabled"] is True
 
     propose_calls: list[dict[str, object]] = []
     fake_impact = CommitImpact(
@@ -268,6 +269,7 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     assert propose_calls[0]["model_name"] == "override-model"
     assert propose_calls[0]["temperature"] == 0.73
     assert propose_calls[0]["hierarchy_docs_enabled"] is True
+    assert propose_calls[0]["graph_enabled"] is True
     assert created_clients == [
         ("gemini", "override-model"),
         ("gemini", "override-model"),
@@ -357,6 +359,78 @@ def test_cli_error_messages_for_runtime_paths(
     )
     assert diff_rc == 2
     assert "Failed to run git diff" in capsys.readouterr().out
+
+
+def test_cli_no_graph_and_ask_graph_flags_propagate(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cli_module = importlib.import_module("sddraft.cli.main")
+    bundle = _fake_bundle(tmp_path)
+    monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
+    monkeypatch.setattr(
+        cli_module, "create_llm_client", lambda *args, **kwargs: object()
+    )
+
+    generate_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        cli_module,
+        "generate_sdd",
+        lambda **kwargs: (
+            generate_calls.append(kwargs)
+            or SimpleNamespace(
+                markdown_path=tmp_path / "sdd.md",
+                review_json_path=tmp_path / "review.json",
+                retrieval_index_path=tmp_path / "retrieval",
+            )
+        ),
+    )
+    rc_generate = main(
+        [
+            "generate",
+            "--project-config",
+            str(tmp_path / "p.yaml"),
+            "--csc",
+            str(tmp_path / "c.yaml"),
+            "--no-graph",
+        ]
+    )
+    assert rc_generate == 0
+    assert generate_calls[0]["graph_enabled"] is False
+
+    captured_ask: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        cli_module,
+        "answer_question",
+        lambda **kwargs: (
+            captured_ask.append(kwargs)
+            or AskResult(
+                answer=QueryAnswer(answer="A", citations=[], confidence=0.5),
+                evidence_pack=QueryEvidencePack(
+                    request=QueryRequest(question="Q"),
+                    chunks=[],
+                    citations=[],
+                ),
+            )
+        ),
+    )
+    rc_ask = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--question",
+            "what changed?",
+            "--graph-depth",
+            "2",
+            "--graph-top-k",
+            "15",
+            "--no-graph",
+        ]
+    )
+    assert rc_ask == 0
+    assert captured_ask[0]["graph_enabled"] is False
+    assert captured_ask[0]["graph_depth"] == 2
+    assert captured_ask[0]["graph_top_k"] == 15
 
 
 def test_cli_migrate_index_command(tmp_path: Path) -> None:

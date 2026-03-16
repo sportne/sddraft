@@ -32,6 +32,7 @@ def _add_common_generation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", type=str)
     parser.add_argument("--temperature", type=float)
     parser.add_argument("--no-hierarchy-docs", action="store_true")
+    parser.add_argument("--no-graph", action="store_true")
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -63,6 +64,9 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ask_parser.add_argument("--model", type=str, default="mock-sddraft")
     ask_parser.add_argument("--temperature", type=float, default=0.2)
     ask_parser.add_argument("--top-k", type=int, default=6)
+    ask_parser.add_argument("--no-graph", action="store_true")
+    ask_parser.add_argument("--graph-depth", type=int, choices=[1, 2], default=1)
+    ask_parser.add_argument("--graph-top-k", type=int, default=12)
 
     migrate_parser = subparsers.add_parser("migrate-index")
     migrate_parser.add_argument("--index-path", required=True, type=Path)
@@ -118,6 +122,7 @@ def _run_generate(args: argparse.Namespace) -> int:
             model_name=resolved_model,
             temperature=resolved_temperature,
             hierarchy_docs_enabled=not args.no_hierarchy_docs,
+            graph_enabled=not args.no_graph,
             progress_callback=_progress,
         )
         print(
@@ -155,6 +160,7 @@ def _run_propose_updates(args: argparse.Namespace) -> int:
             model_name=resolved_model,
             temperature=resolved_temperature,
             hierarchy_docs_enabled=not args.no_hierarchy_docs,
+            graph_enabled=not args.no_graph,
             progress_callback=_progress,
         )
         print(
@@ -177,6 +183,8 @@ def _run_ask(args: argparse.Namespace) -> int:
     from sddraft.domain.models import LLMConfig
 
     resolved_temperature = _resolve_temperature(args.temperature, 0.2)
+    if args.graph_top_k <= 0:
+        raise SDDraftError("--graph-top-k must be a positive integer")
     llm_client = create_llm_client(
         LLMConfig(
             provider=args.provider,
@@ -200,6 +208,9 @@ def _run_ask(args: argparse.Namespace) -> int:
                 llm_client=llm_client,
                 model_name=args.model,
                 temperature=resolved_temperature,
+                graph_enabled=not args.no_graph,
+                graph_depth=args.graph_depth,
+                graph_top_k=args.graph_top_k,
             )
             print(render_query_answer_text(result.answer))
             history.extend([f"Q: {question}", f"A: {result.answer.answer}"])
@@ -215,6 +226,9 @@ def _run_ask(args: argparse.Namespace) -> int:
         llm_client=llm_client,
         model_name=args.model,
         temperature=resolved_temperature,
+        graph_enabled=not args.no_graph,
+        graph_depth=args.graph_depth,
+        graph_top_k=args.graph_top_k,
     )
     print(render_query_answer_text(result.answer))
     return 0

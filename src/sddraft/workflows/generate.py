@@ -9,6 +9,7 @@ from itertools import chain
 from pathlib import Path
 
 from sddraft.analysis.evidence_builder import build_generation_evidence_pack
+from sddraft.analysis.graph_build import build_graph_store
 from sddraft.analysis.hierarchy import iter_hierarchy_chunks
 from sddraft.analysis.metrics import RunMetricsCollector
 from sddraft.analysis.retrieval import (
@@ -155,6 +156,7 @@ def generate_sdd(
     model_name: str | None = None,
     temperature: float | None = None,
     hierarchy_docs_enabled: bool = True,
+    graph_enabled: bool = True,
     progress_callback: Callable[[str], None] | None = None,
 ) -> GenerateResult:
     """Run the end-to-end initial SDD generation workflow."""
@@ -362,6 +364,28 @@ def generate_sdd(
         progress_callback, f"[{csc.csc_id}] Wrote retrieval store and run metrics."
     )
 
+    graph_manifest_path: Path | None = None
+    graph_store_path: Path | None = None
+    if graph_enabled:
+        metrics_collector.start("build_graph")
+        _progress(progress_callback, f"[{csc.csc_id}] Building engineering graph...")
+        graph_result = build_graph_store(
+            csc_id=csc.csc_id,
+            repo_root=repo_root,
+            output_root=output_root,
+            retrieval_root=retrieval_index_path,
+            scan_result=scan_result,
+            document=document,
+            review_artifact=review_artifact,
+        )
+        graph_manifest_path = graph_result.manifest_path
+        graph_store_path = graph_result.store_root
+        metrics_collector.finish(
+            chunks_written=graph_result.node_count + graph_result.edge_count
+        )
+        write_json_model(run_metrics_path, metrics_collector.metrics)
+        _progress(progress_callback, f"[{csc.csc_id}] Wrote engineering graph store.")
+
     return GenerateResult(
         document=document,
         review_artifact=review_artifact,
@@ -372,4 +396,6 @@ def generate_sdd(
         run_metrics_path=run_metrics_path,
         hierarchy_manifest_path=hierarchy_manifest_path,
         hierarchy_store_path=hierarchy_store_path,
+        graph_manifest_path=graph_manifest_path,
+        graph_store_path=graph_store_path,
     )

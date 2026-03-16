@@ -90,8 +90,12 @@ def test_propose_updates_flow(
     assert result.retrieval_index_path.exists()
     assert result.hierarchy_manifest_path is not None
     assert result.hierarchy_store_path is not None
+    assert result.graph_manifest_path is not None
+    assert result.graph_store_path is not None
     assert result.hierarchy_manifest_path.exists()
     assert result.hierarchy_store_path.exists()
+    assert result.graph_manifest_path.exists()
+    assert result.graph_store_path.exists()
     assert result.impact.changed_files
     assert llm.requests
     assert all(request.model_name == override_model for request in llm.requests)
