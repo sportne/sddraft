@@ -15,32 +15,44 @@ def test_scan_repository_extracts_summaries_and_chunks(
     src_dir = tmp_path / "src"
     src_dir.mkdir()
     (src_dir / "tests").mkdir()
+    (tmp_path / ".gitignore").write_text("src/ignored.md\n", encoding="utf-8")
 
     module_path = src_dir / "module.py"
     module_path.write_text(
         '"""Module docs."""\n\nimport os\n\n\nclass NavService:\n    def run(self) -> None:\n        """Run loop"""\n        pass\n\n\ndef plan_route() -> str:\n    return "ok"\n',
         encoding="utf-8",
     )
+    makefile_path = src_dir / "Makefile"
+    makefile_path.write_text("include common.mk\nall:\n\t@echo ok\n", encoding="utf-8")
+    ignored_doc = src_dir / "ignored.md"
+    ignored_doc.write_text("# ignored", encoding="utf-8")
     (src_dir / "tests" / "ignored.py").write_text("x=1", encoding="utf-8")
 
     result = scan_repository(sample_project_config, sample_csc, repo_root=tmp_path)
 
     assert module_path.resolve() in result.files
+    assert makefile_path.resolve() in result.files
+    assert ignored_doc.resolve() not in result.files
     assert all("tests" not in path.as_posix() for path in result.files)
 
     assert result.code_summaries
-    summary = result.code_summaries[0]
-    assert "plan_route" in summary.functions
-    assert "NavService" in summary.classes
-    assert any("import os" in dep for dep in summary.imports)
+    python_summary = next(
+        item for item in result.code_summaries if item.path == module_path
+    )
+    assert "plan_route" in python_summary.functions
+    assert "NavService" in python_summary.classes
+    assert any("import os" in dep for dep in python_summary.imports)
+    unknown_summary = next(
+        item for item in result.code_summaries if item.path == makefile_path
+    )
+    assert unknown_summary.language == "unknown"
+    assert "include common.mk" in unknown_summary.imports
 
     interface_names = {item.name for item in result.interface_summaries}
     assert "NavService" in interface_names
     assert "plan_route" in interface_names
 
     assert result.code_chunks
-    first_chunk = result.code_chunks[0]
-    assert first_chunk.source_type == "code"
-    assert first_chunk.line_start == 1
-    assert first_chunk.line_end is not None
-    assert first_chunk.metadata.get("language") == "python"
+    chunk_languages = {item.metadata.get("language") for item in result.code_chunks}
+    assert "python" in chunk_languages
+    assert "unknown" in chunk_languages

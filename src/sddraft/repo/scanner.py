@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from pathspec import PathSpec
+
 from sddraft.domain.errors import AnalysisError, RepositoryError
 from sddraft.domain.models import (
     CodeUnitSummary,
@@ -19,11 +21,20 @@ from sddraft.domain.models import (
 from sddraft.repo.language_analyzers import detect_language, get_analyzer_for_path
 
 
-def _matches_patterns(path: Path, include: list[str], exclude: list[str]) -> bool:
+def _matches_patterns(path: Path, patterns: list[str]) -> bool:
     path_match = PurePosixPath(path.as_posix())
-    include_match = any(path_match.match(pattern) for pattern in include)
-    exclude_match = any(path_match.match(pattern) for pattern in exclude)
-    return include_match and not exclude_match
+    return any(path_match.match(pattern) for pattern in patterns)
+
+
+def _load_gitignore_spec(repo_root: Path) -> PathSpec | None:
+    gitignore_path = repo_root / ".gitignore"
+    if not gitignore_path.exists():
+        return None
+    try:
+        lines = gitignore_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    return PathSpec.from_lines("gitignore", lines)
 
 
 def discover_source_files(
@@ -35,6 +46,7 @@ def discover_source_files(
     """Discover source files from roots using include/exclude patterns."""
 
     discovered: list[Path] = []
+    gitignore_spec = _load_gitignore_spec(repo_root.resolve())
     for root in roots:
         normalized_root = root if root.is_absolute() else (repo_root / root)
         normalized_root = normalized_root.resolve()
@@ -48,7 +60,21 @@ def discover_source_files(
                 relative_path = file_path.resolve().relative_to(repo_root.resolve())
             except ValueError:
                 relative_path = Path(file_path.name)
-            if _matches_patterns(Path(relative_path), include, exclude):
+
+            relative_posix_path = relative_path.as_posix()
+            if gitignore_spec is not None and gitignore_spec.match_file(
+                relative_posix_path
+            ):
+                continue
+
+            include_match = _matches_patterns(relative_path, include)
+            exclude_match = _matches_patterns(relative_path, exclude)
+            if exclude_match:
+                continue
+
+            # Keep unknown files in scope for project understanding even when
+            # include patterns target specific programming-language suffixes.
+            if include_match or detect_language(relative_path) == "unknown":
                 discovered.append(file_path.resolve())
 
     deduplicated = sorted(set(discovered))
@@ -85,7 +111,7 @@ def build_code_chunks(
     for path in sorted(paths):
         try:
             content = path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             continue
 
         lines = content.splitlines()
@@ -130,12 +156,10 @@ def analyze_source_file(path: Path) -> tuple[CodeUnitSummary, list[InterfaceSumm
     """Analyze one source file with the registered language analyzer."""
 
     analyzer = get_analyzer_for_path(path)
-    if analyzer.language == "unknown":
-        raise AnalysisError(f"Unsupported source language for '{path}'")
 
     try:
         source_text = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise AnalysisError(f"Failed to read source file '{path}': {exc}") from exc
 
     return analyzer.analyze(path=path, source_text=source_text)

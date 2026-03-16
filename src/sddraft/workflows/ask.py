@@ -52,8 +52,8 @@ def answer_question(
                 retrieval_index=None,
                 hierarchy_index=hierarchy_index,
                 top_k=request.top_k,
-                load_chunks_by_node_ids=lambda node_ids, limit: engine.load_chunks_by_node_ids(
-                    node_ids, limit=limit
+                load_chunks_by_node_ids=lambda node_ids, limit: (
+                    engine.load_chunks_by_node_ids(node_ids, limit=limit)
                 ),
             )
         except (AnalysisError, OSError):

@@ -912,7 +912,9 @@ class UnknownAnalyzer:
         re.compile(r"^(def|class|interface|enum|struct|template|fn|func|impl)\b"),
     )
     _dependency_patterns = (
-        re.compile(r"^(import|from\s+\S+\s+import|#\s*include|package|using|use)\b"),
+        re.compile(
+            r"^(import|from\s+\S+\s+import|#\s*include|include|package|using|use)\b"
+        ),
     )
 
     def supports(self, path: Path) -> bool:
@@ -921,7 +923,26 @@ class UnknownAnalyzer:
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
-        raise AnalysisError(f"No analyzer registered for file '{path}'")
+        imports = sorted(
+            {
+                line.strip()
+                for line in source_text.splitlines()
+                if any(
+                    pattern.match(line.strip()) for pattern in self._dependency_patterns
+                )
+            }
+        )
+        return (
+            CodeUnitSummary(
+                path=path,
+                language=self.language,
+                functions=[],
+                classes=[],
+                docstrings=[],
+                imports=imports,
+            ),
+            [],
+        )
 
     def signature_changes(self, changed_lines: list[str]) -> list[str]:
         return [

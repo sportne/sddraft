@@ -30,7 +30,7 @@ Long-running workflows emit `[progress] ...` status lines in the CLI.
 - Supported source languages: Python, Java, C++, JavaScript, TypeScript, Go, Rust, and C#.
 - Supported extensions: `.py`, `.java`, `.c`, `.cc`, `.cpp`, `.h`, `.hpp`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.go`, `.rs`, `.cs`.
 - Parsing uses tree-sitter analyzers in the `repo` layer.
-- Unsupported extensions are ignored by language analysis unless included in future analyzers.
+- Unsupported files are analyzed as `unknown` (deterministically, without language-specific parsing) unless excluded by config or `.gitignore`.
 
 ## Quick Start
 

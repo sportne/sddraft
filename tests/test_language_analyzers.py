@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from sddraft.domain.errors import AnalysisError
 from sddraft.repo.language_analyzers import (
     detect_language,
     get_analyzer_for_language,
@@ -142,5 +139,12 @@ def test_unknown_analyzer_behavior() -> None:
     assert analyzer.signature_changes(["fn run()", "xyz"]) == ["fn run()"]
     assert analyzer.dependency_changes(["use std::fmt;", "abc"]) == ["use std::fmt;"]
     assert get_analyzer_for_language("unknown").language == "unknown"
-    with pytest.raises(AnalysisError):
-        analyzer.analyze(Path("README.md"), "text")
+    summary, interfaces = analyzer.analyze(
+        Path("README.md"),
+        "import os\ninclude common.mk\njust text\n",
+    )
+    assert summary.language == "unknown"
+    assert summary.functions == []
+    assert summary.classes == []
+    assert summary.imports == ["import os", "include common.mk"]
+    assert interfaces == []

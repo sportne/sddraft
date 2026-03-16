@@ -35,11 +35,12 @@ def test_scan_repository_multilanguage(
         'package main\nimport "fmt"\ntype GoService struct{}\nfunc Run() {}\n',
         encoding="utf-8",
     )
+    (src_dir / "BUILD").write_text("include rules.mk\n", encoding="utf-8")
 
     result = scan_repository(sample_project_config, sample_csc, repo_root=tmp_path)
 
     languages = {summary.language for summary in result.code_summaries}
-    assert {"python", "java", "cpp", "javascript", "go"}.issubset(languages)
+    assert {"python", "java", "cpp", "javascript", "go", "unknown"}.issubset(languages)
 
     interface_names = {item.name for item in result.interface_summaries}
     assert "PyService" in interface_names
@@ -54,3 +55,4 @@ def test_scan_repository_multilanguage(
     assert "cpp" in chunk_languages
     assert "javascript" in chunk_languages
     assert "go" in chunk_languages
+    assert "unknown" in chunk_languages
