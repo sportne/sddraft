@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from sddraft.analysis.retrieval import load_retrieval_manifest
 from sddraft.cli.main import main
 
 
@@ -97,7 +98,7 @@ def test_cli_validate_generate_and_ask(tmp_path: Path, monkeypatch) -> None:
     )
     assert generate_exit == 0
 
-    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval_index.json"
+    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval"
     ask_exit = main(
         [
             "ask",
@@ -139,8 +140,17 @@ def test_cli_generate_no_hierarchy_docs_flag(tmp_path: Path, monkeypatch) -> Non
     hierarchy_dir = tmp_path / "artifacts" / "NAV_CTRL" / "hierarchy"
     assert not hierarchy_dir.exists()
 
-    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval_index.json"
-    payload = json.loads(index_path.read_text(encoding="utf-8"))
-    source_types = {chunk["source_type"] for chunk in payload["chunks"]}
+    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval"
+    manifest, store_root = load_retrieval_manifest(index_path)
+    source_types: set[str] = set()
+    for shard in manifest.chunk_shards:
+        rows = (
+            json.loads(line)
+            for line in (store_root / shard.path)
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        )
+        source_types.update(str(row["source_type"]) for row in rows)
     assert "file_summary" not in source_types
     assert "directory_summary" not in source_types

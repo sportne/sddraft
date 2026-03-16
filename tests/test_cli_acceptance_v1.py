@@ -132,7 +132,7 @@ def test_cli_acceptance_required_commands_and_batch_generation(
     for root in (nav_root, power_root):
         assert (root / "sdd.md").exists()
         assert (root / "review_artifact.json").exists()
-        assert (root / "retrieval_index.json").exists()
+        assert (root / "retrieval" / "manifest.json").exists()
 
 
 def test_cli_acceptance_propose_updates_and_inspect_diff(
@@ -193,7 +193,7 @@ Old text
     out_root = tmp_path / "artifacts" / "NAV_CTRL"
     assert (out_root / "update_report.md").exists()
     assert (out_root / "update_proposals.json").exists()
-    assert (out_root / "retrieval_index.json").exists()
+    assert (out_root / "retrieval" / "manifest.json").exists()
 
     inspect_rc = main(
         [

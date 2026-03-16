@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from sddraft.domain.errors import AnalysisError, RepositoryError
@@ -56,6 +57,16 @@ def discover_source_files(
 
 def _build_chunk_id(source_path: Path, line_start: int, line_end: int) -> str:
     return f"code::{source_path.as_posix()}::{line_start}-{line_end}"
+
+
+@dataclass(slots=True)
+class ScanRecord:
+    """Streaming scan record for one source file."""
+
+    path: Path
+    code_summary: CodeUnitSummary
+    interface_summaries: list[InterfaceSummary]
+    code_chunks: list[KnowledgeChunk]
 
 
 def build_code_chunks(
@@ -137,6 +148,39 @@ def scan_repository(
 ) -> ScanResult:
     """Run deterministic repository scanning and summary extraction."""
 
+    files: list[Path] = []
+    code_summaries: list[CodeUnitSummary] = []
+    interface_summaries: list[InterfaceSummary] = []
+    code_chunks: list[KnowledgeChunk] = []
+    dependency_values: set[str] = set()
+
+    for record in scan_repository_stream(
+        project_config=project_config,
+        csc=csc,
+        repo_root=repo_root,
+    ):
+        files.append(record.path)
+        code_summaries.append(record.code_summary)
+        interface_summaries.extend(record.interface_summaries)
+        code_chunks.extend(record.code_chunks)
+        dependency_values.update(record.code_summary.imports)
+
+    return ScanResult(
+        files=files,
+        code_summaries=code_summaries,
+        interface_summaries=interface_summaries,
+        dependencies=sorted(dependency_values),
+        code_chunks=code_chunks,
+    )
+
+
+def scan_repository_stream(
+    project_config: ProjectConfig,
+    csc: CSCDescriptor,
+    repo_root: Path,
+) -> Iterable[ScanRecord]:
+    """Yield per-file scan records for bounded-memory workflows."""
+
     roots = csc.source_roots or project_config.sources.roots
     files = discover_source_files(
         roots=roots,
@@ -148,39 +192,23 @@ def scan_repository(
     if len(files) > project_config.generation.max_files:
         files = files[: project_config.generation.max_files]
 
-    code_summaries: list[CodeUnitSummary] = []
-    interface_summaries: list[InterfaceSummary] = []
-    language_by_path: dict[Path, SourceLanguage] = {}
-    symbol_count_by_path: dict[Path, int] = {}
-
     for path in files:
         try:
             summary, interfaces = analyze_source_file(path)
         except AnalysisError:
             continue
 
-        code_summaries.append(summary)
-        interface_summaries.extend(interfaces)
-
-        language_by_path[path] = summary.language
-        symbol_count_by_path[path] = len(summary.functions) + len(summary.classes)
-
-    dependency_values: set[str] = set()
-    for summary in code_summaries:
-        dependency_values.update(summary.imports)
-
-    code_chunks = build_code_chunks(
-        files,
-        repo_root=repo_root,
-        chunk_lines=project_config.generation.code_chunk_lines,
-        language_by_path=language_by_path,
-        symbol_count_by_path=symbol_count_by_path,
-    )
-
-    return ScanResult(
-        files=files,
-        code_summaries=code_summaries,
-        interface_summaries=interface_summaries,
-        dependencies=sorted(dependency_values),
-        code_chunks=code_chunks,
-    )
+        symbol_count = len(summary.functions) + len(summary.classes)
+        chunks = build_code_chunks(
+            [path],
+            repo_root=repo_root,
+            chunk_lines=project_config.generation.code_chunk_lines,
+            language_by_path={path: summary.language},
+            symbol_count_by_path={path: symbol_count},
+        )
+        yield ScanRecord(
+            path=path,
+            code_summary=summary,
+            interface_summaries=interfaces,
+            code_chunks=chunks,
+        )

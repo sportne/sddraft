@@ -2,26 +2,31 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import json
+from collections import defaultdict
+from collections.abc import Callable, Iterator
+from itertools import chain
 from json import JSONDecodeError
 from pathlib import Path
 
 from pydantic import ValidationError as PydanticValidationError
 
 from sddraft.analysis.commit_impact import build_commit_impact
-from sddraft.analysis.evidence_builder import build_update_evidence_packs
+from sddraft.analysis.evidence_builder import build_update_evidence_pack
+from sddraft.analysis.metrics import RunMetricsCollector
 from sddraft.analysis.retrieval import (
-    LexicalIndexer,
-    load_retrieval_index,
-    save_retrieval_index,
+    build_retrieval_store,
+    default_retrieval_store_path,
 )
 from sddraft.domain.errors import ConfigError
 from sddraft.domain.models import (
+    CodeUnitSummary,
     CSCDescriptor,
+    InterfaceSummary,
     KnowledgeChunk,
     ProjectConfig,
     ProposeUpdatesResult,
-    RetrievalIndex,
+    ScanResult,
     SDDTemplate,
     SectionUpdateProposal,
     UpdateProposalReport,
@@ -32,7 +37,7 @@ from sddraft.render.json_artifacts import write_json_model
 from sddraft.render.markdown import write_markdown
 from sddraft.render.reports import render_update_report_markdown
 from sddraft.repo.diff_parser import get_git_diff, parse_diff
-from sddraft.repo.scanner import scan_repository
+from sddraft.repo.scanner import scan_repository_stream
 from sddraft.workflows.hierarchy_docs import (
     build_hierarchy_artifact,
     load_hierarchy_artifact,
@@ -87,6 +92,77 @@ def _proposal_chunks(
     return chunks
 
 
+def _scan_and_spool_chunks(
+    *,
+    project_config: ProjectConfig,
+    csc: CSCDescriptor,
+    repo_root: Path,
+    output_root: Path,
+) -> tuple[
+    list[Path],
+    list[CodeUnitSummary],
+    list[InterfaceSummary],
+    list[str],
+    Path,
+    int,
+    dict[Path, str],
+]:
+    files: list[Path] = []
+    code_summaries: list[CodeUnitSummary] = []
+    interface_summaries: list[InterfaceSummary] = []
+    dependency_values: set[str] = set()
+    chunk_count = 0
+
+    excerpt_parts: dict[Path, list[str]] = defaultdict(list)
+    spool_path = output_root / ".scan_code_chunks.jsonl"
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    with spool_path.open("w", encoding="utf-8") as handle:
+        for record in scan_repository_stream(
+            project_config=project_config,
+            csc=csc,
+            repo_root=repo_root,
+        ):
+            files.append(record.path)
+            code_summaries.append(record.code_summary)
+            interface_summaries.extend(record.interface_summaries)
+            dependency_values.update(record.code_summary.imports)
+
+            for chunk in record.code_chunks:
+                handle.write(json.dumps(chunk.model_dump(mode="json"), sort_keys=True))
+                handle.write("\n")
+                chunk_count += 1
+                path_key = chunk.source_path
+                if len(excerpt_parts[path_key]) < 2:
+                    excerpt_parts[path_key].append(chunk.text)
+
+    excerpts = {
+        path: "\n\n".join(parts).strip()
+        for path, parts in excerpt_parts.items()
+        if parts
+    }
+
+    return (
+        files,
+        code_summaries,
+        interface_summaries,
+        sorted(dependency_values),
+        spool_path,
+        chunk_count,
+        excerpts,
+    )
+
+
+def _iter_spooled_chunks(path: Path) -> Iterator[KnowledgeChunk]:
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            raw = json.loads(stripped)
+            yield KnowledgeChunk.model_validate(raw)
+
+
 def propose_updates(
     project_config: ProjectConfig,
     csc: CSCDescriptor,
@@ -111,30 +187,41 @@ def propose_updates(
     if not existing_sdd_path.is_file():
         raise ConfigError(f"Existing SDD path is not a file: {existing_sdd_path}")
 
+    output_root = project_config.output_dir / csc.csc_id
+    retrieval_index_path = default_retrieval_store_path(output_root)
+    run_metrics_path = output_root / "run_metrics.json"
+    metrics_collector = RunMetricsCollector(csc_id=csc.csc_id)
+
     progress(f"[{csc.csc_id}] Scanning repository...")
-    scan_result = scan_repository(
-        project_config=project_config, csc=csc, repo_root=repo_root
+    metrics_collector.start("scan")
+    (
+        scan_files,
+        code_summaries,
+        interface_summaries,
+        dependencies,
+        scan_chunks_path,
+        code_chunk_count,
+        code_excerpts,
+    ) = _scan_and_spool_chunks(
+        project_config=project_config,
+        csc=csc,
+        repo_root=repo_root,
+        output_root=output_root,
     )
-    progress(
-        f"[{csc.csc_id}] Scan complete: {len(scan_result.files)} files considered."
+    metrics_collector.finish(
+        files_seen=len(scan_files),
+        chunks_written=code_chunk_count,
     )
+    progress(f"[{csc.csc_id}] Scan complete: {len(scan_files)} files considered.")
 
     progress(f"[{csc.csc_id}] Parsing commit range {commit_range}...")
+    metrics_collector.start("diff_impact")
     raw_diff = get_git_diff(commit_range=commit_range, repo_root=repo_root)
     file_diffs = parse_diff(raw_diff)
     impact = build_commit_impact(commit_range=commit_range, file_diffs=file_diffs)
+    metrics_collector.finish(files_seen=len(file_diffs))
 
     existing_sections = _parse_existing_sections(existing_sdd_path)
-
-    evidence_packs = build_update_evidence_packs(
-        template=template,
-        csc=csc,
-        code_summaries=scan_result.code_summaries,
-        interface_summaries=scan_result.interface_summaries,
-        dependencies=scan_result.dependencies,
-        commit_impact=impact,
-        existing_sections=existing_sections,
-    )
 
     proposals: list[SectionUpdateProposal] = []
     resolved_model = model_name or project_config.llm.model_name
@@ -142,8 +229,21 @@ def propose_updates(
         project_config.llm.temperature if temperature is None else temperature
     )
 
-    total_sections = len(evidence_packs)
-    for idx, pack in enumerate(evidence_packs, start=1):
+    metrics_collector.start("propose_sections")
+    total_sections = len(template.sections)
+    for idx, section_spec in enumerate(template.sections, start=1):
+        pack = build_update_evidence_pack(
+            section=section_spec,
+            csc=csc,
+            code_summaries=code_summaries,
+            interface_summaries=interface_summaries,
+            dependencies=dependencies,
+            commit_impact=impact,
+            existing_sections=existing_sections,
+        )
+        if pack is None:
+            continue
+
         progress(
             f"[{csc.csc_id}] Proposing section update {idx}/{total_sections}: "
             f"{pack.section.id} {pack.section.title}"
@@ -176,6 +276,7 @@ def propose_updates(
             )
 
         proposals.append(proposal)
+    metrics_collector.finish()
 
     report = UpdateProposalReport(
         commit_range=commit_range,
@@ -183,10 +284,8 @@ def propose_updates(
         proposals=proposals,
     )
 
-    output_root = project_config.output_dir / csc.csc_id
     report_markdown_path = output_root / "update_report.md"
     report_json_path = output_root / "update_proposals.json"
-    retrieval_index_path = output_root / "retrieval_index.json"
     hierarchy_json_path: Path | None = None
     hierarchy_index_path: Path | None = None
     hierarchy_chunks: list[KnowledgeChunk] = []
@@ -196,6 +295,7 @@ def propose_updates(
     progress(f"[{csc.csc_id}] Wrote update report artifacts.")
 
     if hierarchy_docs_enabled:
+        metrics_collector.start("hierarchy")
         progress(
             f"[{csc.csc_id}] Refreshing hierarchy documentation for impacted subtree..."
         )
@@ -215,12 +315,19 @@ def propose_updates(
         hierarchy_artifact = build_hierarchy_artifact(
             csc_id=csc.csc_id,
             repo_root=repo_root,
-            scan_result=scan_result,
+            scan_result=ScanResult(
+                files=scan_files,
+                code_summaries=code_summaries,
+                interface_summaries=interface_summaries,
+                dependencies=dependencies,
+                code_chunks=[],
+            ),
             llm_client=llm_client,
             model_name=resolved_model,
             temperature=resolved_temperature,
             changed_paths=changed_paths,
             existing_artifact=existing_artifact,
+            code_excerpts_by_path=code_excerpts,
             progress_callback=progress_callback,
         )
         (
@@ -233,39 +340,37 @@ def propose_updates(
             output_root=output_root,
             progress_callback=progress_callback,
         )
+        metrics_collector.finish(chunks_written=len(hierarchy_chunks))
 
-    indexer = LexicalIndexer()
-    new_chunks = _proposal_chunks(report, report_markdown_path) + hierarchy_chunks
-    new_chunks.extend(scan_result.code_chunks)
+    metrics_collector.start("build_retrieval")
+    new_chunks = _proposal_chunks(report, report_markdown_path)
+    all_chunks = chain(
+        new_chunks, hierarchy_chunks, _iter_spooled_chunks(scan_chunks_path)
+    )
 
-    if retrieval_index_path.exists():
-        existing_index = load_retrieval_index(retrieval_index_path)
-        if not hierarchy_docs_enabled:
-            existing_index = RetrievalIndex(
-                chunks=[
-                    chunk
-                    for chunk in existing_index.chunks
-                    if chunk.source_type not in {"file_summary", "directory_summary"}
-                ]
-            )
-        retrieval_index = indexer.update(existing=existing_index, new_chunks=new_chunks)
-    else:
-        retrieval_index = indexer.build(
-            document_chunks=_proposal_chunks(report, report_markdown_path)
-            + hierarchy_chunks,
-            code_chunks=scan_result.code_chunks,
-        )
+    retrieval_manifest = build_retrieval_store(
+        store_root=retrieval_index_path,
+        chunks=all_chunks,
+        shard_size=project_config.generation.index_shard_size,
+        write_batch_size=project_config.generation.write_batch_size,
+        max_in_memory_records=project_config.generation.max_in_memory_records,
+    )
+    metrics_collector.finish(
+        chunks_written=len(new_chunks) + len(hierarchy_chunks) + code_chunk_count
+    )
 
-    save_retrieval_index(retrieval_index, retrieval_index_path)
-    progress(f"[{csc.csc_id}] Wrote retrieval index.")
+    scan_chunks_path.unlink(missing_ok=True)
+    write_json_model(run_metrics_path, metrics_collector.metrics)
+    progress(f"[{csc.csc_id}] Wrote retrieval store and run metrics.")
 
     return ProposeUpdatesResult(
         impact=impact,
         report=report,
-        retrieval_index=retrieval_index,
+        retrieval_manifest=retrieval_manifest,
         report_markdown_path=report_markdown_path,
         report_json_path=report_json_path,
         retrieval_index_path=retrieval_index_path,
+        run_metrics_path=run_metrics_path,
         hierarchy_json_path=hierarchy_json_path,
         hierarchy_index_path=hierarchy_index_path,
     )

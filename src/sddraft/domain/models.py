@@ -75,6 +75,23 @@ class GenerationOptions(DomainModel):
     max_files: int = 500
     code_chunk_lines: int = 40
     retrieval_top_k: int = 6
+    write_batch_size: int = 200
+    max_in_memory_records: int = 2000
+    index_shard_size: int = 1000
+
+    @field_validator(
+        "max_files",
+        "code_chunk_lines",
+        "retrieval_top_k",
+        "write_batch_size",
+        "max_in_memory_records",
+        "index_shard_size",
+    )
+    @classmethod
+    def validate_positive_ints(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("generation options must be positive integers")
+        return value
 
 
 class ProjectConfig(DomainModel):
@@ -340,6 +357,62 @@ class RetrievalIndex(DomainModel):
     chunks: list[KnowledgeChunk]
 
 
+class ChunkShardRef(DomainModel):
+    """Metadata pointer for one chunk shard."""
+
+    shard_id: int
+    path: Path
+    count: int
+
+
+class PostingShardRef(DomainModel):
+    """Metadata pointer for one postings shard."""
+
+    shard_id: int
+    bucket: str
+    path: Path
+    count: int
+
+
+class DocStatRecord(DomainModel):
+    """Per-chunk lexical statistics used by BM25 retrieval."""
+
+    chunk_id: str
+    doc_length: int
+
+
+class RetrievalManifest(DomainModel):
+    """Sharded retrieval index metadata."""
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    version: Literal["v1-sharded-json"] = "v1-sharded-json"
+    shard_size: int
+    total_chunks: int
+    average_doc_length: float
+    chunk_shards: list[ChunkShardRef] = Field(default_factory=list)
+    posting_shards: list[PostingShardRef] = Field(default_factory=list)
+    docstats_path: Path
+
+
+class RunStageMetric(DomainModel):
+    """Metrics for one workflow stage."""
+
+    stage: str
+    files_seen: int = 0
+    chunks_written: int = 0
+    chunks_loaded: int = 0
+    elapsed_seconds: float = 0.0
+    peak_rss_estimate: float = 0.0
+
+
+class RunMetrics(DomainModel):
+    """Run-level telemetry persisted for long-running workflows."""
+
+    csc_id: str
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    stages: list[RunStageMetric] = Field(default_factory=list)
+
+
 class Citation(DomainModel):
     """Citation for grounded answer evidence."""
 
@@ -399,10 +472,11 @@ class GenerateResult(DomainModel):
 
     document: SDDDocument
     review_artifact: ReviewArtifact
-    retrieval_index: RetrievalIndex
+    retrieval_manifest: RetrievalManifest
     markdown_path: Path
     review_json_path: Path
     retrieval_index_path: Path
+    run_metrics_path: Path
     hierarchy_json_path: Path | None = None
     hierarchy_index_path: Path | None = None
 
@@ -412,10 +486,11 @@ class ProposeUpdatesResult(DomainModel):
 
     impact: CommitImpact
     report: UpdateProposalReport
-    retrieval_index: RetrievalIndex
+    retrieval_manifest: RetrievalManifest
     report_markdown_path: Path
     report_json_path: Path
     retrieval_index_path: Path
+    run_metrics_path: Path
     hierarchy_json_path: Path | None = None
     hierarchy_index_path: Path | None = None
 

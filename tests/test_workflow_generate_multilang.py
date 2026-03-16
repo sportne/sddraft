@@ -42,7 +42,7 @@ def test_generate_and_ask_with_multilanguage_sources(
     )
 
     assert generate_result.document.sections
-    assert generate_result.retrieval_index.chunks
+    assert generate_result.retrieval_manifest.total_chunks > 0
 
     ask_result = answer_question(
         request=QueryRequest(question="What interfaces exist?", top_k=6),

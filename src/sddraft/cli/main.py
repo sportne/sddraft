@@ -7,6 +7,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from sddraft.analysis.retrieval import migrate_legacy_index
 from sddraft.config.loader import load_config_bundle
 from sddraft.domain.errors import SDDraftError
 from sddraft.domain.models import QueryRequest
@@ -62,6 +63,12 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ask_parser.add_argument("--model", type=str, default="mock-sddraft")
     ask_parser.add_argument("--temperature", type=float, default=0.2)
     ask_parser.add_argument("--top-k", type=int, default=6)
+
+    migrate_parser = subparsers.add_parser("migrate-index")
+    migrate_parser.add_argument("--index-path", required=True, type=Path)
+    migrate_parser.add_argument("--shard-size", type=int, default=1000)
+    migrate_parser.add_argument("--write-batch-size", type=int, default=200)
+    migrate_parser.add_argument("--max-in-memory-records", type=int, default=2000)
 
     return parser.parse_args(argv)
 
@@ -213,6 +220,17 @@ def _run_ask(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_migrate_index(args: argparse.Namespace) -> int:
+    migrated_path = migrate_legacy_index(
+        index_path=args.index_path,
+        shard_size=args.shard_size,
+        write_batch_size=args.write_batch_size,
+        max_in_memory_records=args.max_in_memory_records,
+    )
+    print(f"Migrated retrieval index to sharded store: {migrated_path}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entrypoint."""
 
@@ -228,6 +246,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _run_inspect_diff(args)
         if args.command == "ask":
             return _run_ask(args)
+        if args.command == "migrate-index":
+            return _run_migrate_index(args)
     except SDDraftError as exc:
         print(f"Error: {exc}")
         return 2

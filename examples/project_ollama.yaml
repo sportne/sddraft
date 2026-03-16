@@ -26,12 +26,15 @@ sdd_template: ../templates/sdd_default.yaml
 
 llm:
   provider: ollama
-  model_name: qwen2.5-coder:14b-instruct-q2_K_M
+  model_name: qwen2.5:14b-instruct-q4_K_M
   temperature: 0.2
 
 generation:
   max_files: 500
   code_chunk_lines: 40
   retrieval_top_k: 6
+  write_batch_size: 200
+  max_in_memory_records: 2000
+  index_shard_size: 1000
 
 output_dir: ../artifacts

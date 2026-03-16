@@ -117,3 +117,23 @@ purpose: P
 
     assert template.document_type == "sdd"
     assert csc.csc_id == "X"
+
+
+def test_invalid_generation_tuning_raises_validation_error(tmp_path: Path) -> None:
+    project_path = tmp_path / "project.yaml"
+    project_path.write_text(
+        """
+project_name: ExampleProject
+sources:
+  roots: [src]
+  include: ["**/*.py"]
+  exclude: []
+sdd_template: templates/sdd.yaml
+generation:
+  max_files: 0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="generation options must be positive"):
+        load_project_config(project_path)

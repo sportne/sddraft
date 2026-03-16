@@ -6,6 +6,7 @@ import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
+from sddraft.analysis.retrieval import LexicalIndexer, save_retrieval_index
 from sddraft.cli.main import main
 from sddraft.domain.models import (
     AskResult,
@@ -15,13 +16,14 @@ from sddraft.domain.models import (
     CSCDescriptor,
     GenerationOptions,
     InspectDiffResult,
+    KnowledgeChunk,
     LLMConfig,
     ProjectConfig,
     ProposeUpdatesResult,
     QueryAnswer,
     QueryEvidencePack,
     QueryRequest,
-    RetrievalIndex,
+    RetrievalManifest,
     SDDSectionSpec,
     SDDTemplate,
     SourcesConfig,
@@ -47,6 +49,15 @@ def _fake_bundle(tmp_path: Path) -> ConfigBundle:
     return ConfigBundle(project=project, csc_descriptors=[csc], template=template)
 
 
+def _fake_manifest() -> RetrievalManifest:
+    return RetrievalManifest(
+        shard_size=1000,
+        total_chunks=0,
+        average_doc_length=0.0,
+        docstats_path=Path("docstats.jsonl"),
+    )
+
+
 def test_cli_propose_updates_and_inspect_diff_paths(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -69,10 +80,11 @@ def test_cli_propose_updates_and_inspect_diff_paths(
             report=UpdateProposalReport(
                 commit_range="HEAD~1..HEAD", impacted_sections=[], proposals=[]
             ),
-            retrieval_index=RetrievalIndex(chunks=[]),
+            retrieval_manifest=_fake_manifest(),
             report_markdown_path=tmp_path / "r.md",
             report_json_path=tmp_path / "r.json",
-            retrieval_index_path=tmp_path / "i.json",
+            retrieval_index_path=tmp_path / "retrieval",
+            run_metrics_path=tmp_path / "run_metrics.json",
         ),
     )
 
@@ -223,10 +235,11 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
                 report=UpdateProposalReport(
                     commit_range="HEAD~1..HEAD", impacted_sections=[], proposals=[]
                 ),
-                retrieval_index=RetrievalIndex(chunks=[]),
+                retrieval_manifest=_fake_manifest(),
                 report_markdown_path=tmp_path / "r.md",
                 report_json_path=tmp_path / "r.json",
-                retrieval_index_path=tmp_path / "i.json",
+                retrieval_index_path=tmp_path / "retrieval",
+                run_metrics_path=tmp_path / "run_metrics.json",
             )
         ),
     )
@@ -308,7 +321,7 @@ def test_cli_error_messages_for_runtime_paths(
         ]
     )
     assert ask_rc == 2
-    assert "Retrieval index not found" in capsys.readouterr().out
+    assert "Retrieval store not found" in capsys.readouterr().out
 
     cli_module = importlib.import_module("sddraft.cli.main")
     bundle = _fake_bundle(tmp_path)
@@ -344,3 +357,35 @@ def test_cli_error_messages_for_runtime_paths(
     )
     assert diff_rc == 2
     assert "Failed to run git diff" in capsys.readouterr().out
+
+
+def test_cli_migrate_index_command(tmp_path: Path) -> None:
+    legacy_path = tmp_path / "retrieval_index.json"
+    legacy_index = LexicalIndexer().build(
+        document_chunks=[
+            KnowledgeChunk(
+                chunk_id="a",
+                source_type="sdd_section",
+                source_path=Path("sdd.md"),
+                text="scope details",
+            )
+        ],
+        code_chunks=[],
+    )
+    save_retrieval_index(legacy_index, legacy_path)
+
+    rc = main(
+        [
+            "migrate-index",
+            "--index-path",
+            str(legacy_path),
+            "--shard-size",
+            "4",
+            "--write-batch-size",
+            "2",
+            "--max-in-memory-records",
+            "16",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "retrieval" / "manifest.json").exists()

@@ -2,24 +2,31 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import json
+from collections import defaultdict
+from collections.abc import Callable, Iterator
+from itertools import chain
 from json import JSONDecodeError
 from pathlib import Path
 
 from pydantic import ValidationError as PydanticValidationError
 
-from sddraft.analysis.evidence_builder import build_generation_evidence_packs
+from sddraft.analysis.evidence_builder import build_generation_evidence_pack
+from sddraft.analysis.metrics import RunMetricsCollector
 from sddraft.analysis.retrieval import (
-    LexicalIndexer,
     build_document_chunks,
-    save_retrieval_index,
+    build_retrieval_store,
+    default_retrieval_store_path,
 )
 from sddraft.domain.models import (
+    CodeUnitSummary,
     CSCDescriptor,
     GenerateResult,
+    InterfaceSummary,
     KnowledgeChunk,
     ProjectConfig,
     ReviewArtifact,
+    ScanResult,
     SDDDocument,
     SDDTemplate,
     SectionDraft,
@@ -29,7 +36,7 @@ from sddraft.llm.base import LLMClient, StructuredGenerationRequest
 from sddraft.prompts.builders import build_section_generation_prompt
 from sddraft.render.json_artifacts import write_json_model
 from sddraft.render.markdown import render_sdd_markdown, write_markdown
-from sddraft.repo.scanner import scan_repository
+from sddraft.repo.scanner import scan_repository_stream
 from sddraft.workflows.hierarchy_docs import (
     build_hierarchy_artifact,
     load_hierarchy_artifact,
@@ -62,6 +69,69 @@ def _to_relative(path: Path, repo_root: Path) -> Path:
         return path
 
 
+def _scan_and_spool_chunks(
+    *,
+    project_config: ProjectConfig,
+    csc: CSCDescriptor,
+    repo_root: Path,
+    output_root: Path,
+) -> tuple[ScanResult, Path, int, dict[Path, str]]:
+    files: list[Path] = []
+    code_summaries: list[CodeUnitSummary] = []
+    interface_summaries: list[InterfaceSummary] = []
+    dependency_values: set[str] = set()
+    chunk_count = 0
+
+    excerpt_parts: dict[Path, list[str]] = defaultdict(list)
+
+    spool_path = output_root / ".scan_code_chunks.jsonl"
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    with spool_path.open("w", encoding="utf-8") as handle:
+        for record in scan_repository_stream(
+            project_config=project_config,
+            csc=csc,
+            repo_root=repo_root,
+        ):
+            files.append(record.path)
+            code_summaries.append(record.code_summary)
+            interface_summaries.extend(record.interface_summaries)
+            dependency_values.update(record.code_summary.imports)
+
+            for chunk in record.code_chunks:
+                handle.write(json.dumps(chunk.model_dump(mode="json"), sort_keys=True))
+                handle.write("\n")
+                chunk_count += 1
+                path_key = chunk.source_path
+                if len(excerpt_parts[path_key]) < 2:
+                    excerpt_parts[path_key].append(chunk.text)
+
+    excerpts = {
+        path: "\n\n".join(parts).strip()
+        for path, parts in excerpt_parts.items()
+        if parts
+    }
+
+    scan_result = ScanResult(
+        files=files,
+        code_summaries=code_summaries,
+        interface_summaries=interface_summaries,
+        dependencies=sorted(dependency_values),
+        code_chunks=[],
+    )
+    return scan_result, spool_path, chunk_count, excerpts
+
+
+def _iter_spooled_chunks(path: Path) -> Iterator[KnowledgeChunk]:
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            raw = json.loads(stripped)
+            yield KnowledgeChunk.model_validate(raw)
+
+
 def generate_sdd(
     project_config: ProjectConfig,
     csc: CSCDescriptor,
@@ -75,24 +145,26 @@ def generate_sdd(
 ) -> GenerateResult:
     """Run the end-to-end initial SDD generation workflow."""
 
+    output_root = project_config.output_dir / csc.csc_id
+    metrics_collector = RunMetricsCollector(csc_id=csc.csc_id)
+
     _progress(progress_callback, f"[{csc.csc_id}] Scanning repository...")
-    scan_result = scan_repository(
-        project_config=project_config, csc=csc, repo_root=repo_root
+    metrics_collector.start("scan")
+    scan_result, scan_chunks_path, code_chunk_count, code_excerpts = (
+        _scan_and_spool_chunks(
+            project_config=project_config,
+            csc=csc,
+            repo_root=repo_root,
+            output_root=output_root,
+        )
+    )
+    metrics_collector.finish(
+        files_seen=len(scan_result.files),
+        chunks_written=code_chunk_count,
     )
     _progress(
         progress_callback,
         f"[{csc.csc_id}] Scan complete: {len(scan_result.files)} files considered.",
-    )
-
-    _progress(
-        progress_callback, f"[{csc.csc_id}] Building deterministic evidence packs..."
-    )
-    evidence_packs = build_generation_evidence_packs(
-        template=template,
-        csc=csc,
-        code_summaries=scan_result.code_summaries,
-        interface_summaries=scan_result.interface_summaries,
-        dependencies=scan_result.dependencies,
     )
 
     resolved_model = model_name or project_config.llm.model_name
@@ -100,9 +172,17 @@ def generate_sdd(
         project_config.llm.temperature if temperature is None else temperature
     )
 
+    metrics_collector.start("generate_sections")
     section_drafts: list[SectionDraft] = []
-    total_sections = len(evidence_packs)
-    for idx, pack in enumerate(evidence_packs, start=1):
+    total_sections = len(template.sections)
+    for idx, section_spec in enumerate(template.sections, start=1):
+        pack = build_generation_evidence_pack(
+            section=section_spec,
+            csc=csc,
+            code_summaries=scan_result.code_summaries,
+            interface_summaries=scan_result.interface_summaries,
+            dependencies=scan_result.dependencies,
+        )
         _progress(
             progress_callback,
             f"[{csc.csc_id}] Generating section {idx}/{total_sections}: {pack.section.id} {pack.section.title}",
@@ -126,6 +206,7 @@ def generate_sdd(
                 update={"evidence_refs": pack.evidence_references}
             )
         section_drafts.append(section)
+    metrics_collector.finish()
 
     document = SDDDocument(
         csc_id=csc.csc_id,
@@ -147,10 +228,10 @@ def generate_sdd(
         ],
     )
 
-    output_root = project_config.output_dir / csc.csc_id
     markdown_path = output_root / "sdd.md"
     review_json_path = output_root / "review_artifact.json"
-    retrieval_index_path = output_root / "retrieval_index.json"
+    retrieval_index_path = default_retrieval_store_path(output_root)
+    run_metrics_path = output_root / "run_metrics.json"
 
     write_markdown(markdown_path, render_sdd_markdown(document))
     write_json_model(review_json_path, review_artifact)
@@ -169,6 +250,7 @@ def generate_sdd(
     hierarchy_chunks: list[KnowledgeChunk] = []
 
     if hierarchy_docs_enabled:
+        metrics_collector.start("hierarchy")
         _progress(
             progress_callback, f"[{csc.csc_id}] Preparing hierarchy documentation..."
         )
@@ -212,6 +294,7 @@ def generate_sdd(
             temperature=resolved_temperature,
             changed_paths=changed_paths,
             existing_artifact=existing_artifact,
+            code_excerpts_by_path=code_excerpts,
             progress_callback=progress_callback,
         )
         (
@@ -224,22 +307,38 @@ def generate_sdd(
             output_root=output_root,
             progress_callback=progress_callback,
         )
+        metrics_collector.finish(chunks_written=len(hierarchy_chunks))
 
-    indexer = LexicalIndexer()
-    retrieval_index = indexer.build(
-        document_chunks=document_chunks + hierarchy_chunks,
-        code_chunks=scan_result.code_chunks,
+    metrics_collector.start("build_retrieval")
+
+    combined_chunks = chain(
+        document_chunks, hierarchy_chunks, _iter_spooled_chunks(scan_chunks_path)
     )
-    save_retrieval_index(retrieval_index, retrieval_index_path)
-    _progress(progress_callback, f"[{csc.csc_id}] Wrote retrieval index.")
+    retrieval_manifest = build_retrieval_store(
+        store_root=retrieval_index_path,
+        chunks=combined_chunks,
+        shard_size=project_config.generation.index_shard_size,
+        write_batch_size=project_config.generation.write_batch_size,
+        max_in_memory_records=project_config.generation.max_in_memory_records,
+    )
+    metrics_collector.finish(
+        chunks_written=len(document_chunks) + len(hierarchy_chunks) + code_chunk_count
+    )
+    scan_chunks_path.unlink(missing_ok=True)
+
+    write_json_model(run_metrics_path, metrics_collector.metrics)
+    _progress(
+        progress_callback, f"[{csc.csc_id}] Wrote retrieval store and run metrics."
+    )
 
     return GenerateResult(
         document=document,
         review_artifact=review_artifact,
-        retrieval_index=retrieval_index,
+        retrieval_manifest=retrieval_manifest,
         markdown_path=markdown_path,
         review_json_path=review_json_path,
         retrieval_index_path=retrieval_index_path,
+        run_metrics_path=run_metrics_path,
         hierarchy_json_path=hierarchy_json_path,
         hierarchy_index_path=hierarchy_index_path,
     )
