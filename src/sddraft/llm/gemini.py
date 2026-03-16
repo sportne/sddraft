@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from sddraft.domain.errors import LLMError
 from sddraft.llm.base import (
@@ -11,12 +12,19 @@ from sddraft.llm.base import (
     validate_json_text,
 )
 
+genai_sdk: Any
+genai_types: Any
 try:
-    from google import genai
-    from google.genai.types import GenerateContentConfig
+    from google import genai as genai_sdk
+    from google.genai import types as genai_types
 except Exception:  # pragma: no cover - optional dependency
-    genai = None
-    GenerateContentConfig = None
+    genai_sdk = None
+    genai_types = None
+
+genai: Any = genai_sdk
+GenerateContentConfig: Any = (
+    genai_types.GenerateContentConfig if genai_types is not None else None
+)
 
 
 class GeminiLLMClient:
