@@ -302,6 +302,66 @@ class HierarchyDocArtifact(DomainModel):
     directory_summaries: list[DirectorySummaryDoc] = Field(default_factory=list)
 
 
+class FileSummaryRecord(DomainModel):
+    """Streamed file-summary record persisted to hierarchy store."""
+
+    node_id: str
+    path: Path
+    language: SourceLanguage
+    summary: str
+    functions: list[str] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)
+    imports: list[str] = Field(default_factory=list)
+    evidence_refs: list[EvidenceReference] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    confidence: float = 0.5
+
+
+class DirectorySummaryRecord(DomainModel):
+    """Streamed directory-summary record persisted to hierarchy store."""
+
+    node_id: str
+    path: Path
+    summary: str
+    local_files: list[Path] = Field(default_factory=list)
+    child_directories: list[Path] = Field(default_factory=list)
+    evidence_refs: list[EvidenceReference] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    confidence: float = 0.5
+
+
+class HierarchyNodeRecord(DomainModel):
+    """Node record for hierarchy graph storage."""
+
+    node_id: str
+    kind: Literal["file", "directory"]
+    path: Path
+    parent_id: str | None = None
+    doc_path: Path
+    abstract: str
+    keywords: list[str] = Field(default_factory=list)
+
+
+class HierarchyEdgeRecord(DomainModel):
+    """Edge record for hierarchy graph storage."""
+
+    parent_id: str
+    child_id: str
+    relation: Literal["contains"] = "contains"
+
+
+class HierarchyManifest(DomainModel):
+    """Hierarchy store manifest for streamed JSONL artifacts."""
+
+    csc_id: str
+    root: Path
+    version: Literal["v2-stream-jsonl"] = "v2-stream-jsonl"
+    file_summaries_path: Path
+    directory_summaries_path: Path
+    nodes_path: Path
+    edges_path: Path
+
+
 class HierarchyIndexNode(DomainModel):
     """Node entry in hierarchy index."""
 
@@ -478,8 +538,8 @@ class GenerateResult(DomainModel):
     review_json_path: Path
     retrieval_index_path: Path
     run_metrics_path: Path
-    hierarchy_json_path: Path | None = None
-    hierarchy_index_path: Path | None = None
+    hierarchy_manifest_path: Path | None = None
+    hierarchy_store_path: Path | None = None
 
 
 class ProposeUpdatesResult(DomainModel):
@@ -492,8 +552,8 @@ class ProposeUpdatesResult(DomainModel):
     report_json_path: Path
     retrieval_index_path: Path
     run_metrics_path: Path
-    hierarchy_json_path: Path | None = None
-    hierarchy_index_path: Path | None = None
+    hierarchy_manifest_path: Path | None = None
+    hierarchy_store_path: Path | None = None
 
 
 class InspectDiffResult(DomainModel):

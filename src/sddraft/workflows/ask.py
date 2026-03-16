@@ -58,11 +58,11 @@ def answer_question(
             )
         except (AnalysisError, OSError):
             hierarchy_fallback_note = (
-                "Hierarchy index unavailable or unreadable; used lexical evidence only."
+                "Hierarchy store unavailable or unreadable; used lexical evidence only."
             )
     else:
         hierarchy_fallback_note = (
-            "Hierarchy index unavailable; used lexical evidence only."
+            "Hierarchy store unavailable; used lexical evidence only."
         )
     metrics_collector.finish(chunks_loaded=len(chunks))
 

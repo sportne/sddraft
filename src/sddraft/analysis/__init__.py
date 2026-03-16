@@ -12,6 +12,7 @@ from .hierarchy import (
     expand_chunks_with_hierarchy,
     file_node_id,
     hierarchy_chunks,
+    iter_hierarchy_chunks,
     load_hierarchy_index,
     save_hierarchy_index,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "directory_node_id",
     "build_hierarchy_index",
     "hierarchy_chunks",
+    "iter_hierarchy_chunks",
     "save_hierarchy_index",
     "load_hierarchy_index",
     "default_hierarchy_index_path",

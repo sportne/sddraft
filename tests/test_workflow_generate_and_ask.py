@@ -54,10 +54,10 @@ def compute_distance(x: float, y: float) -> float:
     assert result.markdown_path.exists()
     assert result.review_json_path.exists()
     assert result.retrieval_index_path.exists()
-    assert result.hierarchy_json_path is not None
-    assert result.hierarchy_index_path is not None
-    assert result.hierarchy_json_path.exists()
-    assert result.hierarchy_index_path.exists()
+    assert result.hierarchy_manifest_path is not None
+    assert result.hierarchy_store_path is not None
+    assert result.hierarchy_manifest_path.exists()
+    assert result.hierarchy_store_path.exists()
     assert result.document.sections
 
     ask_result = answer_question(
@@ -106,7 +106,7 @@ def test_ask_uses_hierarchy_expansion_when_available(
     )
 
 
-def test_ask_fallback_when_hierarchy_index_missing(
+def test_ask_fallback_when_hierarchy_store_missing(
     tmp_path: Path,
     sample_project_config,
     sample_csc,
@@ -127,8 +127,8 @@ def test_ask_fallback_when_hierarchy_index_missing(
         llm_client=llm,
         repo_root=tmp_path,
     )
-    assert result.hierarchy_index_path is not None
-    result.hierarchy_index_path.unlink()
+    assert result.hierarchy_manifest_path is not None
+    result.hierarchy_manifest_path.unlink()
 
     ask_result = answer_question(
         request=QueryRequest(question="compute_distance", top_k=1),
@@ -138,7 +138,7 @@ def test_ask_fallback_when_hierarchy_index_missing(
     )
 
     assert any(
-        "Hierarchy index unavailable" in item for item in ask_result.answer.uncertainty
+        "Hierarchy store unavailable" in item for item in ask_result.answer.uncertainty
     )
 
 

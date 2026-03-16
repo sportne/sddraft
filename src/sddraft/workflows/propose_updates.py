@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+import shutil
 from collections.abc import Callable, Iterator
 from itertools import chain
-from json import JSONDecodeError
 from pathlib import Path
-
-from pydantic import ValidationError as PydanticValidationError
 
 from sddraft.analysis.commit_impact import build_commit_impact
 from sddraft.analysis.evidence_builder import build_update_evidence_pack
+from sddraft.analysis.hierarchy import iter_hierarchy_chunks
 from sddraft.analysis.metrics import RunMetricsCollector
 from sddraft.analysis.retrieval import (
     build_retrieval_store,
@@ -39,9 +37,8 @@ from sddraft.render.reports import render_update_report_markdown
 from sddraft.repo.diff_parser import get_git_diff, parse_diff
 from sddraft.repo.scanner import scan_repository_stream
 from sddraft.workflows.hierarchy_docs import (
-    build_hierarchy_artifact,
-    load_hierarchy_artifact,
-    persist_hierarchy_outputs,
+    build_hierarchy_store,
+    excerpt_file_path,
 )
 
 
@@ -105,7 +102,7 @@ def _scan_and_spool_chunks(
     list[str],
     Path,
     int,
-    dict[Path, str],
+    Path,
 ]:
     files: list[Path] = []
     code_summaries: list[CodeUnitSummary] = []
@@ -113,9 +110,10 @@ def _scan_and_spool_chunks(
     dependency_values: set[str] = set()
     chunk_count = 0
 
-    excerpt_parts: dict[Path, list[str]] = defaultdict(list)
     spool_path = output_root / ".scan_code_chunks.jsonl"
+    excerpt_root = output_root / ".scan_excerpts"
     output_root.mkdir(parents=True, exist_ok=True)
+    excerpt_root.mkdir(parents=True, exist_ok=True)
 
     with spool_path.open("w", encoding="utf-8") as handle:
         for record in scan_repository_stream(
@@ -132,14 +130,12 @@ def _scan_and_spool_chunks(
                 handle.write(json.dumps(chunk.model_dump(mode="json"), sort_keys=True))
                 handle.write("\n")
                 chunk_count += 1
-                path_key = chunk.source_path
-                excerpt_parts[path_key].append(chunk.text)
 
-    excerpts = {
-        path: "\n\n".join(parts).strip()
-        for path, parts in excerpt_parts.items()
-        if parts
-    }
+                excerpt_path = excerpt_file_path(excerpt_root, chunk.source_path)
+                excerpt_path.parent.mkdir(parents=True, exist_ok=True)
+                with excerpt_path.open("a", encoding="utf-8") as excerpt_handle:
+                    excerpt_handle.write(chunk.text)
+                    excerpt_handle.write("\n\n")
 
     return (
         files,
@@ -148,7 +144,7 @@ def _scan_and_spool_chunks(
         sorted(dependency_values),
         spool_path,
         chunk_count,
-        excerpts,
+        excerpt_root,
     )
 
 
@@ -200,7 +196,7 @@ def propose_updates(
         dependencies,
         scan_chunks_path,
         code_chunk_count,
-        code_excerpts,
+        scan_excerpts_root,
     ) = _scan_and_spool_chunks(
         project_config=project_config,
         csc=csc,
@@ -285,9 +281,9 @@ def propose_updates(
 
     report_markdown_path = output_root / "update_report.md"
     report_json_path = output_root / "update_proposals.json"
-    hierarchy_json_path: Path | None = None
-    hierarchy_index_path: Path | None = None
-    hierarchy_chunks: list[KnowledgeChunk] = []
+    hierarchy_manifest_path: Path | None = None
+    hierarchy_store_path: Path | None = None
+    hierarchy_chunk_count = 0
 
     write_markdown(report_markdown_path, render_update_report_markdown(report))
     write_json_model(report_json_path, report)
@@ -298,22 +294,12 @@ def propose_updates(
         progress(
             f"[{csc.csc_id}] Refreshing hierarchy documentation for impacted subtree..."
         )
-        existing_artifact = None
-        candidate_hierarchy_json_path = (
-            output_root / "hierarchy" / "hierarchy_artifact.json"
-        )
-        if candidate_hierarchy_json_path.exists():
-            try:
-                existing_artifact = load_hierarchy_artifact(
-                    candidate_hierarchy_json_path
-                )
-            except (OSError, JSONDecodeError, PydanticValidationError, ValueError):
-                existing_artifact = None
 
         changed_paths = {item.path for item in impact.changed_files}
-        hierarchy_artifact = build_hierarchy_artifact(
+        hierarchy_store = build_hierarchy_store(
             csc_id=csc.csc_id,
             repo_root=repo_root,
+            output_root=output_root,
             scan_result=ScanResult(
                 files=scan_files,
                 code_summaries=code_summaries,
@@ -325,26 +311,27 @@ def propose_updates(
             model_name=resolved_model,
             temperature=resolved_temperature,
             changed_paths=changed_paths,
-            existing_artifact=existing_artifact,
-            code_excerpts_by_path=code_excerpts,
+            excerpt_root=scan_excerpts_root,
             progress_callback=progress_callback,
         )
-        (
-            hierarchy_json_path,
-            hierarchy_index_path,
-            _,
-            hierarchy_chunks,
-        ) = persist_hierarchy_outputs(
-            artifact=hierarchy_artifact,
-            output_root=output_root,
-            progress_callback=progress_callback,
-        )
-        metrics_collector.finish(chunks_written=len(hierarchy_chunks))
+        hierarchy_manifest_path = hierarchy_store.manifest_path
+        hierarchy_store_path = hierarchy_store.store_root
+        hierarchy_chunk_count = hierarchy_store.chunk_count
+        metrics_collector.finish(chunks_written=hierarchy_chunk_count)
 
     metrics_collector.start("build_retrieval")
     new_chunks = _proposal_chunks(report, report_markdown_path)
+
+    hierarchy_chunk_iter: Iterator[KnowledgeChunk]
+    if hierarchy_manifest_path is not None:
+        hierarchy_chunk_iter = iter_hierarchy_chunks(hierarchy_manifest_path)
+    else:
+        hierarchy_chunk_iter = iter(())
+
     all_chunks = chain(
-        new_chunks, hierarchy_chunks, _iter_spooled_chunks(scan_chunks_path)
+        new_chunks,
+        hierarchy_chunk_iter,
+        _iter_spooled_chunks(scan_chunks_path),
     )
 
     retrieval_manifest = build_retrieval_store(
@@ -355,10 +342,11 @@ def propose_updates(
         max_in_memory_records=project_config.generation.max_in_memory_records,
     )
     metrics_collector.finish(
-        chunks_written=len(new_chunks) + len(hierarchy_chunks) + code_chunk_count
+        chunks_written=len(new_chunks) + hierarchy_chunk_count + code_chunk_count
     )
 
     scan_chunks_path.unlink(missing_ok=True)
+    shutil.rmtree(scan_excerpts_root, ignore_errors=True)
     write_json_model(run_metrics_path, metrics_collector.metrics)
     progress(f"[{csc.csc_id}] Wrote retrieval store and run metrics.")
 
@@ -370,6 +358,6 @@ def propose_updates(
         report_json_path=report_json_path,
         retrieval_index_path=retrieval_index_path,
         run_metrics_path=run_metrics_path,
-        hierarchy_json_path=hierarchy_json_path,
-        hierarchy_index_path=hierarchy_index_path,
+        hierarchy_manifest_path=hierarchy_manifest_path,
+        hierarchy_store_path=hierarchy_store_path,
     )

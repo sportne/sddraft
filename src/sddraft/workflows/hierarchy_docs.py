@@ -4,27 +4,29 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 from pydantic import BaseModel, Field
 
 from sddraft.analysis.hierarchy import (
-    build_hierarchy_index,
     directory_node_id,
     file_node_id,
-    hierarchy_chunks,
-    save_hierarchy_index,
 )
+from sddraft.analysis.retrieval import tokenize
 from sddraft.domain.models import (
     CodeUnitSummary,
     DirectorySummaryDoc,
+    DirectorySummaryRecord,
     EvidenceReference,
     FileSummaryDoc,
-    HierarchyDocArtifact,
-    HierarchyIndex,
+    FileSummaryRecord,
+    HierarchyEdgeRecord,
+    HierarchyManifest,
+    HierarchyNodeRecord,
     InterfaceSummary,
-    KnowledgeChunk,
     ScanResult,
 )
 from sddraft.llm.base import LLMClient, StructuredGenerationRequest
@@ -32,7 +34,10 @@ from sddraft.prompts.builders import (
     build_directory_summary_prompt,
     build_file_summary_prompt,
 )
-from sddraft.render.hierarchy import write_hierarchy_markdown
+from sddraft.render.hierarchy import (
+    write_directory_summary_markdown,
+    write_file_summary_markdown,
+)
 from sddraft.render.json_artifacts import write_json_model
 
 
@@ -51,6 +56,15 @@ class _DirectorySummaryDraft(BaseModel):
 ProgressCallback = Callable[[str], None]
 
 
+@dataclass(slots=True)
+class HierarchyStoreResult:
+    """Persisted hierarchy store metadata returned to workflows."""
+
+    store_root: Path
+    manifest_path: Path
+    chunk_count: int
+
+
 def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
     if progress_callback is not None:
         progress_callback(message)
@@ -65,6 +79,28 @@ def _to_relative(path: Path, repo_root: Path) -> Path:
         return path.resolve().relative_to(repo_root.resolve())
     except ValueError:
         return path
+
+
+def excerpt_file_path(excerpt_root: Path, source_path: Path) -> Path:
+    """Return deterministic excerpt file path for one source file."""
+
+    candidate = excerpt_root / source_path
+    suffix = f"{candidate.suffix}.excerpt" if candidate.suffix else ".excerpt"
+    return candidate.with_suffix(suffix)
+
+
+def load_excerpt_text(*, excerpt_root: Path | None, source_path: Path) -> str:
+    """Load one file's excerpt from on-disk excerpt store."""
+
+    if excerpt_root is None:
+        return ""
+    excerpt_path = excerpt_file_path(excerpt_root, source_path)
+    if not excerpt_path.exists():
+        return ""
+    try:
+        return excerpt_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 def _file_ref(summary: CodeUnitSummary) -> EvidenceReference:
@@ -86,6 +122,23 @@ def _ensure_tbd_missing(summary: str, missing: list[str]) -> list[str]:
     if summary.strip().upper().startswith("TBD"):
         return ["TBD"]
     return []
+
+
+def _normalize_dir_path(path: Path) -> Path:
+    return Path(".") if path in {Path(""), Path(".")} else path
+
+
+def _keywords(text: str, limit: int = 8) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for token in tokenize(text):
+        if token in seen:
+            continue
+        seen.add(token)
+        ordered.append(token)
+        if len(ordered) >= limit:
+            break
+    return ordered
 
 
 def _collect_tree(
@@ -127,18 +180,16 @@ def _rebuild_sets(
     directories: set[Path],
     files_by_dir: dict[Path, list[Path]],
     children_by_dir: dict[Path, list[Path]],
-    existing: HierarchyDocArtifact | None,
+    existing_files: dict[Path, FileSummaryRecord] | None,
+    existing_dirs: dict[Path, DirectorySummaryRecord] | None,
     changed_paths: set[Path] | None,
 ) -> tuple[set[Path], set[Path]]:
-    if existing is None:
+    if existing_files is None or existing_dirs is None:
         return set(files), set(directories)
-
-    existing_file = {item.path: item for item in existing.file_summaries}
-    existing_dir = {item.path: item for item in existing.directory_summaries}
 
     file_set = set(files)
     changed = {path for path in (changed_paths or set()) if path in file_set}
-    file_rebuild = changed | {path for path in file_set if path not in existing_file}
+    file_rebuild = changed | {path for path in file_set if path not in existing_files}
 
     dir_rebuild: set[Path] = set()
     for file_path in file_rebuild:
@@ -152,7 +203,7 @@ def _rebuild_sets(
     for directory in directories:
         expected_local = files_by_dir.get(directory, [])
         expected_children = children_by_dir.get(directory, [])
-        existing_item = existing_dir.get(directory)
+        existing_item = existing_dirs.get(directory)
         if existing_item is None:
             dir_rebuild.add(directory)
             continue
@@ -173,20 +224,101 @@ def _rebuild_sets(
     return file_rebuild, expanded_dirs
 
 
-def build_hierarchy_artifact(
+def _iter_jsonl(path: Path) -> Iterator[dict[str, object]]:
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            yield json.loads(stripped)
+
+
+def _write_jsonl_line(handle: TextIO, model: BaseModel) -> None:
+    handle.write(model.model_dump_json())
+    handle.write("\n")
+
+
+def load_hierarchy_store_records(
+    manifest_path: Path,
+) -> tuple[
+    HierarchyManifest,
+    dict[Path, FileSummaryRecord],
+    dict[Path, DirectorySummaryRecord],
+]:
+    """Load file and directory records from a hierarchy store manifest."""
+
+    manifest = HierarchyManifest.model_validate_json(
+        manifest_path.read_text(encoding="utf-8")
+    )
+    store_root = manifest_path.parent
+    file_records: dict[Path, FileSummaryRecord] = {}
+    for raw in _iter_jsonl(store_root / manifest.file_summaries_path):
+        file_record = FileSummaryRecord.model_validate(raw)
+        file_records[file_record.path] = file_record
+
+    directory_records: dict[Path, DirectorySummaryRecord] = {}
+    for raw in _iter_jsonl(store_root / manifest.directory_summaries_path):
+        directory_record = DirectorySummaryRecord.model_validate(raw)
+        directory_records[directory_record.path] = directory_record
+
+    return manifest, file_records, directory_records
+
+
+def _read_existing_records(
+    manifest_path: Path,
+) -> tuple[
+    dict[Path, FileSummaryRecord] | None,
+    dict[Path, DirectorySummaryRecord] | None,
+]:
+    if not manifest_path.exists():
+        return None, None
+
+    try:
+        manifest, file_records, directory_records = load_hierarchy_store_records(
+            manifest_path
+        )
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None, None
+
+    if manifest.version != "v2-stream-jsonl":
+        return None, None
+
+    return file_records, directory_records
+
+
+def _to_file_summary_doc(record: FileSummaryRecord) -> FileSummaryDoc:
+    return FileSummaryDoc.model_validate(record.model_dump(mode="json"))
+
+
+def _to_directory_summary_doc(record: DirectorySummaryRecord) -> DirectorySummaryDoc:
+    return DirectorySummaryDoc.model_validate(record.model_dump(mode="json"))
+
+
+def build_hierarchy_store(
     *,
     csc_id: str,
     repo_root: Path,
+    output_root: Path,
     scan_result: ScanResult,
     llm_client: LLMClient,
     model_name: str,
     temperature: float,
     changed_paths: set[Path] | None = None,
-    existing_artifact: HierarchyDocArtifact | None = None,
-    code_excerpts_by_path: dict[Path, str] | None = None,
+    excerpt_root: Path | None = None,
     progress_callback: ProgressCallback | None = None,
-) -> HierarchyDocArtifact:
-    """Build hierarchy summaries for files and directories."""
+) -> HierarchyStoreResult:
+    """Build and persist hierarchy summaries as streamed JSONL records."""
+
+    hierarchy_root = output_root / "hierarchy"
+    hierarchy_root.mkdir(parents=True, exist_ok=True)
+
+    manifest_path = hierarchy_root / "manifest.json"
+    file_summaries_path = hierarchy_root / "file_summaries.jsonl"
+    directory_summaries_path = hierarchy_root / "directory_summaries.jsonl"
+    nodes_path = hierarchy_root / "nodes.jsonl"
+    edges_path = hierarchy_root / "edges.jsonl"
+
+    existing_files, existing_dirs = _read_existing_records(manifest_path)
 
     files = sorted({_to_relative(path, repo_root) for path in scan_result.files})
     directories, files_by_dir, children_by_dir = _collect_tree(files)
@@ -199,17 +331,13 @@ def build_hierarchy_artifact(
     for item in scan_result.interface_summaries:
         interfaces_by_path[_to_relative(item.source_path, repo_root)].append(item)
 
-    chunks_by_path: dict[Path, list[KnowledgeChunk]] = defaultdict(list)
-    if code_excerpts_by_path is None:
-        for chunk in scan_result.code_chunks:
-            chunks_by_path[chunk.source_path].append(chunk)
-
     rebuild_files, rebuild_dirs = _rebuild_sets(
         files=files,
         directories=directories,
         files_by_dir=files_by_dir,
         children_by_dir=children_by_dir,
-        existing=existing_artifact,
+        existing_files=existing_files,
+        existing_dirs=existing_dirs,
         changed_paths=changed_paths,
     )
     _progress(
@@ -223,203 +351,291 @@ def build_hierarchy_artifact(
         ),
     )
 
-    existing_file_docs = (
-        {item.path: item for item in existing_artifact.file_summaries}
-        if existing_artifact
-        else {}
-    )
-    existing_dir_docs = (
-        {item.path: item for item in existing_artifact.directory_summaries}
-        if existing_artifact
-        else {}
-    )
+    files_existing = existing_files or {}
+    dirs_existing = existing_dirs or {}
 
-    file_docs_by_path: dict[Path, FileSummaryDoc] = {}
+    file_records_by_path: dict[Path, FileSummaryRecord] = {}
+    directory_records_by_path: dict[Path, DirectorySummaryRecord] = {}
+
     regenerated_files = 0
     total_regenerated_files = len(rebuild_files)
-    for file_path in files:
-        if file_path not in rebuild_files and file_path in existing_file_docs:
-            file_docs_by_path[file_path] = existing_file_docs[file_path]
-            continue
-        regenerated_files += 1
-        if _should_emit_progress(regenerated_files, max(total_regenerated_files, 1)):
-            _progress(
-                progress_callback,
-                f"Hierarchy file summaries: {regenerated_files}/{total_regenerated_files}",
+
+    with (
+        file_summaries_path.open("w", encoding="utf-8") as file_handle,
+        directory_summaries_path.open("w", encoding="utf-8") as directory_handle,
+        nodes_path.open("w", encoding="utf-8") as node_handle,
+        edges_path.open("w", encoding="utf-8") as edge_handle,
+    ):
+        for file_path in files:
+            if file_path not in rebuild_files and file_path in files_existing:
+                file_record = files_existing[file_path]
+            else:
+                regenerated_files += 1
+                if _should_emit_progress(
+                    regenerated_files, max(total_regenerated_files, 1)
+                ):
+                    _progress(
+                        progress_callback,
+                        "Hierarchy file summaries: "
+                        f"{regenerated_files}/{total_regenerated_files}",
+                    )
+
+                code_summary = summary_by_path.get(file_path)
+                if code_summary is None:
+                    file_record = FileSummaryRecord(
+                        node_id=file_node_id(file_path),
+                        path=file_path,
+                        language="unknown",
+                        summary="TBD: No deterministic code summary available.",
+                        evidence_refs=[],
+                        missing_information=["TBD"],
+                        confidence=0.3,
+                    )
+                else:
+                    interfaces = interfaces_by_path.get(file_path, [])
+                    excerpt = load_excerpt_text(
+                        excerpt_root=excerpt_root,
+                        source_path=file_path,
+                    )
+                    system_prompt, user_prompt = build_file_summary_prompt(
+                        code_summary=code_summary,
+                        interfaces=interfaces,
+                        code_excerpt=excerpt,
+                    )
+                    response = llm_client.generate_structured(
+                        StructuredGenerationRequest(
+                            system_prompt=system_prompt,
+                            user_prompt=user_prompt,
+                            response_model=_FileSummaryDraft,
+                            model_name=model_name,
+                            temperature=temperature,
+                        )
+                    )
+                    file_draft = _FileSummaryDraft.model_validate(
+                        response.content.model_dump(mode="json")
+                    )
+                    summary_text = file_draft.summary.strip() or "TBD"
+                    file_record = FileSummaryRecord(
+                        node_id=file_node_id(file_path),
+                        path=file_path,
+                        language=code_summary.language,
+                        summary=summary_text,
+                        functions=code_summary.functions,
+                        classes=code_summary.classes,
+                        imports=code_summary.imports,
+                        evidence_refs=[
+                            _file_ref(code_summary),
+                            *_interface_refs(interfaces),
+                        ],
+                        missing_information=_ensure_tbd_missing(
+                            summary_text,
+                            file_draft.missing_information,
+                        ),
+                        confidence=file_draft.confidence,
+                    )
+
+            file_records_by_path[file_path] = file_record
+            _write_jsonl_line(file_handle, file_record)
+
+            file_doc_path = write_file_summary_markdown(
+                hierarchy_root=hierarchy_root,
+                summary=file_record,
+            )
+            try:
+                doc_path = file_doc_path.relative_to(hierarchy_root)
+            except ValueError:
+                doc_path = file_doc_path
+
+            parent_path = _normalize_dir_path(file_path.parent)
+            parent_id = directory_node_id(parent_path)
+            _write_jsonl_line(
+                node_handle,
+                HierarchyNodeRecord(
+                    node_id=file_record.node_id,
+                    kind="file",
+                    path=file_record.path,
+                    parent_id=parent_id,
+                    doc_path=doc_path,
+                    abstract=file_record.summary[:320],
+                    keywords=_keywords(
+                        " ".join(
+                            [
+                                file_record.summary,
+                                " ".join(file_record.functions),
+                                " ".join(file_record.classes),
+                                " ".join(file_record.imports),
+                            ]
+                        )
+                    ),
+                ),
+            )
+            _write_jsonl_line(
+                edge_handle,
+                HierarchyEdgeRecord(parent_id=parent_id, child_id=file_record.node_id),
             )
 
-        code_summary = summary_by_path.get(file_path)
-        if code_summary is None:
-            file_docs_by_path[file_path] = FileSummaryDoc(
-                node_id=file_node_id(file_path),
-                path=file_path,
-                language="unknown",
-                summary="TBD: No deterministic code summary available.",
-                evidence_refs=[],
-                missing_information=["TBD"],
-                confidence=0.3,
-            )
-            continue
-
-        interfaces = interfaces_by_path.get(file_path, [])
-        excerpt = ""
-        if code_excerpts_by_path is not None:
-            excerpt = code_excerpts_by_path.get(file_path, "")
-        if not excerpt:
-            excerpt_chunks = sorted(
-                chunks_by_path.get(file_path, []), key=lambda item: item.line_start or 0
-            )
-            excerpt = "\n\n".join(chunk.text for chunk in excerpt_chunks).strip()
-
-        system_prompt, user_prompt = build_file_summary_prompt(
-            code_summary=code_summary,
-            interfaces=interfaces,
-            code_excerpt=excerpt,
-        )
-        response = llm_client.generate_structured(
-            StructuredGenerationRequest(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response_model=_FileSummaryDraft,
-                model_name=model_name,
-                temperature=temperature,
-            )
-        )
-        draft = _FileSummaryDraft.model_validate(
-            response.content.model_dump(mode="json")
-        )
-        summary_text = draft.summary.strip() or "TBD"
-
-        file_docs_by_path[file_path] = FileSummaryDoc(
-            node_id=file_node_id(file_path),
-            path=file_path,
-            language=code_summary.language,
-            summary=summary_text,
-            functions=code_summary.functions,
-            classes=code_summary.classes,
-            imports=code_summary.imports,
-            evidence_refs=[_file_ref(code_summary), *_interface_refs(interfaces)],
-            missing_information=_ensure_tbd_missing(
-                summary_text, draft.missing_information
+        directories_ordered = sorted(
+            directories,
+            key=lambda path: (
+                -len(path.parts) if path != Path(".") else -0,
+                path.as_posix(),
             ),
-            confidence=draft.confidence,
         )
 
-    directory_docs_by_path: dict[Path, DirectorySummaryDoc] = {}
-    directories_ordered = sorted(
-        directories,
-        key=lambda path: (
-            -len(path.parts) if path != Path(".") else -0,
-            path.as_posix(),
-        ),
-    )
+        regenerated_directories = 0
+        total_regenerated_directories = len(rebuild_dirs)
+        for directory in directories_ordered:
+            if directory not in rebuild_dirs and directory in dirs_existing:
+                dir_record = dirs_existing[directory]
+            else:
+                regenerated_directories += 1
+                if _should_emit_progress(
+                    regenerated_directories,
+                    max(total_regenerated_directories, 1),
+                ):
+                    _progress(
+                        progress_callback,
+                        "Hierarchy directory summaries: "
+                        f"{regenerated_directories}/{total_regenerated_directories}",
+                    )
 
-    regenerated_directories = 0
-    total_regenerated_directories = len(rebuild_dirs)
-    for directory in directories_ordered:
-        if directory not in rebuild_dirs and directory in existing_dir_docs:
-            directory_docs_by_path[directory] = existing_dir_docs[directory]
-            continue
-        regenerated_directories += 1
-        if _should_emit_progress(
-            regenerated_directories, max(total_regenerated_directories, 1)
-        ):
-            _progress(
-                progress_callback,
-                "Hierarchy directory summaries: "
-                f"{regenerated_directories}/{total_regenerated_directories}",
+                local_files = [
+                    file_records_by_path[path]
+                    for path in files_by_dir.get(directory, [])
+                ]
+                child_summaries = [
+                    directory_records_by_path[path]
+                    for path in children_by_dir.get(directory, [])
+                ]
+                local_file_docs = [_to_file_summary_doc(item) for item in local_files]
+                child_directory_docs = [
+                    _to_directory_summary_doc(item) for item in child_summaries
+                ]
+                system_prompt, user_prompt = build_directory_summary_prompt(
+                    directory_path=directory.as_posix(),
+                    local_files=local_file_docs,
+                    child_directories=child_directory_docs,
+                )
+                response = llm_client.generate_structured(
+                    StructuredGenerationRequest(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        response_model=_DirectorySummaryDraft,
+                        model_name=model_name,
+                        temperature=temperature,
+                    )
+                )
+                dir_draft = _DirectorySummaryDraft.model_validate(
+                    response.content.model_dump(mode="json")
+                )
+                summary_text = dir_draft.summary.strip() or "TBD"
+
+                refs = [
+                    EvidenceReference(kind="file_summary", source=item.path.as_posix())
+                    for item in local_files
+                ] + [
+                    EvidenceReference(
+                        kind="directory_summary",
+                        source=item.path.as_posix(),
+                    )
+                    for item in child_summaries
+                ]
+
+                dir_record = DirectorySummaryRecord(
+                    node_id=directory_node_id(directory),
+                    path=directory,
+                    summary=summary_text,
+                    local_files=[item.path for item in local_files],
+                    child_directories=[item.path for item in child_summaries],
+                    evidence_refs=refs,
+                    missing_information=_ensure_tbd_missing(
+                        summary_text,
+                        dir_draft.missing_information,
+                    ),
+                    confidence=dir_draft.confidence,
+                )
+
+            directory_records_by_path[directory] = dir_record
+            _write_jsonl_line(directory_handle, dir_record)
+
+            directory_doc_path = write_directory_summary_markdown(
+                hierarchy_root=hierarchy_root,
+                summary=dir_record,
             )
+            try:
+                doc_path = directory_doc_path.relative_to(hierarchy_root)
+            except ValueError:
+                doc_path = directory_doc_path
 
-        local_files = [
-            file_docs_by_path[path] for path in files_by_dir.get(directory, [])
-        ]
-        child_summaries = [
-            directory_docs_by_path[path] for path in children_by_dir.get(directory, [])
-        ]
-
-        system_prompt, user_prompt = build_directory_summary_prompt(
-            directory_path=directory.as_posix(),
-            local_files=local_files,
-            child_directories=child_summaries,
-        )
-        response = llm_client.generate_structured(
-            StructuredGenerationRequest(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response_model=_DirectorySummaryDraft,
-                model_name=model_name,
-                temperature=temperature,
+            parent_path = _normalize_dir_path(directory.parent)
+            directory_parent_id: str | None = (
+                None if directory == Path(".") else directory_node_id(parent_path)
             )
-        )
-        dir_draft = _DirectorySummaryDraft.model_validate(
-            response.content.model_dump(mode="json")
-        )
-        summary_text = dir_draft.summary.strip() or "TBD"
+            _write_jsonl_line(
+                node_handle,
+                HierarchyNodeRecord(
+                    node_id=dir_record.node_id,
+                    kind="directory",
+                    path=_normalize_dir_path(dir_record.path),
+                    parent_id=directory_parent_id,
+                    doc_path=doc_path,
+                    abstract=dir_record.summary[:320],
+                    keywords=_keywords(
+                        " ".join(
+                            [
+                                dir_record.summary,
+                                " ".join(
+                                    item.as_posix() for item in dir_record.local_files
+                                ),
+                                " ".join(
+                                    item.as_posix()
+                                    for item in dir_record.child_directories
+                                ),
+                            ]
+                        )
+                    ),
+                ),
+            )
+            if directory_parent_id is not None:
+                _write_jsonl_line(
+                    edge_handle,
+                    HierarchyEdgeRecord(
+                        parent_id=directory_parent_id, child_id=dir_record.node_id
+                    ),
+                )
 
-        refs = [
-            EvidenceReference(kind="file_summary", source=item.path.as_posix())
-            for item in local_files
-        ] + [
-            EvidenceReference(kind="directory_summary", source=item.path.as_posix())
-            for item in child_summaries
-        ]
-
-        directory_docs_by_path[directory] = DirectorySummaryDoc(
-            node_id=directory_node_id(directory),
-            path=directory,
-            summary=summary_text,
-            local_files=[item.path for item in local_files],
-            child_directories=[item.path for item in child_summaries],
-            evidence_refs=refs,
-            missing_information=_ensure_tbd_missing(
-                summary_text, dir_draft.missing_information
-            ),
-            confidence=dir_draft.confidence,
-        )
-
-    return HierarchyDocArtifact(
+    manifest = HierarchyManifest(
         csc_id=csc_id,
         root=Path("."),
-        file_summaries=[
-            file_docs_by_path[path] for path in sorted(file_docs_by_path, key=str)
-        ],
-        directory_summaries=[
-            directory_docs_by_path[path]
-            for path in sorted(directory_docs_by_path, key=lambda item: item.as_posix())
-        ],
+        file_summaries_path=Path(file_summaries_path.name),
+        directory_summaries_path=Path(directory_summaries_path.name),
+        nodes_path=Path(nodes_path.name),
+        edges_path=Path(edges_path.name),
+    )
+    write_json_model(manifest_path, manifest)
+
+    return HierarchyStoreResult(
+        store_root=hierarchy_root,
+        manifest_path=manifest_path,
+        chunk_count=len(file_records_by_path) + len(directory_records_by_path),
     )
 
 
-def load_hierarchy_artifact(path: Path) -> HierarchyDocArtifact:
-    """Load persisted hierarchy artifact."""
+def load_hierarchy_summary_evidence(manifest_path: Path) -> list[str]:
+    """Load hierarchy evidence strings from streamed store records."""
 
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    return HierarchyDocArtifact.model_validate(raw)
-
-
-def persist_hierarchy_outputs(
-    *,
-    artifact: HierarchyDocArtifact,
-    output_root: Path,
-    progress_callback: ProgressCallback | None = None,
-) -> tuple[Path, Path, HierarchyIndex, list[KnowledgeChunk]]:
-    """Persist hierarchy markdown/json/index and return retrieval chunks."""
-
-    hierarchy_root = output_root / "hierarchy"
-    hierarchy_json_path = hierarchy_root / "hierarchy_artifact.json"
-    hierarchy_index_path = hierarchy_root / "hierarchy_index.json"
-
-    _progress(
-        progress_callback, "Hierarchy: writing markdown summaries and index artifacts."
+    manifest, file_records, directory_records = load_hierarchy_store_records(
+        manifest_path
     )
-    node_doc_paths = write_hierarchy_markdown(hierarchy_root, artifact)
-    index = build_hierarchy_index(artifact, node_doc_paths=node_doc_paths)
-    write_json_model(hierarchy_json_path, artifact)
-    save_hierarchy_index(index, hierarchy_index_path)
+    _ = manifest
 
-    return (
-        hierarchy_json_path,
-        hierarchy_index_path,
-        index,
-        hierarchy_chunks(artifact, index),
-    )
+    evidence: list[str] = []
+    for directory in sorted(
+        directory_records.values(), key=lambda item: item.path.as_posix()
+    ):
+        evidence.append(f"directory::{directory.path.as_posix()}::{directory.summary}")
+    for file_record in sorted(
+        file_records.values(), key=lambda item: item.path.as_posix()
+    ):
+        evidence.append(f"file::{file_record.path.as_posix()}::{file_record.summary}")
+    return evidence

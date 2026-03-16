@@ -10,9 +10,11 @@ import pytest
 from sddraft.analysis.hierarchy import directory_node_id, file_node_id
 from sddraft.domain.errors import ConfigError
 from sddraft.domain.models import (
-    DirectorySummaryDoc,
-    FileSummaryDoc,
-    HierarchyDocArtifact,
+    DirectorySummaryRecord,
+    FileSummaryRecord,
+    HierarchyEdgeRecord,
+    HierarchyManifest,
+    HierarchyNodeRecord,
 )
 from sddraft.llm.base import StructuredGenerationRequest
 from sddraft.llm.mock import MockLLMClient
@@ -86,10 +88,10 @@ def test_propose_updates_flow(
     assert result.report_markdown_path.exists()
     assert result.report_json_path.exists()
     assert result.retrieval_index_path.exists()
-    assert result.hierarchy_json_path is not None
-    assert result.hierarchy_index_path is not None
-    assert result.hierarchy_json_path.exists()
-    assert result.hierarchy_index_path.exists()
+    assert result.hierarchy_manifest_path is not None
+    assert result.hierarchy_store_path is not None
+    assert result.hierarchy_manifest_path.exists()
+    assert result.hierarchy_store_path.exists()
     assert result.impact.changed_files
     assert llm.requests
     assert all(request.model_name == override_model for request in llm.requests)
@@ -141,48 +143,134 @@ def test_propose_updates_hierarchy_refresh_preserves_unaffected_file_summary(
     hierarchy_root = output_root / "hierarchy"
     hierarchy_root.mkdir(parents=True, exist_ok=True)
 
-    existing_hierarchy = HierarchyDocArtifact(
+    manifest = HierarchyManifest(
         csc_id=sample_csc.csc_id,
         root=Path("."),
-        file_summaries=[
-            FileSummaryDoc(
-                node_id=file_node_id(Path("src/module.py")),
-                path=Path("src/module.py"),
-                language="python",
-                summary="OLD-MODULE-SUMMARY",
-            ),
-            FileSummaryDoc(
-                node_id=file_node_id(Path("src/sub/worker.py")),
-                path=Path("src/sub/worker.py"),
-                language="python",
-                summary="PRESERVE-WORKER-SUMMARY",
-            ),
-        ],
-        directory_summaries=[
-            DirectorySummaryDoc(
-                node_id=directory_node_id(Path(".")),
-                path=Path("."),
-                summary="ROOT",
-                child_directories=[Path("src")],
-            ),
-            DirectorySummaryDoc(
-                node_id=directory_node_id(Path("src")),
-                path=Path("src"),
-                summary="SRC",
-                local_files=[Path("src/module.py")],
-                child_directories=[Path("src/sub")],
-            ),
-            DirectorySummaryDoc(
-                node_id=directory_node_id(Path("src/sub")),
-                path=Path("src/sub"),
-                summary="SUB",
-                local_files=[Path("src/sub/worker.py")],
-            ),
-        ],
+        file_summaries_path=Path("file_summaries.jsonl"),
+        directory_summaries_path=Path("directory_summaries.jsonl"),
+        nodes_path=Path("nodes.jsonl"),
+        edges_path=Path("edges.jsonl"),
     )
-    hierarchy_json_path = hierarchy_root / "hierarchy_artifact.json"
-    hierarchy_json_path.write_text(
-        existing_hierarchy.model_dump_json(indent=2), encoding="utf-8"
+    (hierarchy_root / "manifest.json").write_text(
+        manifest.model_dump_json(indent=2), encoding="utf-8"
+    )
+    (hierarchy_root / "file_summaries.jsonl").write_text(
+        "\n".join(
+            [
+                FileSummaryRecord(
+                    node_id=file_node_id(Path("src/module.py")),
+                    path=Path("src/module.py"),
+                    language="python",
+                    summary="OLD-MODULE-SUMMARY",
+                ).model_dump_json(),
+                FileSummaryRecord(
+                    node_id=file_node_id(Path("src/sub/worker.py")),
+                    path=Path("src/sub/worker.py"),
+                    language="python",
+                    summary="PRESERVE-WORKER-SUMMARY",
+                ).model_dump_json(),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (hierarchy_root / "directory_summaries.jsonl").write_text(
+        "\n".join(
+            [
+                DirectorySummaryRecord(
+                    node_id=directory_node_id(Path(".")),
+                    path=Path("."),
+                    summary="ROOT",
+                    child_directories=[Path("src")],
+                ).model_dump_json(),
+                DirectorySummaryRecord(
+                    node_id=directory_node_id(Path("src")),
+                    path=Path("src"),
+                    summary="SRC",
+                    local_files=[Path("src/module.py")],
+                    child_directories=[Path("src/sub")],
+                ).model_dump_json(),
+                DirectorySummaryRecord(
+                    node_id=directory_node_id(Path("src/sub")),
+                    path=Path("src/sub"),
+                    summary="SUB",
+                    local_files=[Path("src/sub/worker.py")],
+                ).model_dump_json(),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (hierarchy_root / "nodes.jsonl").write_text(
+        "\n".join(
+            [
+                HierarchyNodeRecord(
+                    node_id=directory_node_id(Path(".")),
+                    kind="directory",
+                    path=Path("."),
+                    doc_path=Path("_directory.md"),
+                    abstract="ROOT",
+                ).model_dump_json(),
+                HierarchyNodeRecord(
+                    node_id=directory_node_id(Path("src")),
+                    kind="directory",
+                    path=Path("src"),
+                    parent_id=directory_node_id(Path(".")),
+                    doc_path=Path("src/_directory.md"),
+                    abstract="SRC",
+                ).model_dump_json(),
+                HierarchyNodeRecord(
+                    node_id=directory_node_id(Path("src/sub")),
+                    kind="directory",
+                    path=Path("src/sub"),
+                    parent_id=directory_node_id(Path("src")),
+                    doc_path=Path("src/sub/_directory.md"),
+                    abstract="SUB",
+                ).model_dump_json(),
+                HierarchyNodeRecord(
+                    node_id=file_node_id(Path("src/module.py")),
+                    kind="file",
+                    path=Path("src/module.py"),
+                    parent_id=directory_node_id(Path("src")),
+                    doc_path=Path("src/module.py.md"),
+                    abstract="OLD-MODULE-SUMMARY",
+                ).model_dump_json(),
+                HierarchyNodeRecord(
+                    node_id=file_node_id(Path("src/sub/worker.py")),
+                    kind="file",
+                    path=Path("src/sub/worker.py"),
+                    parent_id=directory_node_id(Path("src/sub")),
+                    doc_path=Path("src/sub/worker.py.md"),
+                    abstract="PRESERVE-WORKER-SUMMARY",
+                ).model_dump_json(),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (hierarchy_root / "edges.jsonl").write_text(
+        "\n".join(
+            [
+                HierarchyEdgeRecord(
+                    parent_id=directory_node_id(Path(".")),
+                    child_id=directory_node_id(Path("src")),
+                ).model_dump_json(),
+                HierarchyEdgeRecord(
+                    parent_id=directory_node_id(Path("src")),
+                    child_id=directory_node_id(Path("src/sub")),
+                ).model_dump_json(),
+                HierarchyEdgeRecord(
+                    parent_id=directory_node_id(Path("src")),
+                    child_id=file_node_id(Path("src/module.py")),
+                ).model_dump_json(),
+                HierarchyEdgeRecord(
+                    parent_id=directory_node_id(Path("src/sub")),
+                    child_id=file_node_id(Path("src/sub/worker.py")),
+                ).model_dump_json(),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
     )
 
     changed_file.write_text("def a(x, y):\n    return x + y\n", encoding="utf-8")
@@ -206,13 +294,17 @@ def test_propose_updates_hierarchy_refresh_preserves_unaffected_file_summary(
         repo_root=tmp_path,
     )
 
-    assert result.hierarchy_json_path is not None
-    refreshed = HierarchyDocArtifact.model_validate_json(
-        result.hierarchy_json_path.read_text(encoding="utf-8")
-    )
+    assert result.hierarchy_manifest_path is not None
+    refreshed_files = [
+        FileSummaryRecord.model_validate_json(line)
+        for line in (result.hierarchy_manifest_path.parent / "file_summaries.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    ]
     worker_summary = next(
         item.summary
-        for item in refreshed.file_summaries
+        for item in refreshed_files
         if item.path == Path("src/sub/worker.py")
     )
     assert worker_summary == "PRESERVE-WORKER-SUMMARY"
