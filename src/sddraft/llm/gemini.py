@@ -12,18 +12,20 @@ from sddraft.llm.base import (
     validate_json_text,
 )
 
-genai_sdk: Any
-genai_types: Any
+_genai_sdk: Any = None
+_genai_types: Any = None
 try:
-    from google import genai as genai_sdk
-    from google.genai import types as genai_types
-except Exception:  # pragma: no cover - optional dependency
-    genai_sdk = None
-    genai_types = None
+    from google import genai as _google_genai_sdk
+    from google.genai import types as _google_genai_types
 
-genai: Any = genai_sdk
+    _genai_sdk = _google_genai_sdk
+    _genai_types = _google_genai_types
+except Exception:  # pragma: no cover - optional dependency
+    pass
+
+genai: Any = _genai_sdk
 GenerateContentConfig: Any = (
-    genai_types.GenerateContentConfig if genai_types is not None else None
+    _genai_types.GenerateContentConfig if _genai_types is not None else None
 )
 
 
