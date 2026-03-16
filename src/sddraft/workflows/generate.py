@@ -22,6 +22,7 @@ from sddraft.domain.models import (
     CodeUnitSummary,
     CSCDescriptor,
     GenerateResult,
+    HierarchyDocArtifact,
     InterfaceSummary,
     KnowledgeChunk,
     ProjectConfig,
@@ -103,8 +104,7 @@ def _scan_and_spool_chunks(
                 handle.write("\n")
                 chunk_count += 1
                 path_key = chunk.source_path
-                if len(excerpt_parts[path_key]) < 2:
-                    excerpt_parts[path_key].append(chunk.text)
+                excerpt_parts[path_key].append(chunk.text)
 
     excerpts = {
         path: "\n\n".join(parts).strip()
@@ -130,6 +130,23 @@ def _iter_spooled_chunks(path: Path) -> Iterator[KnowledgeChunk]:
                 continue
             raw = json.loads(stripped)
             yield KnowledgeChunk.model_validate(raw)
+
+
+def _hierarchy_summary_evidence(artifact: HierarchyDocArtifact) -> list[str]:
+    """Build deterministic hierarchy summary strings for section evidence."""
+
+    evidence: list[str] = []
+    for dir_summary in sorted(
+        artifact.directory_summaries, key=lambda entry: entry.path.as_posix()
+    ):
+        evidence.append(
+            f"directory::{dir_summary.path.as_posix()}::{dir_summary.summary}"
+        )
+    for file_summary in sorted(
+        artifact.file_summaries, key=lambda entry: entry.path.as_posix()
+    ):
+        evidence.append(f"file::{file_summary.path.as_posix()}::{file_summary.summary}")
+    return evidence
 
 
 def generate_sdd(
@@ -172,6 +189,72 @@ def generate_sdd(
         project_config.llm.temperature if temperature is None else temperature
     )
 
+    hierarchy_json_path: Path | None = None
+    hierarchy_index_path: Path | None = None
+    hierarchy_chunks: list[KnowledgeChunk] = []
+    hierarchy_summary_evidence: list[str] = []
+
+    if hierarchy_docs_enabled:
+        metrics_collector.start("hierarchy")
+        _progress(
+            progress_callback, f"[{csc.csc_id}] Preparing hierarchy documentation..."
+        )
+        existing_artifact = None
+        changed_paths: set[Path] | None = None
+        candidate_hierarchy_json_path = (
+            output_root / "hierarchy" / "hierarchy_artifact.json"
+        )
+        if candidate_hierarchy_json_path.exists():
+            try:
+                existing_artifact = load_hierarchy_artifact(
+                    candidate_hierarchy_json_path
+                )
+                artifact_mtime = candidate_hierarchy_json_path.stat().st_mtime
+                changed_paths = set()
+                for file_path in scan_result.files:
+                    relative_path = _to_relative(file_path, repo_root)
+                    try:
+                        if file_path.stat().st_mtime > artifact_mtime:
+                            changed_paths.add(relative_path)
+                    except OSError:
+                        changed_paths.add(relative_path)
+                _progress(
+                    progress_callback,
+                    f"[{csc.csc_id}] Found existing hierarchy artifact; {len(changed_paths)} changed file(s) detected.",
+                )
+            except (OSError, JSONDecodeError, PydanticValidationError, ValueError):
+                existing_artifact = None
+                changed_paths = None
+                _progress(
+                    progress_callback,
+                    f"[{csc.csc_id}] Existing hierarchy artifact unreadable; rebuilding hierarchy.",
+                )
+
+        hierarchy_artifact = build_hierarchy_artifact(
+            csc_id=csc.csc_id,
+            repo_root=repo_root,
+            scan_result=scan_result,
+            llm_client=llm_client,
+            model_name=resolved_model,
+            temperature=resolved_temperature,
+            changed_paths=changed_paths,
+            existing_artifact=existing_artifact,
+            code_excerpts_by_path=code_excerpts,
+            progress_callback=progress_callback,
+        )
+        hierarchy_summary_evidence = _hierarchy_summary_evidence(hierarchy_artifact)
+        (
+            hierarchy_json_path,
+            hierarchy_index_path,
+            _,
+            hierarchy_chunks,
+        ) = persist_hierarchy_outputs(
+            artifact=hierarchy_artifact,
+            output_root=output_root,
+            progress_callback=progress_callback,
+        )
+        metrics_collector.finish(chunks_written=len(hierarchy_chunks))
+
     metrics_collector.start("generate_sections")
     section_drafts: list[SectionDraft] = []
     total_sections = len(template.sections)
@@ -182,6 +265,7 @@ def generate_sdd(
             code_summaries=scan_result.code_summaries,
             interface_summaries=scan_result.interface_summaries,
             dependencies=scan_result.dependencies,
+            hierarchy_summaries=hierarchy_summary_evidence,
         )
         _progress(
             progress_callback,
@@ -245,69 +329,6 @@ def generate_sdd(
         markdown_path=markdown_path,
         review_json_path=review_json_path,
     )
-    hierarchy_json_path: Path | None = None
-    hierarchy_index_path: Path | None = None
-    hierarchy_chunks: list[KnowledgeChunk] = []
-
-    if hierarchy_docs_enabled:
-        metrics_collector.start("hierarchy")
-        _progress(
-            progress_callback, f"[{csc.csc_id}] Preparing hierarchy documentation..."
-        )
-        existing_artifact = None
-        changed_paths: set[Path] | None = None
-        candidate_hierarchy_json_path = (
-            output_root / "hierarchy" / "hierarchy_artifact.json"
-        )
-        if candidate_hierarchy_json_path.exists():
-            try:
-                existing_artifact = load_hierarchy_artifact(
-                    candidate_hierarchy_json_path
-                )
-                artifact_mtime = candidate_hierarchy_json_path.stat().st_mtime
-                changed_paths = set()
-                for file_path in scan_result.files:
-                    relative_path = _to_relative(file_path, repo_root)
-                    try:
-                        if file_path.stat().st_mtime > artifact_mtime:
-                            changed_paths.add(relative_path)
-                    except OSError:
-                        changed_paths.add(relative_path)
-                _progress(
-                    progress_callback,
-                    f"[{csc.csc_id}] Found existing hierarchy artifact; {len(changed_paths)} changed file(s) detected.",
-                )
-            except (OSError, JSONDecodeError, PydanticValidationError, ValueError):
-                existing_artifact = None
-                changed_paths = None
-                _progress(
-                    progress_callback,
-                    f"[{csc.csc_id}] Existing hierarchy artifact unreadable; rebuilding hierarchy.",
-                )
-
-        hierarchy_artifact = build_hierarchy_artifact(
-            csc_id=csc.csc_id,
-            repo_root=repo_root,
-            scan_result=scan_result,
-            llm_client=llm_client,
-            model_name=resolved_model,
-            temperature=resolved_temperature,
-            changed_paths=changed_paths,
-            existing_artifact=existing_artifact,
-            code_excerpts_by_path=code_excerpts,
-            progress_callback=progress_callback,
-        )
-        (
-            hierarchy_json_path,
-            hierarchy_index_path,
-            _,
-            hierarchy_chunks,
-        ) = persist_hierarchy_outputs(
-            artifact=hierarchy_artifact,
-            output_root=output_root,
-            progress_callback=progress_callback,
-        )
-        metrics_collector.finish(chunks_written=len(hierarchy_chunks))
 
     metrics_collector.start("build_retrieval")
 

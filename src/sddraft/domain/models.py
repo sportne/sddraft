@@ -201,6 +201,7 @@ class SectionEvidencePack(DomainModel):
     code_summaries: list[CodeUnitSummary] = Field(default_factory=list)
     interface_summaries: list[InterfaceSummary] = Field(default_factory=list)
     dependency_summaries: list[str] = Field(default_factory=list)
+    hierarchy_summaries: list[str] = Field(default_factory=list)
     commit_impact: CommitImpact | None = None
     existing_section_text: str | None = None
     evidence_references: list[EvidenceReference] = Field(default_factory=list)

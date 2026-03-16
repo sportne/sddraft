@@ -268,7 +268,7 @@ def build_hierarchy_artifact(
         if not excerpt:
             excerpt_chunks = sorted(
                 chunks_by_path.get(file_path, []), key=lambda item: item.line_start or 0
-            )[:2]
+            )
             excerpt = "\n\n".join(chunk.text for chunk in excerpt_chunks).strip()
 
         system_prompt, user_prompt = build_file_summary_prompt(

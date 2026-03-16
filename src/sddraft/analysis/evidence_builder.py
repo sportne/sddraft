@@ -41,6 +41,7 @@ def _build_references(
     code_summaries: list[CodeUnitSummary],
     interface_summaries: list[InterfaceSummary],
     dependencies: list[str],
+    hierarchy_summaries: list[str],
     commit_impact: CommitImpact | None,
     existing_text: str | None,
 ) -> list[EvidenceReference]:
@@ -59,6 +60,10 @@ def _build_references(
     references.extend(
         EvidenceReference(kind="dependency", source=dependency)
         for dependency in dependencies
+    )
+    references.extend(
+        EvidenceReference(kind="hierarchy_summary", source=summary)
+        for summary in hierarchy_summaries
     )
 
     if commit_impact is not None:
@@ -89,6 +94,7 @@ def build_generation_evidence_pack(
     code_summaries: list[CodeUnitSummary],
     interface_summaries: list[InterfaceSummary],
     dependencies: list[str],
+    hierarchy_summaries: list[str] | None = None,
 ) -> SectionEvidencePack:
     """Build one generation evidence pack for a single section."""
 
@@ -98,10 +104,12 @@ def build_generation_evidence_pack(
         interface_summaries=interface_summaries,
         dependencies=dependencies,
     )
+    hierarchy_values = hierarchy_summaries or []
     refs = _build_references(
         code_summaries=section_code,
         interface_summaries=section_interfaces,
         dependencies=section_dependencies,
+        hierarchy_summaries=hierarchy_values,
         commit_impact=None,
         existing_text=None,
     )
@@ -111,6 +119,7 @@ def build_generation_evidence_pack(
         code_summaries=section_code,
         interface_summaries=section_interfaces,
         dependency_summaries=section_dependencies,
+        hierarchy_summaries=hierarchy_values,
         evidence_references=refs,
     )
 
@@ -121,6 +130,7 @@ def build_generation_evidence_packs(
     code_summaries: list[CodeUnitSummary],
     interface_summaries: list[InterfaceSummary],
     dependencies: list[str],
+    hierarchy_summaries: list[str] | None = None,
 ) -> list[SectionEvidencePack]:
     """Build evidence packs for initial SDD generation."""
 
@@ -133,6 +143,7 @@ def build_generation_evidence_packs(
                 code_summaries=code_summaries,
                 interface_summaries=interface_summaries,
                 dependencies=dependencies,
+                hierarchy_summaries=hierarchy_summaries,
             )
         )
     return packs
@@ -169,6 +180,7 @@ def build_update_evidence_pack(
         code_summaries=section_code,
         interface_summaries=section_interfaces,
         dependencies=section_dependencies,
+        hierarchy_summaries=[],
         commit_impact=section_commit_impact,
         existing_text=existing_text,
     )

@@ -133,8 +133,7 @@ def _scan_and_spool_chunks(
                 handle.write("\n")
                 chunk_count += 1
                 path_key = chunk.source_path
-                if len(excerpt_parts[path_key]) < 2:
-                    excerpt_parts[path_key].append(chunk.text)
+                excerpt_parts[path_key].append(chunk.text)
 
     excerpts = {
         path: "\n\n".join(parts).strip()
