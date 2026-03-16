@@ -85,6 +85,13 @@ def _build_chunk_id(source_path: Path, line_start: int, line_end: int) -> str:
     return f"code::{source_path.as_posix()}::{line_start}-{line_end}"
 
 
+def _to_repo_relative(path: Path, repo_root: Path) -> Path:
+    try:
+        return path.resolve().relative_to(repo_root.resolve())
+    except ValueError:
+        return path
+
+
 @dataclass(slots=True)
 class ScanRecord:
     """Streaming scan record for one source file."""
@@ -152,7 +159,10 @@ def build_code_chunks(
     return chunks
 
 
-def analyze_source_file(path: Path) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+def analyze_source_file(
+    path: Path,
+    repo_root: Path,
+) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
     """Analyze one source file with the registered language analyzer."""
 
     analyzer = get_analyzer_for_path(path)
@@ -162,7 +172,10 @@ def analyze_source_file(path: Path) -> tuple[CodeUnitSummary, list[InterfaceSumm
     except (OSError, UnicodeDecodeError) as exc:
         raise AnalysisError(f"Failed to read source file '{path}': {exc}") from exc
 
-    return analyzer.analyze(path=path, source_text=source_text)
+    return analyzer.analyze(
+        path=_to_repo_relative(path, repo_root),
+        source_text=source_text,
+    )
 
 
 def scan_repository(
@@ -218,7 +231,7 @@ def scan_repository_stream(
 
     for path in files:
         try:
-            summary, interfaces = analyze_source_file(path)
+            summary, interfaces = analyze_source_file(path, repo_root=repo_root)
         except AnalysisError:
             continue
 
@@ -231,7 +244,7 @@ def scan_repository_stream(
             symbol_count_by_path={path: symbol_count},
         )
         yield ScanRecord(
-            path=path,
+            path=_to_repo_relative(path, repo_root),
             code_summary=summary,
             interface_summaries=interfaces,
             code_chunks=chunks,

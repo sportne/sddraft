@@ -30,20 +30,20 @@ def test_scan_repository_extracts_summaries_and_chunks(
 
     result = scan_repository(sample_project_config, sample_csc, repo_root=tmp_path)
 
-    assert module_path.resolve() in result.files
-    assert makefile_path.resolve() in result.files
-    assert ignored_doc.resolve() not in result.files
+    assert Path("src/module.py") in result.files
+    assert Path("src/Makefile") in result.files
+    assert Path("src/ignored.md") not in result.files
     assert all("tests" not in path.as_posix() for path in result.files)
 
     assert result.code_summaries
     python_summary = next(
-        item for item in result.code_summaries if item.path == module_path
+        item for item in result.code_summaries if item.path == Path("src/module.py")
     )
     assert "plan_route" in python_summary.functions
     assert "NavService" in python_summary.classes
     assert any("import os" in dep for dep in python_summary.imports)
     unknown_summary = next(
-        item for item in result.code_summaries if item.path == makefile_path
+        item for item in result.code_summaries if item.path == Path("src/Makefile")
     )
     assert unknown_summary.language == "unknown"
     assert "include common.mk" in unknown_summary.imports

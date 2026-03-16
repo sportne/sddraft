@@ -70,6 +70,12 @@ def _to_relative(path: Path, repo_root: Path) -> Path:
         return path
 
 
+def _to_absolute(path: Path, repo_root: Path) -> Path:
+    if path.is_absolute():
+        return path
+    return (repo_root / path).resolve()
+
+
 def _scan_and_spool_chunks(
     *,
     project_config: ProjectConfig,
@@ -214,7 +220,10 @@ def generate_sdd(
                 for file_path in scan_result.files:
                     relative_path = _to_relative(file_path, repo_root)
                     try:
-                        if file_path.stat().st_mtime > artifact_mtime:
+                        if (
+                            _to_absolute(file_path, repo_root).stat().st_mtime
+                            > artifact_mtime
+                        ):
                             changed_paths.add(relative_path)
                     except OSError:
                         changed_paths.add(relative_path)
