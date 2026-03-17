@@ -21,13 +21,13 @@ from sddraft.domain.errors import ConfigError
 from sddraft.domain.models import (
     CodeUnitSummary,
     CSCDescriptor,
-    InterfaceSummary,
     KnowledgeChunk,
     ProjectConfig,
     ProposeUpdatesResult,
     ScanResult,
     SDDTemplate,
     SectionUpdateProposal,
+    SymbolSummary,
     UpdateProposalReport,
 )
 from sddraft.llm.base import LLMClient, StructuredGenerationRequest
@@ -99,7 +99,7 @@ def _scan_and_spool_chunks(
 ) -> tuple[
     list[Path],
     list[CodeUnitSummary],
-    list[InterfaceSummary],
+    list[SymbolSummary],
     list[str],
     Path,
     int,
@@ -107,7 +107,7 @@ def _scan_and_spool_chunks(
 ]:
     files: list[Path] = []
     code_summaries: list[CodeUnitSummary] = []
-    interface_summaries: list[InterfaceSummary] = []
+    symbol_summaries: list[SymbolSummary] = []
     dependency_values: set[str] = set()
     chunk_count = 0
 
@@ -124,7 +124,7 @@ def _scan_and_spool_chunks(
         ):
             files.append(record.path)
             code_summaries.append(record.code_summary)
-            interface_summaries.extend(record.interface_summaries)
+            symbol_summaries.extend(record.symbol_summaries)
             dependency_values.update(record.code_summary.imports)
 
             for chunk in record.code_chunks:
@@ -141,7 +141,7 @@ def _scan_and_spool_chunks(
     return (
         files,
         code_summaries,
-        interface_summaries,
+        symbol_summaries,
         sorted(dependency_values),
         spool_path,
         chunk_count,
@@ -194,7 +194,7 @@ def propose_updates(
     (
         scan_files,
         code_summaries,
-        interface_summaries,
+        symbol_summaries,
         dependencies,
         scan_chunks_path,
         code_chunk_count,
@@ -233,7 +233,7 @@ def propose_updates(
             section=section_spec,
             csc=csc,
             code_summaries=code_summaries,
-            interface_summaries=interface_summaries,
+            symbol_summaries=symbol_summaries,
             dependencies=dependencies,
             commit_impact=impact,
             existing_sections=existing_sections,
@@ -303,7 +303,7 @@ def propose_updates(
         scan_result = ScanResult(
             files=scan_files,
             code_summaries=code_summaries,
-            interface_summaries=interface_summaries,
+            symbol_summaries=symbol_summaries,
             dependencies=dependencies,
             code_chunks=[],
         )
@@ -361,7 +361,7 @@ def propose_updates(
         scan_result_for_graph = ScanResult(
             files=scan_files,
             code_summaries=code_summaries,
-            interface_summaries=interface_summaries,
+            symbol_summaries=symbol_summaries,
             dependencies=dependencies,
             code_chunks=[],
         )

@@ -12,11 +12,11 @@ from sddraft.domain.errors import AnalysisError, RepositoryError
 from sddraft.domain.models import (
     CodeUnitSummary,
     CSCDescriptor,
-    InterfaceSummary,
     KnowledgeChunk,
     ProjectConfig,
     ScanResult,
     SourceLanguage,
+    SymbolSummary,
 )
 from sddraft.repo.language_analyzers import detect_language, get_analyzer_for_path
 
@@ -98,7 +98,7 @@ class ScanRecord:
 
     path: Path
     code_summary: CodeUnitSummary
-    interface_summaries: list[InterfaceSummary]
+    symbol_summaries: list[SymbolSummary]
     code_chunks: list[KnowledgeChunk]
 
 
@@ -162,7 +162,7 @@ def build_code_chunks(
 def analyze_source_file(
     path: Path,
     repo_root: Path,
-) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
     """Analyze one source file with the registered language analyzer."""
 
     analyzer = get_analyzer_for_path(path)
@@ -187,7 +187,7 @@ def scan_repository(
 
     files: list[Path] = []
     code_summaries: list[CodeUnitSummary] = []
-    interface_summaries: list[InterfaceSummary] = []
+    symbol_summaries: list[SymbolSummary] = []
     code_chunks: list[KnowledgeChunk] = []
     dependency_values: set[str] = set()
 
@@ -198,14 +198,14 @@ def scan_repository(
     ):
         files.append(record.path)
         code_summaries.append(record.code_summary)
-        interface_summaries.extend(record.interface_summaries)
+        symbol_summaries.extend(record.symbol_summaries)
         code_chunks.extend(record.code_chunks)
         dependency_values.update(record.code_summary.imports)
 
     return ScanResult(
         files=files,
         code_summaries=code_summaries,
-        interface_summaries=interface_summaries,
+        symbol_summaries=symbol_summaries,
         dependencies=sorted(dependency_values),
         code_chunks=code_chunks,
     )
@@ -231,11 +231,11 @@ def scan_repository_stream(
 
     for path in files:
         try:
-            summary, interfaces = analyze_source_file(path, repo_root=repo_root)
+            summary, symbols = analyze_source_file(path, repo_root=repo_root)
         except AnalysisError:
             continue
 
-        symbol_count = len(summary.functions) + len(summary.classes)
+        symbol_count = len(symbols)
         chunks = build_code_chunks(
             [path],
             repo_root=repo_root,
@@ -246,6 +246,6 @@ def scan_repository_stream(
         yield ScanRecord(
             path=_to_repo_relative(path, repo_root),
             code_summary=summary,
-            interface_summaries=interfaces,
+            symbol_summaries=symbols,
             code_chunks=chunks,
         )

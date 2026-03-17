@@ -8,9 +8,9 @@ from sddraft.domain.models import (
     CodeUnitSummary,
     DirectorySummaryDoc,
     FileSummaryDoc,
-    InterfaceSummary,
     QueryEvidencePack,
     SectionEvidencePack,
+    SymbolSummary,
 )
 from sddraft.prompts.templates import (
     DIRECTORY_SUMMARY_SYSTEM_PROMPT,
@@ -64,7 +64,7 @@ def build_query_prompt(pack: QueryEvidencePack) -> tuple[str, str]:
 def build_file_summary_prompt(
     *,
     code_summary: CodeUnitSummary,
-    interfaces: list[InterfaceSummary],
+    symbols: list[SymbolSummary],
     code_excerpt: str,
 ) -> tuple[str, str]:
     """Return system and user prompts for file summary generation."""
@@ -72,7 +72,7 @@ def build_file_summary_prompt(
     user_prompt = (
         "Generate a concise summary for one source file.\n"
         f"Code Summary:\n{_json(code_summary.model_dump(mode='json'))}\n\n"
-        f"Interfaces:\n{_json([item.model_dump(mode='json') for item in interfaces])}\n\n"
+        f"Symbols:\n{_json([item.model_dump(mode='json') for item in symbols])}\n\n"
         f"Code Excerpt:\n{code_excerpt or 'TBD'}\n"
     )
     return FILE_SUMMARY_SYSTEM_PROMPT, user_prompt

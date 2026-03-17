@@ -48,9 +48,9 @@ def test_scan_repository_extracts_summaries_and_chunks(
     assert unknown_summary.language == "unknown"
     assert "include common.mk" in unknown_summary.imports
 
-    interface_names = {item.name for item in result.interface_summaries}
-    assert "NavService" in interface_names
-    assert "plan_route" in interface_names
+    symbol_names = {item.name for item in result.symbol_summaries}
+    assert "NavService" in symbol_names
+    assert "plan_route" in symbol_names
 
     assert result.code_chunks
     chunk_languages = {item.metadata.get("language") for item in result.code_chunks}

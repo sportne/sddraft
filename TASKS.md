@@ -11,7 +11,7 @@
 
 - Graph-enhanced retrieval is implemented end-to-end: `generate` and `propose-updates` build `graph/manifest.json`, `nodes.jsonl`, `edges.jsonl`, `symbol_index.json`, and `adjacency.json`.
 - `ask` currently runs lexical retrieval, optional hierarchy expansion, graph expansion, and deterministic reranking with fallback when hierarchy/graph artifacts are missing.
-- Symbol inventory exists, but it is conservative and regex-assisted; spans and ownership quality are strongest for Python and weaker for other languages.
+- Symbol inventory is now analyzer-emitted and symbol-first (`SymbolSummary`), with deterministic owner/span metadata where available; quality remains conservative for some language-specific edge cases.
 - `imports` graph edges are currently resolved only for Python in graph build logic.
 - Graph build is currently full-rebuild per run; no manifest fingerprinting or partial graph reuse yet.
 - Vector readiness is partial: placeholder vector candidate source exists, and generation config has `vector_*` fields, but no real retrieval orchestration path is wired.
@@ -36,22 +36,22 @@
 `Dependencies:` None (start here).
 `Completion Criteria:` Symbol spans/ownership are analyzer-derived where possible, IDs remain stable, and cross-language symbol tests pass.
 
-- [ ] **G1-01**  
+- [x] **G1-01**  
   `Outcome:` Create a symbol-quality inventory by language from current analyzers and graph artifacts.  
   `Definition of Done:` Gaps are documented in comments/tests for Python, Java, C++, JS/TS, Go, Rust, and C#.  
   `Verification Command(s):` `pytest tests/test_language_analyzers.py tests/test_graph_build_and_retrieval.py`
 
-- [ ] **G1-02**  
+- [x] **G1-02**  
   `Outcome:` Extend deterministic symbol extraction to prefer analyzer-derived symbol facts (name, kind, qualified name, span, owner) over regex fallback whenever available.  
   `Definition of Done:` Symbol inventory path uses analyzer facts first; regex span matching is fallback-only.  
   `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_repo_scanner_multilang.py`
 
-- [ ] **G1-03**  
+- [x] **G1-03**  
   `Outcome:` Improve parent/child symbol ownership mapping for nested symbols and methods.  
   `Definition of Done:` Graph has reliable `parent_of`/`contains` symbol edges for nested ownership cases.  
   `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py`
 
-- [ ] **G1-04**  
+- [x] **G1-04**  
   `Outcome:` Preserve stable symbol node IDs while improving symbol metadata quality.  
   `Definition of Done:` ID derivation remains deterministic and unaffected by span-only changes.  
   `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py::test_generate_writes_deterministic_graph_artifacts`

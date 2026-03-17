@@ -160,14 +160,17 @@ class CodeUnitSummary(DomainModel):
     imports: list[str] = Field(default_factory=list)
 
 
-class InterfaceSummary(DomainModel):
-    """Public interface summary for one type/function source."""
+class SymbolSummary(DomainModel):
+    """Deterministic symbol summary for one source declaration."""
 
     name: str
-    kind: Literal["class", "function", "module"]
+    qualified_name: str | None = None
+    kind: str
     language: SourceLanguage
     source_path: Path
-    members: list[str] = Field(default_factory=list)
+    owner_qualified_name: str | None = None
+    line_start: int | None = None
+    line_end: int | None = None
 
 
 class FileDiffSummary(DomainModel):
@@ -197,7 +200,7 @@ class EvidenceReference(DomainModel):
 
     kind: str = Field(
         description=(
-            "Evidence category identifier, such as code_summary, interface, "
+            "Evidence category identifier, such as code_summary, symbol, "
             "dependency, commit_impact, hierarchy_summary, or existing_sdd."
         )
     )
@@ -222,7 +225,7 @@ class SectionEvidencePack(DomainModel):
     section: SDDSectionSpec
     csc: CSCDescriptor
     code_summaries: list[CodeUnitSummary] = Field(default_factory=list)
-    interface_summaries: list[InterfaceSummary] = Field(default_factory=list)
+    symbol_summaries: list[SymbolSummary] = Field(default_factory=list)
     dependency_summaries: list[str] = Field(default_factory=list)
     hierarchy_summaries: list[str] = Field(default_factory=list)
     commit_impact: CommitImpact | None = None
@@ -586,9 +589,7 @@ class Citation(DomainModel):
         default=None,
         description="Optional 1-based ending line number of cited span.",
     )
-    quote: str = Field(
-        description="Short supporting excerpt from the cited chunk."
-    )
+    quote: str = Field(description="Short supporting excerpt from the cited chunk.")
 
 
 class ChunkInclusionReason(DomainModel):
@@ -637,20 +638,14 @@ class QueryAnswer(DomainModel):
     """Structured query answer result."""
 
     answer: str = Field(
-        description=(
-            "Grounded answer text using only supplied evidence and citations."
-        )
+        description=("Grounded answer text using only supplied evidence and citations.")
     )
     citations: list[Citation] = Field(
-        description=(
-            "Citations supporting factual claims in the answer."
-        )
+        description=("Citations supporting factual claims in the answer.")
     )
     uncertainty: list[str] = Field(
         default_factory=list,
-        description=(
-            "Known caveats, confidence limits, or fallback conditions."
-        ),
+        description=("Known caveats, confidence limits, or fallback conditions."),
     )
     missing_information: list[str] = Field(
         default_factory=list,
@@ -674,7 +669,7 @@ class ScanResult(DomainModel):
 
     files: list[Path]
     code_summaries: list[CodeUnitSummary]
-    interface_summaries: list[InterfaceSummary]
+    symbol_summaries: list[SymbolSummary]
     dependencies: list[str]
     code_chunks: list[KnowledgeChunk]
 

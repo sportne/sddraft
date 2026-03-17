@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from sddraft.domain.errors import AnalysisError
-from sddraft.domain.models import CodeUnitSummary, InterfaceSummary, SourceLanguage
+from sddraft.domain.models import (
+    CodeUnitSummary,
+    SourceLanguage,
+    SymbolSummary,
+)
 
 LANGUAGE_BY_SUFFIX: dict[str, SourceLanguage] = {
     ".py": "python",
@@ -49,8 +53,8 @@ class LanguageAnalyzer(Protocol):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
-        """Build deterministic code and interface summaries."""
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Build deterministic code and symbol summaries."""
 
     def signature_changes(self, changed_lines: list[str]) -> list[str]:
         """Return signature-like changed lines."""
@@ -67,6 +71,8 @@ class TSNode(Protocol):
 
     start_byte: int
     end_byte: int
+    start_point: tuple[int, int] | list[int]
+    end_point: tuple[int, int] | list[int]
     type: str
     children: list[TSNode]
 
@@ -147,25 +153,89 @@ def _first_identifier(source_bytes: bytes, node: TSNode) -> str | None:
     return None
 
 
-def _append_module_interface(
-    interfaces: list[InterfaceSummary],
+def _line_span(node: TSNode) -> tuple[int | None, int | None]:
+    start_point = getattr(node, "start_point", None)
+    end_point = getattr(node, "end_point", None)
+
+    if (
+        isinstance(start_point, (tuple, list))
+        and len(start_point) >= 1
+        and isinstance(start_point[0], int)
+    ):
+        start_line = int(start_point[0]) + 1
+    else:
+        start_line = None
+
+    if (
+        isinstance(end_point, (tuple, list))
+        and len(end_point) >= 1
+        and isinstance(end_point[0], int)
+    ):
+        end_line = int(end_point[0]) + 1
+    else:
+        end_line = None
+
+    return start_line, end_line
+
+
+def _qualified(owner_qualified_name: str | None, name: str) -> str:
+    if owner_qualified_name:
+        return f"{owner_qualified_name}.{name}"
+    return name
+
+
+def _append_symbol(
+    *,
+    symbols: list[SymbolSummary],
+    seen: set[tuple[str, str, str]],
+    name: str | None,
+    kind: str,
+    language: SourceLanguage,
+    source_path: Path,
+    owner_qualified_name: str | None = None,
+    node: TSNode | None = None,
+) -> None:
+    cleaned_name = (name or "").strip()
+    if not cleaned_name:
+        return
+    qualified_name = _qualified(owner_qualified_name, cleaned_name)
+    dedupe_key = (kind, qualified_name, source_path.as_posix())
+    if dedupe_key in seen:
+        return
+    seen.add(dedupe_key)
+    line_start, line_end = _line_span(node) if node is not None else (None, None)
+    symbols.append(
+        SymbolSummary(
+            name=cleaned_name,
+            qualified_name=qualified_name,
+            kind=kind,
+            language=language,
+            source_path=source_path,
+            owner_qualified_name=owner_qualified_name,
+            line_start=line_start,
+            line_end=line_end,
+        )
+    )
+
+
+def _append_module_symbol(
+    *,
+    symbols: list[SymbolSummary],
+    seen: set[tuple[str, str, str]],
     path: Path,
     language: SourceLanguage,
     classes: set[str],
     functions: set[str],
 ) -> None:
-    members = sorted({*classes, *functions})
-    if not members:
+    if not classes and not functions:
         return
-
-    interfaces.append(
-        InterfaceSummary(
-            name=path.stem,
-            kind="module",
-            language=language,
-            source_path=path,
-            members=members,
-        )
+    _append_symbol(
+        symbols=symbols,
+        seen=seen,
+        name=path.stem,
+        kind="module",
+        language=language,
+        source_path=path,
     )
 
 
@@ -233,27 +303,81 @@ class PythonAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
-        class_nodes: list[TSNode] = []
-
-        for node in _walk(tree.root_node):
-            if node.type == "function_definition":
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type == "class_definition":
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    classes.add(name)
-                    class_nodes.append(node)
-            elif node.type in {"import_statement", "import_from_statement"}:
+        def walk_python(
+            node: TSNode,
+            owner_qualified_name: str | None = None,
+            in_class: bool = False,
+        ) -> None:
+            if node.type in {"import_statement", "import_from_statement"}:
                 imports.add(_node_text(source_bytes, node).strip())
+
+            if node.type == "class_definition":
+                class_name = _field_text(source_bytes, node, "name")
+                class_owner: str | None
+                if class_name:
+                    classes.add(class_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=class_name,
+                        kind="class",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    class_owner = _qualified(owner_qualified_name, class_name)
+                else:
+                    class_owner = owner_qualified_name
+
+                for child in node.children:
+                    walk_python(child, class_owner, in_class=True)
+                return
+
+            if node.type == "function_definition":
+                function_name = _field_text(source_bytes, node, "name")
+                function_owner: str | None
+                if function_name:
+                    functions.add(function_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=function_name,
+                        kind="method" if in_class else "function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    function_owner = _qualified(owner_qualified_name, function_name)
+                else:
+                    function_owner = owner_qualified_name
+
+                for child in node.children:
+                    walk_python(child, function_owner, in_class=in_class)
+                return
+
+            for child in node.children:
+                walk_python(child, owner_qualified_name, in_class=in_class)
+
+        walk_python(tree.root_node)
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -264,52 +388,14 @@ class PythonAnalyzer(_BaseAnalyzer):
             imports=sorted(item for item in imports if item),
         )
 
-        interfaces: list[InterfaceSummary] = []
-        public_functions = {name for name in functions if not name.startswith("_")}
-
-        for class_node in class_nodes:
-            class_name = _field_text(source_bytes, class_node, "name")
-            if not class_name or class_name.startswith("_"):
-                continue
-            members = sorted(
-                {
-                    _field_text(source_bytes, child, "name") or ""
-                    for child in _walk(class_node)
-                    if child.type == "function_definition"
-                }
-            )
-            members = [name for name in members if name and not name.startswith("_")]
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=members,
-                )
-            )
-
-        for function_name in sorted(public_functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        public_classes = {item.name for item in interfaces if item.kind == "class"}
-        _append_module_interface(
-            interfaces,
-            path,
-            self.language,
-            public_classes,
-            public_functions,
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
         )
-
-        return summary, interfaces
 
 
 class JavaAnalyzer(_BaseAnalyzer):
@@ -332,30 +418,86 @@ class JavaAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
-        type_nodes: list[TSNode] = []
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
-        for node in _walk(tree.root_node):
+        def walk_java(node: TSNode, owner_qualified_name: str | None = None) -> None:
+            if node.type in {"import_declaration", "package_declaration"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
             if node.type in {
                 "class_declaration",
                 "interface_declaration",
                 "enum_declaration",
             }:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    classes.add(name)
-                    type_nodes.append(node)
-            elif node.type in {"method_declaration", "constructor_declaration"}:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type in {"import_declaration", "package_declaration"}:
-                imports.add(_node_text(source_bytes, node).strip())
+                type_name = _field_text(source_bytes, node, "name")
+                type_owner: str | None
+                if type_name:
+                    classes.add(type_name)
+                    kind = {
+                        "class_declaration": "class",
+                        "interface_declaration": "interface",
+                        "enum_declaration": "enum",
+                    }.get(node.type, "class")
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=type_name,
+                        kind=kind,
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    type_owner = _qualified(owner_qualified_name, type_name)
+                else:
+                    type_owner = owner_qualified_name
+
+                for child in node.children:
+                    walk_java(child, type_owner)
+                return
+
+            if node.type in {"method_declaration", "constructor_declaration"}:
+                method_name = _field_text(source_bytes, node, "name")
+                method_owner: str | None
+                if method_name:
+                    functions.add(method_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=method_name,
+                        kind="method" if owner_qualified_name else "function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    method_owner = _qualified(owner_qualified_name, method_name)
+                else:
+                    method_owner = owner_qualified_name
+
+                for child in node.children:
+                    walk_java(child, method_owner)
+                return
+
+            for child in node.children:
+                walk_java(child, owner_qualified_name)
+
+        walk_java(tree.root_node)
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -365,42 +507,14 @@ class JavaAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for type_node in type_nodes:
-            type_name = _field_text(source_bytes, type_node, "name")
-            if not type_name:
-                continue
-            members = sorted(
-                {
-                    _field_text(source_bytes, child, "name") or ""
-                    for child in _walk(type_node)
-                    if child.type in {"method_declaration", "constructor_declaration"}
-                }
-            )
-            interfaces.append(
-                InterfaceSummary(
-                    name=type_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[item for item in members if item],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class CppAnalyzer(_BaseAnalyzer):
@@ -432,12 +546,14 @@ class CppAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
         for node in _walk(tree.root_node):
             if node.type in {"class_specifier", "struct_specifier"}:
@@ -446,6 +562,15 @@ class CppAnalyzer(_BaseAnalyzer):
                 )
                 if name:
                     classes.add(name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=name,
+                        kind="struct" if node.type == "struct_specifier" else "class",
+                        language=self.language,
+                        source_path=path,
+                        node=node,
+                    )
             elif node.type == "function_definition":
                 declarator = node.child_by_field_name("declarator")
                 declarator_text = (
@@ -453,11 +578,40 @@ class CppAnalyzer(_BaseAnalyzer):
                     if declarator is not None
                     else _node_text(source_bytes, node)
                 )
+                qualified_matches = re.findall(
+                    r"([~A-Za-z_][\w:]*)\s*\(",
+                    declarator_text,
+                )
+                qualified_name = (
+                    cast(str, qualified_matches[-1]) if qualified_matches else None
+                )
                 name = self._extract_cpp_callable_name(declarator_text)
                 if name:
                     functions.add(name)
+                    owner = None
+                    if qualified_name and "::" in qualified_name:
+                        owner = qualified_name.rsplit("::", maxsplit=1)[0]
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=name,
+                        kind="method" if owner else "function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner,
+                        node=node,
+                    )
             elif node.type == "preproc_include":
                 imports.add(_node_text(source_bytes, node).strip())
+
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -467,32 +621,14 @@ class CppAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for class_name in sorted(classes):
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class JavaScriptAnalyzer(_BaseAnalyzer):
@@ -516,28 +652,95 @@ class JavaScriptAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
-        for node in _walk(tree.root_node):
-            if node.type in {"function_declaration", "generator_function_declaration"}:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type == "class_declaration":
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    classes.add(name)
-            elif node.type == "method_definition":
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type == "import_statement":
+        def walk_javascript(
+            node: TSNode, owner_qualified_name: str | None = None
+        ) -> None:
+            if node.type == "import_statement":
                 imports.add(_node_text(source_bytes, node).strip())
+
+            if node.type == "class_declaration":
+                class_name = _field_text(source_bytes, node, "name")
+                class_owner: str | None
+                if class_name:
+                    classes.add(class_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=class_name,
+                        kind="class",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    class_owner = _qualified(owner_qualified_name, class_name)
+                else:
+                    class_owner = owner_qualified_name
+                for child in node.children:
+                    walk_javascript(child, class_owner)
+                return
+
+            if node.type in {"function_declaration", "generator_function_declaration"}:
+                function_name = _field_text(source_bytes, node, "name")
+                function_owner: str | None
+                if function_name:
+                    functions.add(function_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=function_name,
+                        kind="function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    function_owner = _qualified(owner_qualified_name, function_name)
+                else:
+                    function_owner = owner_qualified_name
+                for child in node.children:
+                    walk_javascript(child, function_owner)
+                return
+
+            if node.type == "method_definition":
+                method_name = _field_text(source_bytes, node, "name")
+                if method_name:
+                    functions.add(method_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=method_name,
+                        kind="method",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                for child in node.children:
+                    walk_javascript(child, owner_qualified_name)
+                return
+
+            for child in node.children:
+                walk_javascript(child, owner_qualified_name)
+
+        walk_javascript(tree.root_node)
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -547,32 +750,14 @@ class JavaScriptAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for class_name in sorted(classes):
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class TypeScriptAnalyzer(_BaseAnalyzer):
@@ -596,33 +781,92 @@ class TypeScriptAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
-        for node in _walk(tree.root_node):
+        def walk_typescript(
+            node: TSNode, owner_qualified_name: str | None = None
+        ) -> None:
+            if node.type in {"import_statement", "export_statement"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
             if node.type in {
-                "function_declaration",
-                "method_definition",
-                "method_signature",
-            }:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type in {
                 "class_declaration",
                 "interface_declaration",
                 "type_alias_declaration",
                 "enum_declaration",
             }:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    classes.add(name)
-            elif node.type in {"import_statement", "export_statement"}:
-                imports.add(_node_text(source_bytes, node).strip())
+                type_name = _field_text(source_bytes, node, "name")
+                type_owner: str | None
+                if type_name:
+                    classes.add(type_name)
+                    kind = {
+                        "class_declaration": "class",
+                        "interface_declaration": "interface",
+                        "type_alias_declaration": "type",
+                        "enum_declaration": "enum",
+                    }.get(node.type, "class")
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=type_name,
+                        kind=kind,
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    type_owner = _qualified(owner_qualified_name, type_name)
+                else:
+                    type_owner = owner_qualified_name
+                for child in node.children:
+                    walk_typescript(child, type_owner)
+                return
+
+            if node.type in {
+                "function_declaration",
+                "method_definition",
+                "method_signature",
+            }:
+                function_name = _field_text(source_bytes, node, "name")
+                function_owner: str | None
+                if function_name:
+                    functions.add(function_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=function_name,
+                        kind="method" if owner_qualified_name else "function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    function_owner = _qualified(owner_qualified_name, function_name)
+                else:
+                    function_owner = owner_qualified_name
+                for child in node.children:
+                    walk_typescript(child, function_owner)
+                return
+
+            for child in node.children:
+                walk_typescript(child, owner_qualified_name)
+
+        walk_typescript(tree.root_node)
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -632,32 +876,14 @@ class TypeScriptAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for class_name in sorted(classes):
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class GoAnalyzer(_BaseAnalyzer):
@@ -681,24 +907,71 @@ class GoAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
         for node in _walk(tree.root_node):
             if node.type in {"function_declaration", "method_declaration"}:
                 name = _field_text(source_bytes, node, "name")
                 if name:
                     functions.add(name)
+                    owner: str | None = None
+                    if node.type == "method_declaration":
+                        receiver = node.child_by_field_name("receiver")
+                        receiver_text = (
+                            _node_text(source_bytes, receiver)
+                            if receiver is not None
+                            else ""
+                        )
+                        receiver_match = re.search(
+                            r"([A-Za-z_][A-Za-z0-9_]*)\s*\)?\s*$",
+                            receiver_text,
+                        )
+                        owner = receiver_match.group(1) if receiver_match else None
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=name,
+                        kind=(
+                            "method"
+                            if node.type == "method_declaration"
+                            else "function"
+                        ),
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner,
+                        node=node,
+                    )
             elif node.type == "type_spec":
                 name = _field_text(source_bytes, node, "name")
                 if name:
                     classes.add(name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=name,
+                        kind="class",
+                        language=self.language,
+                        source_path=path,
+                        node=node,
+                    )
             elif node.type in {"import_declaration", "import_spec"}:
                 imports.add(_node_text(source_bytes, node).strip())
+
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -708,32 +981,14 @@ class GoAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for class_name in sorted(classes):
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class RustAnalyzer(_BaseAnalyzer):
@@ -757,26 +1012,106 @@ class RustAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
-        for node in _walk(tree.root_node):
-            if node.type == "function_item":
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type in {"struct_item", "enum_item", "trait_item", "impl_item"}:
-                name = _field_text(source_bytes, node, "name") or _first_identifier(
-                    source_bytes, node
-                )
-                if name:
-                    classes.add(name)
-            elif node.type in {"use_declaration", "extern_crate_declaration"}:
+        def walk_rust(node: TSNode, owner_qualified_name: str | None = None) -> None:
+            if node.type in {"use_declaration", "extern_crate_declaration"}:
                 imports.add(_node_text(source_bytes, node).strip())
+
+            if node.type in {"struct_item", "enum_item", "trait_item"}:
+                type_name = _field_text(
+                    source_bytes, node, "name"
+                ) or _first_identifier(source_bytes, node)
+                type_owner: str | None
+                if type_name:
+                    classes.add(type_name)
+                    kind = {
+                        "struct_item": "struct",
+                        "enum_item": "enum",
+                        "trait_item": "trait",
+                    }.get(node.type, "class")
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=type_name,
+                        kind=kind,
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    type_owner = _qualified(owner_qualified_name, type_name)
+                else:
+                    type_owner = owner_qualified_name
+                for child in node.children:
+                    walk_rust(child, type_owner)
+                return
+
+            if node.type == "impl_item":
+                impl_name = _field_text(
+                    source_bytes, node, "name"
+                ) or _first_identifier(source_bytes, node)
+                impl_owner: str | None
+                if impl_name:
+                    classes.add(impl_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=impl_name,
+                        kind="impl",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    impl_owner = _qualified(owner_qualified_name, impl_name)
+                else:
+                    impl_owner = owner_qualified_name
+                for child in node.children:
+                    walk_rust(child, impl_owner)
+                return
+
+            if node.type == "function_item":
+                function_name = _field_text(source_bytes, node, "name")
+                function_owner: str | None
+                if function_name:
+                    functions.add(function_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=function_name,
+                        kind="method" if owner_qualified_name else "function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    function_owner = _qualified(owner_qualified_name, function_name)
+                else:
+                    function_owner = owner_qualified_name
+                for child in node.children:
+                    walk_rust(child, function_owner)
+                return
+
+            for child in node.children:
+                walk_rust(child, owner_qualified_name)
+
+        walk_rust(tree.root_node)
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -786,32 +1121,14 @@ class RustAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for class_name in sorted(classes):
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class CSharpAnalyzer(_BaseAnalyzer):
@@ -837,14 +1154,19 @@ class CSharpAnalyzer(_BaseAnalyzer):
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
         classes: set[str] = set()
         imports: set[str] = set()
+        symbols: list[SymbolSummary] = []
+        seen: set[tuple[str, str, str]] = set()
 
-        for node in _walk(tree.root_node):
+        def walk_csharp(node: TSNode, owner_qualified_name: str | None = None) -> None:
+            if node.type in {"using_directive", "extern_alias_directive"}:
+                imports.add(_node_text(source_bytes, node).strip())
+
             if node.type in {
                 "class_declaration",
                 "interface_declaration",
@@ -852,19 +1174,74 @@ class CSharpAnalyzer(_BaseAnalyzer):
                 "enum_declaration",
                 "record_declaration",
             }:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    classes.add(name)
-            elif node.type in {
+                type_name = _field_text(source_bytes, node, "name")
+                type_owner: str | None
+                if type_name:
+                    classes.add(type_name)
+                    kind = {
+                        "class_declaration": "class",
+                        "interface_declaration": "interface",
+                        "struct_declaration": "struct",
+                        "enum_declaration": "enum",
+                        "record_declaration": "record",
+                    }.get(node.type, "class")
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=type_name,
+                        kind=kind,
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    type_owner = _qualified(owner_qualified_name, type_name)
+                else:
+                    type_owner = owner_qualified_name
+
+                for child in node.children:
+                    walk_csharp(child, type_owner)
+                return
+
+            if node.type in {
                 "method_declaration",
                 "constructor_declaration",
                 "local_function_statement",
             }:
-                name = _field_text(source_bytes, node, "name")
-                if name:
-                    functions.add(name)
-            elif node.type in {"using_directive", "extern_alias_directive"}:
-                imports.add(_node_text(source_bytes, node).strip())
+                function_name = _field_text(source_bytes, node, "name")
+                function_owner: str | None
+                if function_name:
+                    functions.add(function_name)
+                    _append_symbol(
+                        symbols=symbols,
+                        seen=seen,
+                        name=function_name,
+                        kind="method" if owner_qualified_name else "function",
+                        language=self.language,
+                        source_path=path,
+                        owner_qualified_name=owner_qualified_name,
+                        node=node,
+                    )
+                    function_owner = _qualified(owner_qualified_name, function_name)
+                else:
+                    function_owner = owner_qualified_name
+
+                for child in node.children:
+                    walk_csharp(child, function_owner)
+                return
+
+            for child in node.children:
+                walk_csharp(child, owner_qualified_name)
+
+        walk_csharp(tree.root_node)
+        _append_module_symbol(
+            symbols=symbols,
+            seen=seen,
+            path=path,
+            language=self.language,
+            classes=classes,
+            functions=functions,
+        )
 
         summary = CodeUnitSummary(
             path=path,
@@ -874,32 +1251,14 @@ class CSharpAnalyzer(_BaseAnalyzer):
             docstrings=[],
             imports=sorted(item for item in imports if item),
         )
-
-        interfaces: list[InterfaceSummary] = []
-        for class_name in sorted(classes):
-            interfaces.append(
-                InterfaceSummary(
-                    name=class_name,
-                    kind="class",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        for function_name in sorted(functions):
-            interfaces.append(
-                InterfaceSummary(
-                    name=function_name,
-                    kind="function",
-                    language=self.language,
-                    source_path=path,
-                    members=[],
-                )
-            )
-
-        _append_module_interface(interfaces, path, self.language, classes, functions)
-        return summary, interfaces
+        return summary, sorted(
+            symbols,
+            key=lambda item: (
+                item.kind,
+                item.qualified_name or item.name,
+                item.line_start or 0,
+            ),
+        )
 
 
 class UnknownAnalyzer:
@@ -922,7 +1281,7 @@ class UnknownAnalyzer:
 
     def analyze(
         self, path: Path, source_text: str
-    ) -> tuple[CodeUnitSummary, list[InterfaceSummary]]:
+    ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
         imports = sorted(
             {
                 line.strip()

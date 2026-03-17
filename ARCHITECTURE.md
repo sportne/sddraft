@@ -281,7 +281,7 @@ Important models include:
 * `SDDTemplate`
 * `SDDSectionSpec`
 * `CodeUnitSummary`
-* `InterfaceSummary`
+* `SymbolSummary`
 * `CommitImpact`
 * `SectionEvidencePack`
 * `SectionDraft`

@@ -64,6 +64,7 @@ class GraphSymbolRecord(GraphModel):
     symbol_id: str
     name: str
     qualified_name: str | None = None
+    owner_qualified_name: str | None = None
     kind: str
     language: SourceLanguage
     file_path: Path

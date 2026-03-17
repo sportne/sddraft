@@ -21,7 +21,6 @@ from sddraft.domain.models import (
     CodeUnitSummary,
     CSCDescriptor,
     GenerateResult,
-    InterfaceSummary,
     KnowledgeChunk,
     ProjectConfig,
     ReviewArtifact,
@@ -30,6 +29,7 @@ from sddraft.domain.models import (
     SDDTemplate,
     SectionDraft,
     SectionReviewArtifact,
+    SymbolSummary,
 )
 from sddraft.llm.base import LLMClient, StructuredGenerationRequest
 from sddraft.prompts.builders import build_section_generation_prompt
@@ -96,7 +96,7 @@ def _scan_and_spool_chunks(
 ) -> tuple[ScanResult, Path, int, Path]:
     files: list[Path] = []
     code_summaries: list[CodeUnitSummary] = []
-    interface_summaries: list[InterfaceSummary] = []
+    symbol_summaries: list[SymbolSummary] = []
     dependency_values: set[str] = set()
     chunk_count = 0
 
@@ -113,7 +113,7 @@ def _scan_and_spool_chunks(
         ):
             files.append(record.path)
             code_summaries.append(record.code_summary)
-            interface_summaries.extend(record.interface_summaries)
+            symbol_summaries.extend(record.symbol_summaries)
             dependency_values.update(record.code_summary.imports)
 
             for chunk in record.code_chunks:
@@ -130,7 +130,7 @@ def _scan_and_spool_chunks(
     scan_result = ScanResult(
         files=files,
         code_summaries=code_summaries,
-        interface_summaries=interface_summaries,
+        symbol_summaries=symbol_summaries,
         dependencies=sorted(dependency_values),
         code_chunks=[],
     )
@@ -266,7 +266,7 @@ def generate_sdd(
             section=section_spec,
             csc=csc,
             code_summaries=scan_result.code_summaries,
-            interface_summaries=scan_result.interface_summaries,
+            symbol_summaries=scan_result.symbol_summaries,
             dependencies=scan_result.dependencies,
             hierarchy_summaries=section_hierarchy_evidence,
         )

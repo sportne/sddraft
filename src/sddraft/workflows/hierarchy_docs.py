@@ -26,8 +26,8 @@ from sddraft.domain.models import (
     HierarchyEdgeRecord,
     HierarchyManifest,
     HierarchyNodeRecord,
-    InterfaceSummary,
     ScanResult,
+    SymbolSummary,
 )
 from sddraft.llm.base import LLMClient, StructuredGenerationRequest
 from sddraft.prompts.builders import (
@@ -44,7 +44,7 @@ from sddraft.render.json_artifacts import write_json_model
 class _FileSummaryDraft(BaseModel):
     summary: str = Field(
         description=(
-            "Concise file summary grounded in provided code summary, interfaces, and "
+            "Concise file summary grounded in provided code summary, symbols, and "
             "code excerpt."
         )
     )
@@ -145,10 +145,12 @@ def _file_ref(summary: CodeUnitSummary) -> EvidenceReference:
     return EvidenceReference(kind="code_summary", source=summary.path.as_posix())
 
 
-def _interface_refs(items: list[InterfaceSummary]) -> list[EvidenceReference]:
+def _symbol_refs(items: list[SymbolSummary]) -> list[EvidenceReference]:
     return [
         EvidenceReference(
-            kind="interface", source=item.source_path.as_posix(), detail=item.name
+            kind="symbol",
+            source=item.source_path.as_posix(),
+            detail=item.qualified_name or item.name,
         )
         for item in items
     ]
@@ -365,9 +367,9 @@ def build_hierarchy_store(
     for summary in scan_result.code_summaries:
         summary_by_path[_to_relative(summary.path, repo_root)] = summary
 
-    interfaces_by_path: dict[Path, list[InterfaceSummary]] = defaultdict(list)
-    for item in scan_result.interface_summaries:
-        interfaces_by_path[_to_relative(item.source_path, repo_root)].append(item)
+    symbols_by_path: dict[Path, list[SymbolSummary]] = defaultdict(list)
+    for item in scan_result.symbol_summaries:
+        symbols_by_path[_to_relative(item.source_path, repo_root)].append(item)
 
     rebuild_files, rebuild_dirs = _rebuild_sets(
         files=files,
@@ -430,14 +432,14 @@ def build_hierarchy_store(
                         confidence=0.3,
                     )
                 else:
-                    interfaces = interfaces_by_path.get(file_path, [])
+                    symbols = symbols_by_path.get(file_path, [])
                     excerpt = load_excerpt_text(
                         excerpt_root=excerpt_root,
                         source_path=file_path,
                     )
                     system_prompt, user_prompt = build_file_summary_prompt(
                         code_summary=code_summary,
-                        interfaces=interfaces,
+                        symbols=symbols,
                         code_excerpt=excerpt,
                     )
                     response = llm_client.generate_structured(
@@ -463,7 +465,7 @@ def build_hierarchy_store(
                         imports=code_summary.imports,
                         evidence_refs=[
                             _file_ref(code_summary),
-                            *_interface_refs(interfaces),
+                            *_symbol_refs(symbols),
                         ],
                         missing_information=_ensure_tbd_missing(
                             summary_text,

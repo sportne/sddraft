@@ -217,7 +217,7 @@ def _targets_from_evidence_refs(
             file_targets.add(file_node_id(Path(ref.source)))
             continue
 
-        if ref.kind == "interface":
+        if ref.kind == "symbol":
             source_path = Path(ref.source)
             file_targets.add(file_node_id(source_path))
             if ref.detail:
@@ -336,9 +336,7 @@ def build_graph_store(
             target_id=file_node_id(file_path),
         )
 
-    symbol_records = build_symbol_inventory(
-        scan_result=scan_result, repo_root=repo_root
-    )
+    symbol_records = build_symbol_inventory(scan_result=scan_result)
     symbols_by_file = _symbols_by_file(symbol_records)
     symbols_by_name = _symbols_by_name(symbol_records)
 
@@ -373,17 +371,21 @@ def build_graph_store(
         )
 
     symbol_lookup = {record.symbol_id: record for record in symbol_records}
-    for symbol in symbol_records:
-        if not symbol.qualified_name or "." not in symbol.qualified_name:
+    symbol_by_file_and_qualified: dict[tuple[Path, str], GraphSymbolRecord] = {}
+    for record in symbol_records:
+        key = (record.file_path, record.qualified_name or record.name)
+        current = symbol_by_file_and_qualified.get(key)
+        if current is None:
+            symbol_by_file_and_qualified[key] = record
             continue
-        parent_name = symbol.qualified_name.rsplit(".", maxsplit=1)[0]
-        parent_symbol = next(
-            (
-                item
-                for item in symbols_by_file.get(symbol.file_path, [])
-                if item.qualified_name == parent_name or item.name == parent_name
-            ),
-            None,
+        # Prefer concrete declaration symbols over module placeholders.
+        if current.kind == "module" and record.kind != "module":
+            symbol_by_file_and_qualified[key] = record
+    for symbol in symbol_records:
+        if not symbol.owner_qualified_name:
+            continue
+        parent_symbol = symbol_by_file_and_qualified.get(
+            (symbol.file_path, symbol.owner_qualified_name)
         )
         if parent_symbol is None:
             continue

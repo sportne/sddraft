@@ -14,7 +14,7 @@ architecture boundaries.
 
 1. Add a `LanguageAnalyzer` implementation in `src/sddraft/repo/language_analyzers.py`.
 2. Map file extensions to a normalized `SourceLanguage` and register the analyzer.
-3. Ensure analyzer output feeds `CodeUnitSummary` and `InterfaceSummary`.
+3. Ensure analyzer output feeds `CodeUnitSummary` and `SymbolSummary`.
 4. Add scan/diff tests to validate deterministic extraction and classification.
 
 ## Add a Renderer Output

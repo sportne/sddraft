@@ -42,12 +42,12 @@ def test_scan_repository_multilanguage(
     languages = {summary.language for summary in result.code_summaries}
     assert {"python", "java", "cpp", "javascript", "go", "unknown"}.issubset(languages)
 
-    interface_names = {item.name for item in result.interface_summaries}
-    assert "PyService" in interface_names
-    assert "Main" in interface_names
-    assert "Core" in interface_names
-    assert "JsApp" in interface_names
-    assert "GoService" in interface_names
+    symbol_names = {item.name for item in result.symbol_summaries}
+    assert "PyService" in symbol_names
+    assert "Main" in symbol_names
+    assert "Core" in symbol_names
+    assert "JsApp" in symbol_names
+    assert "GoService" in symbol_names
 
     chunk_languages = {chunk.metadata.get("language") for chunk in result.code_chunks}
     assert "python" in chunk_languages

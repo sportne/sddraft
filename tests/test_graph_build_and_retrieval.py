@@ -129,7 +129,7 @@ def test_symbol_inventory_extracts_python_symbols_with_spans(
         csc=sample_csc,
         repo_root=tmp_path,
     )
-    symbols = build_symbol_inventory(scan_result=scan_result, repo_root=tmp_path)
+    symbols = build_symbol_inventory(scan_result=scan_result)
 
     names = {item.name for item in symbols}
     assert "Planner" in names
@@ -142,6 +142,101 @@ def test_symbol_inventory_extracts_python_symbols_with_spans(
         for item in symbols
         if item.name == "compute_distance"
     )
+
+
+def test_symbol_ids_stable_when_only_spans_change(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    module_path = src_dir / "module.py"
+    module_path.write_text(
+        (
+            "class Planner:\n"
+            "    def run(self) -> int:\n"
+            "        return 1\n\n"
+            "def compute_distance(x: int, y: int) -> int:\n"
+            "    return x + y\n"
+        ),
+        encoding="utf-8",
+    )
+
+    first_scan = scan_repository(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        repo_root=tmp_path,
+    )
+    first_ids = {
+        item.symbol_id for item in build_symbol_inventory(scan_result=first_scan)
+    }
+
+    module_path.write_text(
+        (
+            "\n\n"
+            "class Planner:\n"
+            "    def run(self) -> int:\n"
+            "        return 1\n\n"
+            "def compute_distance(x: int, y: int) -> int:\n"
+            "    return x + y\n"
+        ),
+        encoding="utf-8",
+    )
+
+    second_scan = scan_repository(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        repo_root=tmp_path,
+    )
+    second_ids = {
+        item.symbol_id for item in build_symbol_inventory(scan_result=second_scan)
+    }
+    assert first_ids == second_ids
+
+
+def test_graph_build_uses_symbol_owners_for_parent_edges(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "class Planner:\n    def run(self):\n        return 1\n",
+        encoding="utf-8",
+    )
+    (src_dir / "Main.java").write_text(
+        "public class Main { int run() { return 1; } }\n",
+        encoding="utf-8",
+    )
+
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        repo_root=tmp_path,
+        hierarchy_docs_enabled=False,
+        graph_enabled=True,
+    )
+    assert result.graph_store_path is not None
+    edges = _read_jsonl(result.graph_store_path / "edges.jsonl")
+    parent_pairs = {
+        (str(item["source_id"]), str(item["target_id"]))
+        for item in edges
+        if item.get("edge_type") == "parent_of"
+    }
+
+    assert (
+        "sym::src/module.py::class::Planner",
+        "sym::src/module.py::method::Planner.run",
+    ) in parent_pairs
+    assert (
+        "sym::src/Main.java::class::Main",
+        "sym::src/Main.java::method::Main.run",
+    ) in parent_pairs
 
 
 def test_ask_graph_fallback_and_graph_augmented_selection(
