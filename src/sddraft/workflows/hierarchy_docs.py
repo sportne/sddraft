@@ -42,15 +42,53 @@ from sddraft.render.json_artifacts import write_json_model
 
 
 class _FileSummaryDraft(BaseModel):
-    summary: str
-    missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    summary: str = Field(
+        description=(
+            "Concise file summary grounded in provided code summary, interfaces, and "
+            "code excerpt."
+        )
+    )
+    missing_information: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Unknown details required for a complete summary. Use TBD items when "
+            "information is missing."
+        ),
+    )
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence in the summary based on provided evidence (0.0 low, 1.0 "
+            "high)."
+        ),
+    )
 
 
 class _DirectorySummaryDraft(BaseModel):
-    summary: str
-    missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    summary: str = Field(
+        description=(
+            "Concise directory summary based only on local file summaries and direct "
+            "child directory summaries."
+        )
+    )
+    missing_information: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Unknown details required for a complete summary. Use TBD items when "
+            "information is missing."
+        ),
+    )
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence in the summary based on provided evidence (0.0 low, 1.0 "
+            "high)."
+        ),
+    )
 
 
 ProgressCallback = Callable[[str], None]

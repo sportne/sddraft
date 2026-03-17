@@ -195,9 +195,25 @@ class CommitImpact(DomainModel):
 class EvidenceReference(DomainModel):
     """Traceable evidence pointer used by generated outputs."""
 
-    kind: str
-    source: str
-    detail: str | None = None
+    kind: str = Field(
+        description=(
+            "Evidence category identifier, such as code_summary, interface, "
+            "dependency, commit_impact, hierarchy_summary, or existing_sdd."
+        )
+    )
+    source: str = Field(
+        description=(
+            "Deterministic source pointer, usually a relative path or stable "
+            "artifact identifier."
+        )
+    )
+    detail: str | None = Field(
+        default=None,
+        description=(
+            "Optional disambiguating detail within source, for example an "
+            "interface name, symbol name, section ID, or line hint."
+        ),
+    )
 
 
 class SectionEvidencePack(DomainModel):
@@ -217,26 +233,77 @@ class SectionEvidencePack(DomainModel):
 class SectionDraft(DomainModel):
     """Structured generated section draft."""
 
-    section_id: str
-    title: str
-    content: str
-    evidence_refs: list[EvidenceReference] = Field(default_factory=list)
-    assumptions: list[str] = Field(default_factory=list)
-    missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    section_id: str = Field(
+        description="Template section identifier this draft corresponds to."
+    )
+    title: str = Field(description="Human-readable section title.")
+    content: str = Field(
+        description=(
+            "Draft section content grounded only in supplied evidence. Unknown facts "
+            "must be marked as TBD."
+        )
+    )
+    evidence_refs: list[EvidenceReference] = Field(
+        default_factory=list,
+        description="Evidence references that directly support claims in content.",
+    )
+    assumptions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Assumptions made due to partial evidence. Leave empty when none."
+        ),
+    )
+    missing_information: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Missing inputs needed for a complete section. Use explicit TBD entries "
+            "instead of inventing facts."
+        ),
+    )
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence that the section content is supported by available evidence "
+            "(0.0 low, 1.0 high)."
+        ),
+    )
 
 
 class SectionUpdateProposal(DomainModel):
     """Structured section update proposal."""
 
-    section_id: str
-    title: str
-    existing_text: str
-    proposed_text: str
-    rationale: str
-    uncertainty_list: list[str] = Field(default_factory=list)
-    review_priority: Literal["low", "medium", "high"] = "medium"
-    evidence_refs: list[EvidenceReference] = Field(default_factory=list)
+    section_id: str = Field(
+        description="Identifier of the section that should be revised."
+    )
+    title: str = Field(description="Section title.")
+    existing_text: str = Field(
+        description="Current section text being reviewed for update."
+    )
+    proposed_text: str = Field(
+        description="Proposed revised section text grounded in supplied evidence."
+    )
+    rationale: str = Field(
+        description=(
+            "Reason the update is needed and how evidence supports the proposed text."
+        )
+    )
+    uncertainty_list: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Open questions, risks, or unknowns reviewers should verify. Use TBD "
+            "items when details are missing."
+        ),
+    )
+    review_priority: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="Suggested review urgency based on impact and uncertainty.",
+    )
+    evidence_refs: list[EvidenceReference] = Field(
+        default_factory=list,
+        description="Evidence references that justify the proposal and rationale.",
+    )
 
 
 class SDDDocument(DomainModel):
@@ -284,7 +351,12 @@ class FileSummaryDoc(DomainModel):
     imports: list[str] = Field(default_factory=list)
     evidence_refs: list[EvidenceReference] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in the file summary based on supplied evidence.",
+    )
 
 
 class DirectorySummaryDoc(DomainModel):
@@ -297,7 +369,15 @@ class DirectorySummaryDoc(DomainModel):
     child_directories: list[Path] = Field(default_factory=list)
     evidence_refs: list[EvidenceReference] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence in the directory summary based on local files and direct "
+            "child directory summaries."
+        ),
+    )
 
 
 class HierarchyDocArtifact(DomainModel):
@@ -321,7 +401,12 @@ class FileSummaryRecord(DomainModel):
     imports: list[str] = Field(default_factory=list)
     evidence_refs: list[EvidenceReference] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in the generated file summary.",
+    )
 
 
 class DirectorySummaryRecord(DomainModel):
@@ -334,7 +419,12 @@ class DirectorySummaryRecord(DomainModel):
     child_directories: list[Path] = Field(default_factory=list)
     evidence_refs: list[EvidenceReference] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in the generated directory summary.",
+    )
 
 
 class HierarchyNodeRecord(DomainModel):
@@ -484,11 +574,21 @@ class RunMetrics(DomainModel):
 class Citation(DomainModel):
     """Citation for grounded answer evidence."""
 
-    chunk_id: str
-    source_path: Path
-    line_start: int | None = None
-    line_end: int | None = None
-    quote: str
+    chunk_id: str = Field(description="Referenced retrieval chunk identifier.")
+    source_path: Path = Field(
+        description="Relative source path for the cited evidence."
+    )
+    line_start: int | None = Field(
+        default=None,
+        description="Optional 1-based starting line number of cited span.",
+    )
+    line_end: int | None = Field(
+        default=None,
+        description="Optional 1-based ending line number of cited span.",
+    )
+    quote: str = Field(
+        description="Short supporting excerpt from the cited chunk."
+    )
 
 
 class ChunkInclusionReason(DomainModel):
@@ -536,11 +636,37 @@ class QueryEvidencePack(DomainModel):
 class QueryAnswer(DomainModel):
     """Structured query answer result."""
 
-    answer: str
-    citations: list[Citation]
-    uncertainty: list[str] = Field(default_factory=list)
-    missing_information: list[str] = Field(default_factory=list)
-    confidence: float = 0.5
+    answer: str = Field(
+        description=(
+            "Grounded answer text using only supplied evidence and citations."
+        )
+    )
+    citations: list[Citation] = Field(
+        description=(
+            "Citations supporting factual claims in the answer."
+        )
+    )
+    uncertainty: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Known caveats, confidence limits, or fallback conditions."
+        ),
+    )
+    missing_information: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Information needed for a complete answer but absent from provided "
+            "evidence. Use TBD items when unknown."
+        ),
+    )
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Overall confidence that the answer is supported by cited evidence "
+            "(0.0 low, 1.0 high)."
+        ),
+    )
 
 
 class ScanResult(DomainModel):
