@@ -239,6 +239,10 @@ Edge types include:
 
 IDs are deterministic and stable for unchanged inputs.
 
+`imports` edges are language-aware across supported analyzers (Python, Java,
+JavaScript/TypeScript, Go, Rust, C#, C/C++) and use conservative repo-local
+resolution. Ambiguous/external dependencies are intentionally left unresolved.
+
 ---
 
 ## 3.10 Ask Retrieval Pipeline

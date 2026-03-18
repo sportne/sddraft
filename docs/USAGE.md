@@ -88,6 +88,10 @@ and only regenerates changed/missing hierarchy nodes.
 - `artifacts/<CSC>/graph/symbol_index.json`
 - `artifacts/<CSC>/graph/adjacency.json`
 
+`imports` edges are emitted with language-aware, conservative repo-local
+resolution. Edge `reason` payloads include language, dependency kind, raw import/include text,
+normalized key, and resolution status.
+
 `ask` retrieval flow is deterministic and staged:
 1. lexical retrieval from `retrieval/`
 2. hierarchy expansion (if present)

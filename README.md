@@ -10,6 +10,7 @@ and git history.
 - Proposes section updates from commit impact.
 - Answers grounded repository questions with citations via `sddraft ask`.
 - Builds inspectable retrieval, hierarchy, and engineering-graph artifacts.
+- Emits conservative multi-language dependency (`imports`) graph edges to improve cross-file Q&A.
 
 ## Quick Start
 

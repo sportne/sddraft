@@ -9,6 +9,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from sddraft.analysis.dependency_resolution import (
+    dependency_reason_payload,
+    resolve_dependency_records,
+)
 from sddraft.analysis.graph_models import (
     GraphEdgeRecord,
     GraphEdgeType,
@@ -118,44 +122,6 @@ def _symbols_by_name(
             by_name[key], key=lambda item: (item.file_path.as_posix(), item.symbol_id)
         )
     return by_name
-
-
-def _build_python_module_index(files: list[Path]) -> dict[str, Path]:
-    candidates: dict[str, set[Path]] = defaultdict(set)
-    for file_path in files:
-        if file_path.suffix != ".py":
-            continue
-        parts = list(file_path.with_suffix("").parts)
-        if parts and parts[-1] == "__init__":
-            parts = parts[:-1]
-        if not parts:
-            continue
-        for idx in range(len(parts)):
-            module_name = ".".join(parts[idx:])
-            if module_name:
-                candidates[module_name].add(file_path)
-    module_to_file: dict[str, Path] = {}
-    for module_name, file_paths in candidates.items():
-        if len(file_paths) == 1:
-            module_to_file[module_name] = next(iter(file_paths))
-    return module_to_file
-
-
-def _extract_python_import_modules(raw_imports: list[str]) -> set[str]:
-    modules: set[str] = set()
-    for line in raw_imports:
-        stripped = line.strip()
-        if stripped.startswith("import "):
-            tail = stripped[len("import ") :]
-            for part in tail.split(","):
-                name = part.strip().split(" as ")[0].strip()
-                if name:
-                    modules.add(name)
-        elif stripped.startswith("from "):
-            match = re.match(r"from\s+([A-Za-z0-9_\.]+)\s+import\s+", stripped)
-            if match:
-                modules.add(match.group(1))
-    return modules
 
 
 def _extract_changed_symbol_names(changed_lines: list[str]) -> set[str]:
@@ -402,22 +368,29 @@ def build_graph_store(
             target_id=symbol.symbol_id,
         )
 
-    module_index = _build_python_module_index(files)
-    for summary in scan_result.code_summaries:
-        if summary.language != "python":
+    dependency_records = resolve_dependency_records(
+        code_summaries=scan_result.code_summaries,
+        symbol_summaries=scan_result.symbol_summaries,
+        files=files,
+        repo_root=repo_root,
+    )
+    for dependency_record in dependency_records:
+        if (
+            dependency_record.target_path is None
+            or dependency_record.target_path == dependency_record.source_path
+        ):
             continue
-        source_file_id = file_node_id(summary.path)
-        for module_name in sorted(_extract_python_import_modules(summary.imports)):
-            target_path = module_index.get(module_name)
-            if target_path is None or target_path == summary.path:
-                continue
-            _add_edge(
-                edges,
-                edge_type="imports",
-                source_id=source_file_id,
-                target_id=file_node_id(target_path),
-                reason=f"python:{module_name}",
-            )
+        source_file_id = file_node_id(dependency_record.source_path)
+        target_file_id = file_node_id(dependency_record.target_path)
+        if source_file_id not in nodes or target_file_id not in nodes:
+            continue
+        _add_edge(
+            edges,
+            edge_type="imports",
+            source_id=source_file_id,
+            target_id=target_file_id,
+            reason=dependency_reason_payload(dependency_record),
+        )
 
     engine = open_query_engine(retrieval_root)
     section_targets_by_section_node: dict[str, tuple[set[str], set[str]]] = {}

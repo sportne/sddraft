@@ -27,6 +27,18 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
     ]
 
 
+def _imports_with_reasons(graph_root: Path) -> dict[tuple[str, str], dict[str, object]]:
+    edges = _read_jsonl(graph_root / "edges.jsonl")
+    values: dict[tuple[str, str], dict[str, object]] = {}
+    for edge in edges:
+        if edge.get("edge_type") != "imports":
+            continue
+        reason_text = str(edge.get("reason") or "{}")
+        reason = json.loads(reason_text)
+        values[(str(edge["source_id"]), str(edge["target_id"]))] = reason
+    return values
+
+
 def test_generate_writes_deterministic_graph_artifacts(
     tmp_path: Path,
     sample_project_config,
@@ -104,6 +116,138 @@ def test_generate_writes_deterministic_graph_artifacts(
     assert (second.graph_store_path / "edges.jsonl").read_text(
         encoding="utf-8"
     ) == edge_snapshot
+
+
+def test_generate_writes_multilanguage_import_edges_with_metadata(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+
+    (src_dir / "helper.py").write_text(
+        "def helper() -> int:\n    return 1\n", encoding="utf-8"
+    )
+    (src_dir / "module.py").write_text(
+        "from helper import helper\n\ndef run() -> int:\n    return helper()\n",
+        encoding="utf-8",
+    )
+
+    (src_dir / "java").mkdir()
+    (src_dir / "java" / "Util.java").write_text(
+        "package demo;\npublic class Util {}\n",
+        encoding="utf-8",
+    )
+    (src_dir / "java" / "Main.java").write_text(
+        "package demo;\nimport demo.Util;\npublic class Main { Util util; }\n",
+        encoding="utf-8",
+    )
+
+    (src_dir / "js").mkdir()
+    (src_dir / "js" / "lib.js").write_text(
+        "export function dep() { return 1; }\n",
+        encoding="utf-8",
+    )
+    (src_dir / "js" / "caller.js").write_text(
+        "import { dep } from './lib.js';\nexport function call() { return dep(); }\n",
+        encoding="utf-8",
+    )
+
+    (src_dir / "ts").mkdir()
+    (src_dir / "ts" / "dep.ts").write_text(
+        "export const dep = () => 1;\n",
+        encoding="utf-8",
+    )
+    (src_dir / "ts" / "caller.ts").write_text(
+        "import { dep } from './dep';\nexport const call = () => dep();\n",
+        encoding="utf-8",
+    )
+
+    (src_dir / "go").mkdir()
+    (src_dir / "go" / "gohelper.go").write_text(
+        "package gomain\nfunc Helper() int { return 1 }\n",
+        encoding="utf-8",
+    )
+    (src_dir / "go" / "main.go").write_text(
+        'package gomain\nimport "./gohelper"\nfunc Run() int { return gohelper.Helper() }\n',
+        encoding="utf-8",
+    )
+
+    (src_dir / "rust").mkdir()
+    (src_dir / "rust" / "util.rs").write_text(
+        "pub fn run() -> i32 { 1 }\n", encoding="utf-8"
+    )
+    (src_dir / "rust" / "lib.rs").write_text(
+        "mod util;\nuse crate::util::run;\npub fn call() -> i32 { run() }\n",
+        encoding="utf-8",
+    )
+
+    (src_dir / "cs").mkdir()
+    (src_dir / "cs" / "Service.cs").write_text(
+        "namespace Demo.Core { public class Service {} }\n",
+        encoding="utf-8",
+    )
+    (src_dir / "cs" / "Program.cs").write_text(
+        "using Demo.Core;\nnamespace Demo.App { public class Program {} }\n",
+        encoding="utf-8",
+    )
+
+    (src_dir / "cpp").mkdir()
+    (src_dir / "cpp" / "core.hpp").write_text(
+        "#pragma once\nint core();\n", encoding="utf-8"
+    )
+    (src_dir / "cpp" / "main.cpp").write_text(
+        '#include "core.hpp"\nint run() { return core(); }\n',
+        encoding="utf-8",
+    )
+
+    # Unresolved external dependencies should not become repo-local edges.
+    (src_dir / "external.java").write_text(
+        "import java.util.List;\npublic class External {}\n",
+        encoding="utf-8",
+    )
+    (src_dir / "external.cpp").write_text(
+        "#include <vector>\nint x() { return 1; }\n",
+        encoding="utf-8",
+    )
+
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        repo_root=tmp_path,
+        hierarchy_docs_enabled=False,
+        graph_enabled=True,
+    )
+    assert result.graph_store_path is not None
+    imports = _imports_with_reasons(result.graph_store_path)
+
+    expected_pairs = {
+        ("file::src/module.py", "file::src/helper.py"),
+        ("file::src/java/Main.java", "file::src/java/Util.java"),
+        ("file::src/js/caller.js", "file::src/js/lib.js"),
+        ("file::src/ts/caller.ts", "file::src/ts/dep.ts"),
+        ("file::src/go/main.go", "file::src/go/gohelper.go"),
+        ("file::src/rust/lib.rs", "file::src/rust/util.rs"),
+        ("file::src/cs/Program.cs", "file::src/cs/Service.cs"),
+        ("file::src/cpp/main.cpp", "file::src/cpp/core.hpp"),
+    }
+    assert expected_pairs.issubset(set(imports))
+
+    # Reason payload is inspectable structured JSON.
+    js_reason = imports[("file::src/js/caller.js", "file::src/js/lib.js")]
+    assert js_reason["language"] == "javascript"
+    assert js_reason["kind"] == "import"
+    assert js_reason["resolution"] in {"resolved_exact", "resolved_heuristic"}
+    assert js_reason["normalized"] == "./lib.js"
+
+    cpp_reason = imports[("file::src/cpp/main.cpp", "file::src/cpp/core.hpp")]
+    assert cpp_reason["language"] == "cpp"
+    assert cpp_reason["kind"] == "include"
+    assert cpp_reason["normalized"] == "core.hpp"
 
 
 def test_symbol_inventory_extracts_python_symbols_with_spans(

@@ -12,7 +12,7 @@
 - Graph-enhanced retrieval is implemented end-to-end: `generate` and `propose-updates` build `graph/manifest.json`, `nodes.jsonl`, `edges.jsonl`, `symbol_index.json`, and `adjacency.json`.
 - `ask` currently runs lexical retrieval, optional hierarchy expansion, graph expansion, and deterministic reranking with fallback when hierarchy/graph artifacts are missing.
 - Symbol inventory is now analyzer-emitted and symbol-first (`SymbolSummary`), with deterministic owner/span metadata where available; quality remains conservative for some language-specific edge cases.
-- `imports` graph edges are currently resolved only for Python in graph build logic.
+- `imports` graph edges now use a normalized multi-language resolver (`python`, `java`, `javascript`, `typescript`, `go`, `rust`, `csharp`, `cpp`) with conservative repo-local resolution and inspectable reason metadata.
 - Graph build is currently full-rebuild per run; no manifest fingerprinting or partial graph reuse yet.
 - Vector readiness is partial: placeholder vector candidate source exists, and generation config has `vector_*` fields, but no real retrieval orchestration path is wired.
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates, but commit-oriented Q&A traversal is not yet intentionally tuned.
@@ -63,22 +63,22 @@
 `Dependencies:` Phase 1.
 `Completion Criteria:` Imports edges are emitted for major supported languages when target resolution is reliable; unresolved imports are deterministic and non-fatal.
 
-- [ ] **G2-01**  
+- [x] **G2-01**  
   `Outcome:` Define normalized import/dependency resolution strategy per language (`java`, `cpp`, `javascript`, `typescript`, `go`, `rust`, `csharp`).  
   `Definition of Done:` Graph build has a language-router for import edge extraction rather than Python-only logic.  
   `Verification Command(s):` `pytest tests/test_repo_scanner_multilang.py tests/test_graph_build_and_retrieval.py`
 
-- [ ] **G2-02**  
+- [x] **G2-02**  
   `Outcome:` Implement Java + JS/TS import edge resolution to known files/modules.  
   `Definition of Done:` `imports` edges appear in graph artifacts for these languages in mixed-language fixtures.  
   `Verification Command(s):` `pytest tests/test_workflow_generate_multilang.py`
 
-- [ ] **G2-03**  
+- [x] **G2-03**  
   `Outcome:` Implement conservative C++ include and C#/Go/Rust dependency edge resolution where deterministic mapping is possible.  
   `Definition of Done:` Supported patterns emit edges; ambiguous/unresolved entries are skipped consistently with reason metadata.  
   `Verification Command(s):` `pytest tests/test_language_analyzers.py tests/test_graph_build_and_retrieval.py`
 
-- [ ] **G2-04**  
+- [x] **G2-04**  
   `Outcome:` Add regression tests for import edge creation and tie-break determinism across languages.  
   `Definition of Done:` Edge counts/types are asserted in graph artifact tests for multilingual fixtures.  
   `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_graph_index_and_candidate_sources.py`
