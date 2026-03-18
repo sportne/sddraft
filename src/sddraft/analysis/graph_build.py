@@ -1,4 +1,9 @@
-"""Engineering graph construction and persistence."""
+"""Engineering graph construction and persistence.
+
+The graph builder turns deterministic scan/retrieval artifacts into a single
+inspectable graph store (`nodes.jsonl` + `edges.jsonl`). `ask` later uses this
+store to expand evidence beyond pure lexical matches.
+"""
 
 from __future__ import annotations
 
@@ -239,6 +244,7 @@ def build_graph_store(
     nodes: dict[str, GraphNodeRecord] = {}
     edges: dict[str, GraphEdgeRecord] = {}
 
+    # 1) Normalize file paths to stable repo-relative paths.
     files = sorted({_to_relative(path, repo_root) for path in scan_result.files})
     file_summary_by_path = {item.path: item for item in scan_result.code_summaries}
 
@@ -251,6 +257,7 @@ def build_graph_store(
                 break
             cursor = cursor.parent if cursor.parent != Path("") else Path(".")
 
+    # 2) Add directory nodes before file nodes so containment edges are clear.
     for directory in sorted(
         directories, key=lambda item: (len(item.parts), item.as_posix())
     ):
@@ -280,6 +287,7 @@ def build_graph_store(
                 target_id=directory_node_id(directory),
             )
 
+    # 3) Add file nodes and directory->file containment edges.
     for file_path in files:
         summary = file_summary_by_path.get(file_path)
         _add_node(
@@ -306,6 +314,7 @@ def build_graph_store(
     symbols_by_file = _symbols_by_file(symbol_records)
     symbols_by_name = _symbols_by_name(symbol_records)
 
+    # 4) Add symbol nodes and file->symbol edges.
     for symbol in symbol_records:
         _add_node(
             nodes,
@@ -368,6 +377,7 @@ def build_graph_store(
             target_id=symbol.symbol_id,
         )
 
+    # 5) Add file->file `imports` edges from normalized dependency records.
     dependency_records = resolve_dependency_records(
         code_summaries=scan_result.code_summaries,
         symbol_summaries=scan_result.symbol_summaries,
@@ -395,6 +405,7 @@ def build_graph_store(
     engine = open_query_engine(retrieval_root)
     section_targets_by_section_node: dict[str, tuple[set[str], set[str]]] = {}
 
+    # 6) Add retrieval chunk nodes plus chunk->symbol reference edges.
     for chunk in sorted(engine.iter_chunks(), key=lambda item: item.chunk_id):
         chunk_id_value = chunk_node_id(chunk.chunk_id)
         _add_node(
@@ -443,6 +454,7 @@ def build_graph_store(
         for item in (review_artifact.sections if review_artifact else [])
     }
 
+    # 7) Link generated SDD sections to evidence targets via `documents`.
     if document is not None:
         for section in sorted(document.sections, key=lambda item: item.section_id):
             sid = section_node_id(section.section_id)
@@ -520,6 +532,7 @@ def build_graph_store(
 
     changed_file_ids: set[str] = set()
     changed_symbol_ids: set[str] = set()
+    # 8) Optionally enrich graph with commit/update impact edges.
     if commit_impact is not None:
         commit_id = commit_node_id(commit_impact.commit_range)
         _add_node(

@@ -1,4 +1,10 @@
-"""Language-aware dependency normalization and repo-local resolution."""
+"""Language-aware dependency normalization and repo-local resolution.
+
+This module converts language-specific import/include/use statements into a
+single normalized record shape used by graph building. Resolution is
+intentionally conservative: we emit repo-local links only when a deterministic
+target file can be identified.
+"""
 
 from __future__ import annotations
 

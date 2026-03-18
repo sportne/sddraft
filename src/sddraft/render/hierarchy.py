@@ -15,11 +15,15 @@ from sddraft.domain.models import (
 
 
 def file_doc_relative_path(file_path: Path) -> Path:
+    """Return the markdown path used for one file summary document."""
+
     suffix = f"{file_path.suffix}.md" if file_path.suffix else ".md"
     return file_path.with_suffix(suffix)
 
 
 def directory_doc_relative_path(directory_path: Path) -> Path:
+    """Return the markdown path used for one directory summary document."""
+
     if directory_path == Path("."):
         return Path("_directory.md")
     return directory_path / "_directory.md"

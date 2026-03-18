@@ -304,6 +304,8 @@ class PythonAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract Python symbols/imports and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -419,6 +421,8 @@ class JavaAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract Java symbols/imports and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -547,6 +551,8 @@ class CppAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract C/C++ symbols/includes and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -653,6 +659,8 @@ class JavaScriptAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract JavaScript symbols/imports and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -782,6 +790,8 @@ class TypeScriptAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract TypeScript symbols/imports and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -908,6 +918,8 @@ class GoAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract Go symbols/imports and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -1013,6 +1025,8 @@ class RustAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract Rust symbols/use statements and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -1155,6 +1169,8 @@ class CSharpAnalyzer(_BaseAnalyzer):
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Extract C# symbols/usings and return deterministic summaries."""
+
         tree, source_bytes = self._parse(source_text)
 
         functions: set[str] = set()
@@ -1277,11 +1293,15 @@ class UnknownAnalyzer:
     )
 
     def supports(self, path: Path) -> bool:
+        """Always return False so real analyzers are preferred when available."""
+
         return False
 
     def analyze(
         self, path: Path, source_text: str
     ) -> tuple[CodeUnitSummary, list[SymbolSummary]]:
+        """Collect conservative unknown-language imports and return empty symbols."""
+
         imports = sorted(
             {
                 line.strip()
@@ -1304,6 +1324,8 @@ class UnknownAnalyzer:
         )
 
     def signature_changes(self, changed_lines: list[str]) -> list[str]:
+        """Return lines that look like signature-level edits in unknown files."""
+
         return [
             line.strip()
             for line in changed_lines
@@ -1311,6 +1333,8 @@ class UnknownAnalyzer:
         ]
 
     def dependency_changes(self, changed_lines: list[str]) -> list[str]:
+        """Return lines that look like dependency/import edits in unknown files."""
+
         return [
             line.strip()
             for line in changed_lines
@@ -1318,6 +1342,8 @@ class UnknownAnalyzer:
         ]
 
     def is_comment_line(self, line: str) -> bool:
+        """Best-effort comment detection for unknown-language diff classification."""
+
         stripped = line.strip()
         if not stripped:
             return True

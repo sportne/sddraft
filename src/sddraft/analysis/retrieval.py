@@ -104,12 +104,16 @@ class LexicalIndexer:
         document_chunks: list[KnowledgeChunk],
         code_chunks: list[KnowledgeChunk],
     ) -> RetrievalIndex:
+        """Build an in-memory retrieval index from document and code chunks."""
+
         combined = self._normalize(document_chunks + code_chunks)
         return RetrievalIndex(chunks=combined)
 
     def update(
         self, existing: RetrievalIndex, new_chunks: list[KnowledgeChunk]
     ) -> RetrievalIndex:
+        """Replace chunks by `chunk_id` and return a deterministically sorted index."""
+
         replacements = {chunk.chunk_id: chunk for chunk in self._normalize(new_chunks)}
         merged: dict[str, KnowledgeChunk] = {
             chunk.chunk_id: chunk for chunk in existing.chunks
@@ -165,6 +169,8 @@ class BM25Retriever:
         return score
 
     def search_scored(self, query: str, top_k: int = 6) -> list[ScoredChunk]:
+        """Run BM25 scoring and return scored chunks with deterministic tie-breaks."""
+
         query_terms = tokenize(query)
         scored: list[tuple[float, KnowledgeChunk]] = []
         for chunk, doc_len in zip(self._chunks, self._doc_lengths, strict=False):
@@ -198,6 +204,8 @@ class BM25Retriever:
         return [ScoredChunk(chunk=item, score=0.0) for item in fallback[:top_k]]
 
     def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
+        """Compatibility wrapper that returns chunks without score metadata."""
+
         return [item.chunk for item in self.search_scored(query, top_k=top_k)]
 
 
@@ -504,6 +512,8 @@ class RetrievalQueryEngine:
         return [ScoredChunk(chunk=item, score=0.0) for item in self._fallback(top_k)]
 
     def search(self, query: str, top_k: int = 6) -> list[KnowledgeChunk]:
+        """Compatibility wrapper that returns chunks without score metadata."""
+
         return [item.chunk for item in self.search_scored(query, top_k=top_k)]
 
     def load_chunks_by_node_ids(

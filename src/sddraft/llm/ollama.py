@@ -58,6 +58,8 @@ class OllamaLLMClient:
         self,
         request: StructuredGenerationRequest,
     ) -> StructuredGenerationResponse:
+        """Send one schema-constrained request to Ollama and validate JSON output."""
+
         request_payload = {
             "model": request.model_name or self._model_name,
             "messages": [

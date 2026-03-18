@@ -94,6 +94,15 @@ def _scan_and_spool_chunks(
     repo_root: Path,
     output_root: Path,
 ) -> tuple[ScanResult, Path, int, Path]:
+    """Stream scan results to disk so memory use stays bounded.
+
+    Returns:
+    - `ScanResult` with file-level summaries (no in-memory code chunks)
+    - path to the temporary JSONL chunk spool
+    - number of chunks written
+    - path to excerpt files used by hierarchy generation
+    """
+
     files: list[Path] = []
     code_summaries: list[CodeUnitSummary] = []
     symbol_summaries: list[SymbolSummary] = []
@@ -105,6 +114,8 @@ def _scan_and_spool_chunks(
     output_root.mkdir(parents=True, exist_ok=True)
     excerpt_root.mkdir(parents=True, exist_ok=True)
 
+    # The scanner yields one file at a time. We immediately persist each chunk
+    # instead of keeping all chunks in memory.
     with spool_path.open("w", encoding="utf-8") as handle:
         for record in scan_repository_stream(
             project_config=project_config,
@@ -121,6 +132,7 @@ def _scan_and_spool_chunks(
                 handle.write("\n")
                 chunk_count += 1
 
+                # Excerpts are appended per file and reused for hierarchy docs.
                 excerpt_path = excerpt_file_path(excerpt_root, chunk.source_path)
                 excerpt_path.parent.mkdir(parents=True, exist_ok=True)
                 with excerpt_path.open("a", encoding="utf-8") as excerpt_handle:

@@ -46,6 +46,8 @@ def answer_question(
 ) -> AskResult:
     """Retrieve evidence and generate a grounded structured answer."""
 
+    # Stage 1: always start with lexical retrieval so behavior is predictable
+    # even when hierarchy/graph artifacts are missing.
     retrieval_root = resolve_retrieval_store_path(index_path)
     metrics_collector = RunMetricsCollector(csc_id=retrieval_root.parent.name)
     metrics_collector.start("retrieve")
@@ -60,6 +62,7 @@ def answer_question(
     hierarchy_path = default_hierarchy_index_path(retrieval_root)
     if hierarchy_path.exists():
         try:
+            # Stage 2: expand lexical evidence with nearby hierarchy context.
             hierarchy_index = load_hierarchy_index(hierarchy_path)
             chunks = expand_chunks_with_hierarchy(
                 initial_chunks=chunks,
@@ -88,6 +91,7 @@ def answer_question(
         graph_manifest_path = default_graph_manifest_path(retrieval_root)
         if graph_manifest_path.exists():
             try:
+                # Stage 3: graph expansion + reranking for richer cross-file context.
                 graph_store = load_graph_store(graph_manifest_path)
                 lexical_chunk_ids = {item.chunk.chunk_id for item in lexical_scored}
                 lexical_seed = [
@@ -144,6 +148,7 @@ def answer_question(
     )
 
     metrics_collector.start("answer")
+    # Stage 4: prompt + structured model response generation.
     system_prompt, user_prompt = build_query_prompt(evidence_pack)
     response = llm_client.generate_structured(
         StructuredGenerationRequest(

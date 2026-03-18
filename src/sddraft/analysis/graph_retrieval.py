@@ -77,6 +77,8 @@ class LexicalCandidateSource:
         self._engine = engine
 
     def collect(self, *, query: str, top_k: int) -> list[ScoredChunk]:
+        """Return lexical BM25 candidates for the user query."""
+
         return self._engine.search_scored(query, top_k=top_k)
 
 
@@ -86,6 +88,8 @@ class VectorCandidateSource:
     name = "vector"
 
     def collect(self, *, query: str, top_k: int) -> list[ScoredChunk]:
+        """Return no candidates until a real vector backend is implemented."""
+
         _ = (query, top_k)
         return []
 
@@ -114,6 +118,8 @@ class GraphExpansionCandidateSource:
         query: str,
         seed_chunks: list[KnowledgeChunk],
     ) -> tuple[list[GraphChunkCandidate], AnchorSet, QueryIntent]:
+        """Expand graph neighbors from lexical seeds and return graph candidates."""
+
         return collect_graph_candidates(
             query=query,
             engine=self._engine,
@@ -420,6 +426,8 @@ def rerank_evidence(
     if top_k <= 0:
         return RerankResult([], [], [], [], [])
 
+    # Normalize lexical scores to a 0-1 range so they can be blended with
+    # graph proximity and anchor signals in a transparent formula.
     lexical_max = max((item.score for item in lexical_candidates), default=0.0)
     lexical_by_chunk_id = {item.chunk.chunk_id: item for item in lexical_candidates}
     graph_by_chunk_id = {item.chunk.chunk_id: item for item in graph_candidates}
@@ -450,6 +458,8 @@ def rerank_evidence(
         graph_item = graph_by_chunk_id.get(chunk_id)
         graph_score = graph_item.graph_score if graph_item is not None else 0.0
         type_bias = _type_bias(chunk, intent)
+        # Weighted score tuned for v1:
+        # lexical relevance is primary, graph/anchor add contextual lift.
         final_score = (
             0.65 * lexical_norm + 0.20 * anchor_score + 0.15 * graph_score + type_bias
         )
@@ -487,6 +497,8 @@ def rerank_evidence(
     related_symbols: set[str] = set()
     related_sections: set[str] = set()
 
+    # Related entities are supplemental context shown to the prompt/response.
+    # They are kept separate from primary selected chunks.
     for candidate in graph_candidates:
         chunk = candidate.chunk
         if chunk.source_path not in anchors.file_paths:

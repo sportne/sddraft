@@ -99,6 +99,8 @@ class MockLLMClient:
         self,
         request: StructuredGenerationRequest,
     ) -> StructuredGenerationResponse:
+        """Return deterministic schema-valid content without network calls."""
+
         payload = self._build_payload(request)
         parsed = validate_payload(request.response_model, payload)
         return StructuredGenerationResponse(

@@ -49,6 +49,8 @@ class GeminiLLMClient:
         self,
         request: StructuredGenerationRequest,
     ) -> StructuredGenerationResponse:
+        """Send one schema-constrained request to Gemini and validate response JSON."""
+
         prompt = f"{request.system_prompt}\n\n{request.user_prompt}"
         try:
             response = self._client.models.generate_content(

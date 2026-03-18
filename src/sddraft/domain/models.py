@@ -64,6 +64,8 @@ class LLMConfig(DomainModel):
     @field_validator("temperature")
     @classmethod
     def validate_temperature(cls, value: float) -> float:
+        """Ensure model temperature stays in the supported 0.0-1.0 range."""
+
         if value < 0.0 or value > 1.0:
             raise ValueError("temperature must be between 0.0 and 1.0")
         return value
@@ -96,6 +98,8 @@ class GenerationOptions(DomainModel):
     )
     @classmethod
     def validate_positive_ints(cls, value: int) -> int:
+        """Reject zero/negative generation tuning values."""
+
         if value <= 0:
             raise ValueError("generation options must be positive integers")
         return value
@@ -615,6 +619,8 @@ class QueryRequest(DomainModel):
     @field_validator("question")
     @classmethod
     def validate_question(cls, value: str) -> str:
+        """Trim user questions and prevent empty queries."""
+
         cleaned = value.strip()
         if not cleaned:
             raise ValueError("question must not be empty")
