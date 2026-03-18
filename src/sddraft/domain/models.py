@@ -608,6 +608,34 @@ class Citation(DomainModel):
     quote: str = Field(description="Short supporting excerpt from the cited chunk.")
 
 
+class GraphInclusionPath(DomainModel):
+    """Deterministic graph-path rationale for chunk inclusion."""
+
+    distance: int = Field(
+        ge=1,
+        description="Traversal hop distance from an anchor node to this path target.",
+    )
+    edge_type: str = Field(description="Graph edge type used on this traversal step.")
+    source_node_id: str = Field(description="Source node ID for the traversed edge.")
+    source_node_type: str | None = Field(
+        default=None,
+        description="Optional source node type when available in the graph store.",
+    )
+    source_label: str | None = Field(
+        default=None,
+        description="Optional human-readable source node label for inspection.",
+    )
+    target_node_id: str = Field(description="Target node ID for the traversed edge.")
+    target_node_type: str | None = Field(
+        default=None,
+        description="Optional target node type when available in the graph store.",
+    )
+    target_label: str | None = Field(
+        default=None,
+        description="Optional human-readable target node label for inspection.",
+    )
+
+
 class ChunkInclusionReason(DomainModel):
     """Score breakdown for why a chunk was selected for Q&A evidence."""
 
@@ -619,6 +647,13 @@ class ChunkInclusionReason(DomainModel):
     type_bias: float = 0.0
     final_score: float = 0.0
     reason: str
+    graph_paths: list[GraphInclusionPath] = Field(
+        default_factory=list,
+        description=(
+            "Optional graph traversal rationale that links this chunk to anchor "
+            "evidence."
+        ),
+    )
 
 
 class QueryRequest(DomainModel):

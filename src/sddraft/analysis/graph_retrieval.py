@@ -14,9 +14,17 @@ from sddraft.analysis.graph_models import (
     section_node_id,
 )
 from sddraft.analysis.retrieval import RetrievalQueryEngine, ScoredChunk, tokenize
-from sddraft.domain.models import ChunkInclusionReason, KnowledgeChunk
+from sddraft.domain.models import (
+    ChunkInclusionReason,
+    GraphInclusionPath,
+    KnowledgeChunk,
+)
 
 QueryIntent = Literal["implementation", "dependency", "documentation", "architecture"]
+_LEXICAL_WEIGHT = 0.65
+_ANCHOR_WEIGHT = 0.20
+_GRAPH_WEIGHT = 0.15
+_MAX_GRAPH_PATHS_PER_REASON = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +34,8 @@ class GraphTraversalHit:
     node_id: str
     distance: int
     via_edge_type: GraphEdgeType | None
+    edge_source_id: str | None
+    edge_target_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +45,10 @@ class GraphChunkCandidate:
     chunk: KnowledgeChunk
     graph_score: float
     reason: str
+    graph_paths: tuple[GraphInclusionPath, ...] = ()
+    related_files: tuple[Path, ...] = ()
+    related_symbols: tuple[str, ...] = ()
+    related_sections: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +57,8 @@ class AnchorSet:
 
     node_ids: set[str]
     file_paths: set[Path]
+    symbol_ids: set[str]
+    symbol_labels: set[str]
     symbol_names: set[str]
     section_ids: set[str]
 
@@ -176,11 +192,92 @@ def _tie_break_key(chunk: KnowledgeChunk) -> tuple[str, int, str]:
     return (chunk.source_path.as_posix(), chunk.line_start or 0, chunk.chunk_id)
 
 
+def _iter_neighbor_edges(store: GraphStore, node_id: str) -> list[tuple[str, str]]:
+    edge_ids = store.outgoing.get(node_id, []) + store.incoming.get(node_id, [])
+    values: list[tuple[str, str]] = []
+    for edge_id in sorted(set(edge_ids)):
+        edge = store.edges_by_id.get(edge_id)
+        if edge is None:
+            continue
+        neighbor = edge.target_id if edge.source_id == node_id else edge.source_id
+        values.append((edge_id, neighbor))
+    return values
+
+
+def _symbol_label(store: GraphStore, symbol_id: str) -> str | None:
+    record = store.symbol_records.get(symbol_id)
+    if record is not None:
+        name = record.qualified_name or record.name
+        return f"{name} [{record.file_path.as_posix()}]"
+
+    node = store.nodes_by_id.get(symbol_id)
+    if node is None or node.node_type != "symbol":
+        return None
+    name = node.qualified_name or node.symbol_name or node.label
+    if node.path is not None:
+        return f"{name} [{node.path.as_posix()}]"
+    return name
+
+
+def _symbol_ids_for_path(store: GraphStore, path: Path) -> set[str]:
+    values = {
+        record.symbol_id
+        for record in store.symbol_records.values()
+        if record.file_path == path
+    }
+    if values:
+        return values
+    return {
+        node_id
+        for node_id, node in store.nodes_by_id.items()
+        if node.node_type == "symbol" and node.path == path
+    }
+
+
+def _collect_anchor_symbol_ids(store: GraphStore, node_ids: set[str]) -> set[str]:
+    symbol_ids: set[str] = set()
+    related_file_paths: set[Path] = set()
+    for node_id in sorted(node_ids):
+        node = store.nodes_by_id.get(node_id)
+        if node is None:
+            continue
+        if node.node_type == "symbol":
+            symbol_ids.add(node.node_id)
+            continue
+        if node.node_type == "file" and node.path is not None:
+            related_file_paths.add(node.path)
+
+        for edge_id, neighbor_id in _iter_neighbor_edges(store, node_id):
+            edge = store.edges_by_id.get(edge_id)
+            neighbor = store.nodes_by_id.get(neighbor_id)
+            if edge is None or neighbor is None:
+                continue
+            if edge.edge_type not in {
+                "references",
+                "defines",
+                "contains",
+                "documents",
+                "impacts_section",
+            }:
+                continue
+            if neighbor.node_type == "symbol":
+                symbol_ids.add(neighbor.node_id)
+            elif neighbor.node_type == "file" and neighbor.path is not None:
+                related_file_paths.add(neighbor.path)
+
+    for path in sorted(related_file_paths, key=lambda item: item.as_posix()):
+        symbol_ids.update(_symbol_ids_for_path(store, path))
+
+    return symbol_ids
+
+
 def extract_anchors(chunks: list[KnowledgeChunk], store: GraphStore) -> AnchorSet:
     """Extract anchor entities from current evidence chunks."""
 
     node_ids: set[str] = set()
     file_paths: set[Path] = set()
+    symbol_ids: set[str] = set()
+    symbol_labels: set[str] = set()
     symbol_names: set[str] = set()
     section_ids: set[str] = set()
 
@@ -200,14 +297,23 @@ def extract_anchors(chunks: list[KnowledgeChunk], store: GraphStore) -> AnchorSe
                 node_ids.add(sid)
                 section_ids.add(chunk.section_id)
 
-        for token in tokenize(chunk.text):
-            if token in store.symbols_by_name:
-                symbol_names.add(token)
-                node_ids.update(store.symbols_by_name[token])
+    symbol_ids.update(_collect_anchor_symbol_ids(store, node_ids))
+    for path in sorted(file_paths, key=lambda item: item.as_posix()):
+        symbol_ids.update(_symbol_ids_for_path(store, path))
+    node_ids.update(symbol_ids)
+
+    for symbol_id in sorted(symbol_ids):
+        label = _symbol_label(store, symbol_id)
+        if label is None:
+            continue
+        symbol_labels.add(label)
+        symbol_names.add(label.split("[", maxsplit=1)[0].strip().split(".")[-1].lower())
 
     return AnchorSet(
         node_ids=node_ids,
         file_paths=file_paths,
+        symbol_ids=symbol_ids,
+        symbol_labels=symbol_labels,
         symbol_names=symbol_names,
         section_ids=section_ids,
     )
@@ -250,6 +356,8 @@ def expand_graph_neighbors(
                         node_id=neighbor,
                         distance=distance,
                         via_edge_type=edge.edge_type,
+                        edge_source_id=edge.source_id,
+                        edge_target_id=edge.target_id,
                     )
                 )
                 if len(hits) >= limit:
@@ -271,10 +379,30 @@ def _load_graph_candidate_chunks(
     if not hits:
         return []
 
+    def path_from_hit(hit: GraphTraversalHit) -> GraphInclusionPath | None:
+        if (
+            hit.via_edge_type is None
+            or hit.edge_source_id is None
+            or hit.edge_target_id is None
+        ):
+            return None
+        source_node = store.nodes_by_id.get(hit.edge_source_id)
+        target_node = store.nodes_by_id.get(hit.edge_target_id)
+        return GraphInclusionPath(
+            distance=max(hit.distance, 1),
+            edge_type=hit.via_edge_type,
+            source_node_id=hit.edge_source_id,
+            source_node_type=source_node.node_type if source_node is not None else None,
+            source_label=source_node.label if source_node is not None else None,
+            target_node_id=hit.edge_target_id,
+            target_node_type=target_node.node_type if target_node is not None else None,
+            target_label=target_node.label if target_node is not None else None,
+        )
+
     chunk_ids: set[str] = set()
     source_paths: set[Path] = set()
     section_ids: set[str] = set()
-    symbol_hits: list[GraphTraversalHit] = []
+    symbol_hits: list[tuple[GraphTraversalHit, GraphInclusionPath | None]] = []
 
     for hit in hits:
         node = store.nodes_by_id.get(hit.node_id)
@@ -287,7 +415,7 @@ def _load_graph_candidate_chunks(
         elif node.node_type == "sdd_section" and node.section_id:
             section_ids.add(node.section_id)
         elif node.node_type == "symbol":
-            symbol_hits.append(hit)
+            symbol_hits.append((hit, path_from_hit(hit)))
             if node.path is not None:
                 source_paths.add(node.path)
 
@@ -304,6 +432,92 @@ def _load_graph_candidate_chunks(
 
     scored: dict[str, GraphChunkCandidate] = {}
 
+    def add_candidate(
+        *,
+        chunk: KnowledgeChunk,
+        score: float,
+        reason: str,
+        related_files: set[Path] | None = None,
+        related_symbols: set[str] | None = None,
+        related_sections: set[str] | None = None,
+        graph_paths: list[GraphInclusionPath] | None = None,
+    ) -> None:
+        current = scored.get(chunk.chunk_id)
+        path_by_key: dict[tuple[int, str, str, str], GraphInclusionPath] = {}
+        for item in (current.graph_paths if current is not None else tuple()):
+            key = (
+                item.distance,
+                item.edge_type,
+                item.source_node_id,
+                item.target_node_id,
+            )
+            path_by_key[key] = item
+        for item in graph_paths or []:
+            key = (
+                item.distance,
+                item.edge_type,
+                item.source_node_id,
+                item.target_node_id,
+            )
+            path_by_key[key] = item
+        new_paths = tuple(
+            item
+            for _, item in sorted(
+                path_by_key.items(),
+                key=lambda pair: pair[0],
+            )
+        )
+        new_files = tuple(
+            sorted(
+                {
+                    *(current.related_files if current is not None else tuple()),
+                    *(related_files or set()),
+                },
+                key=lambda item: item.as_posix(),
+            )
+        )
+        new_symbols = tuple(
+            sorted(
+                {
+                    *(current.related_symbols if current is not None else tuple()),
+                    *(related_symbols or set()),
+                }
+            )
+        )
+        new_sections = tuple(
+            sorted(
+                {
+                    *(current.related_sections if current is not None else tuple()),
+                    *(related_sections or set()),
+                }
+            )
+        )
+        preferred_reason = reason
+        preferred_score = score
+        if current is not None:
+            if current.graph_score > score:
+                preferred_score = current.graph_score
+                preferred_reason = current.reason
+            elif current.graph_score == score:
+                preferred_reason = min(current.reason, reason)
+        scored[chunk.chunk_id] = GraphChunkCandidate(
+            chunk=chunk,
+            graph_score=preferred_score,
+            reason=preferred_reason,
+            graph_paths=new_paths,
+            related_files=new_files,
+            related_symbols=new_symbols,
+            related_sections=new_sections,
+        )
+
+    def symbols_for_path(path: Path) -> set[str]:
+        values: set[str] = set()
+        for symbol_id in _symbol_ids_for_path(store, path):
+            label = _symbol_label(store, symbol_id)
+            if label is not None:
+                values.add(label)
+        return values
+
     for hit in hits:
         node = store.nodes_by_id.get(hit.node_id)
         if node is None:
@@ -311,46 +525,60 @@ def _load_graph_candidate_chunks(
 
         reason = f"graph:{node.node_type}:{node.label}"
         score = 1.0 / max(hit.distance, 1)
+        hit_path = path_from_hit(hit)
+        graph_paths = [hit_path] if hit_path is not None else []
 
         if node.node_type == "chunk" and node.chunk_id and node.chunk_id in loaded:
             chunk = loaded[node.chunk_id]
-            scored[chunk.chunk_id] = GraphChunkCandidate(
+            add_candidate(
                 chunk=chunk,
-                graph_score=score,
+                score=score,
                 reason=reason,
+                related_files={chunk.source_path},
+                related_sections={chunk.section_id} if chunk.section_id else set(),
+                graph_paths=graph_paths,
             )
             continue
 
         if node.node_type == "file" and node.path is not None:
+            symbol_labels = symbols_for_path(node.path)
             for chunk in loaded.values():
                 if chunk.source_path == node.path:
-                    current = scored.get(chunk.chunk_id)
-                    if current is None or score > current.graph_score:
-                        scored[chunk.chunk_id] = GraphChunkCandidate(
-                            chunk=chunk,
-                            graph_score=score,
-                            reason=reason,
-                        )
+                    add_candidate(
+                        chunk=chunk,
+                        score=score,
+                        reason=reason,
+                        related_files={node.path},
+                        related_symbols=symbol_labels,
+                        related_sections=(
+                            {chunk.section_id} if chunk.section_id else set()
+                        ),
+                        graph_paths=graph_paths,
+                    )
             continue
 
         if node.node_type == "sdd_section" and node.section_id:
             for chunk in loaded.values():
                 if chunk.section_id == node.section_id:
-                    current = scored.get(chunk.chunk_id)
-                    if current is None or score > current.graph_score:
-                        scored[chunk.chunk_id] = GraphChunkCandidate(
-                            chunk=chunk,
-                            graph_score=score,
-                            reason=reason,
-                        )
+                    add_candidate(
+                        chunk=chunk,
+                        score=score,
+                        reason=reason,
+                        related_files={chunk.source_path},
+                        related_sections={node.section_id},
+                        graph_paths=graph_paths,
+                    )
             continue
 
-    for hit in symbol_hits:
+    for hit, symbol_path in symbol_hits:
         node = store.nodes_by_id.get(hit.node_id)
         if node is None or node.path is None:
             continue
         score = 1.0 / max(hit.distance, 1)
         reason = f"graph:symbol:{node.label}"
+        symbol_label = _symbol_label(store, node.node_id)
+        related_symbol_labels = {symbol_label} if symbol_label is not None else set()
+        graph_paths = [symbol_path] if symbol_path is not None else []
         for chunk in loaded.values():
             if chunk.source_path != node.path:
                 continue
@@ -360,21 +588,27 @@ def _load_graph_candidate_chunks(
                 and chunk.line_end is not None
             ):
                 if chunk.line_start <= node.line_start <= chunk.line_end:
-                    current = scored.get(chunk.chunk_id)
-                    if current is None or score > current.graph_score:
-                        scored[chunk.chunk_id] = GraphChunkCandidate(
-                            chunk=chunk,
-                            graph_score=score,
-                            reason=reason,
-                        )
-            elif node.symbol_name and node.symbol_name.lower() in tokenize(chunk.text):
-                current = scored.get(chunk.chunk_id)
-                if current is None or score > current.graph_score:
-                    scored[chunk.chunk_id] = GraphChunkCandidate(
+                    add_candidate(
                         chunk=chunk,
-                        graph_score=score,
+                        score=score,
                         reason=reason,
+                        related_files={node.path},
+                        related_symbols=related_symbol_labels,
+                        related_sections=(
+                            {chunk.section_id} if chunk.section_id else set()
+                        ),
+                        graph_paths=graph_paths,
                     )
+            elif node.symbol_name and node.symbol_name.lower() in tokenize(chunk.text):
+                add_candidate(
+                    chunk=chunk,
+                    score=score,
+                    reason=reason,
+                    related_files={node.path},
+                    related_symbols=related_symbol_labels,
+                    related_sections={chunk.section_id} if chunk.section_id else set(),
+                    graph_paths=graph_paths,
+                )
 
     ranked = sorted(
         scored.values(),
@@ -461,7 +695,10 @@ def rerank_evidence(
         # Weighted score tuned for v1:
         # lexical relevance is primary, graph/anchor add contextual lift.
         final_score = (
-            0.65 * lexical_norm + 0.20 * anchor_score + 0.15 * graph_score + type_bias
+            _LEXICAL_WEIGHT * lexical_norm
+            + _ANCHOR_WEIGHT * anchor_score
+            + _GRAPH_WEIGHT * graph_score
+            + type_bias
         )
 
         source: Literal["lexical", "hierarchy", "graph", "vector"] = "lexical"
@@ -482,6 +719,11 @@ def rerank_evidence(
             type_bias=round(type_bias, 6),
             final_score=round(final_score, 6),
             reason=reason_text,
+            graph_paths=(
+                list(graph_item.graph_paths[:_MAX_GRAPH_PATHS_PER_REASON])
+                if graph_item is not None
+                else []
+            ),
         )
         ranked_rows.append((final_score, chunk, reason))
 
@@ -500,15 +742,14 @@ def rerank_evidence(
     # Related entities are supplemental context shown to the prompt/response.
     # They are kept separate from primary selected chunks.
     for candidate in graph_candidates:
-        chunk = candidate.chunk
-        if chunk.source_path not in anchors.file_paths:
-            related_files.add(chunk.source_path)
-        if chunk.section_id and chunk.section_id not in anchors.section_ids:
-            related_sections.add(chunk.section_id)
-        for token in tokenize(chunk.text):
-            if len(token) <= 2 or token in anchors.symbol_names or token.isdigit():
-                continue
-            related_symbols.add(token)
+        for path in candidate.related_files:
+            if path not in anchors.file_paths:
+                related_files.add(path)
+        for section_id in candidate.related_sections:
+            if section_id not in anchors.section_ids:
+                related_sections.add(section_id)
+        for label in candidate.related_symbols:
+            related_symbols.add(label)
 
     return RerankResult(
         chunks=selected_chunks,

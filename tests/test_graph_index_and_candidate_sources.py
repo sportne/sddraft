@@ -477,6 +477,18 @@ def test_graph_candidate_collection_and_rerank() -> None:
     assert reranked.reasons
     assert any(item.source == "graph" for item in reranked.reasons)
     assert "2" in reranked.related_sections
+    assert "helper [src/helper.py]" in reranked.related_symbols
+    assert all("implementation" not in symbol for symbol in reranked.related_symbols)
+    assert any(
+        reason.graph_paths for reason in reranked.reasons if reason.source == "graph"
+    )
+    graph_reason = next(
+        reason for reason in reranked.reasons if reason.source == "graph"
+    )
+    assert any(
+        path.edge_type in {"references", "documents", "contains"}
+        for path in graph_reason.graph_paths
+    )
 
 
 def test_graph_retrieval_edge_cases() -> None:
@@ -495,7 +507,12 @@ def test_graph_retrieval_edge_cases() -> None:
     empty_hits = expand_graph_neighbors(
         store=store,
         anchors=AnchorSet(
-            node_ids=set(), file_paths=set(), symbol_names=set(), section_ids=set()
+            node_ids=set(),
+            file_paths=set(),
+            symbol_ids=set(),
+            symbol_labels=set(),
+            symbol_names=set(),
+            section_ids=set(),
         ),
         depth=1,
         edge_filter=preferred_edge_types("implementation"),
@@ -524,3 +541,89 @@ def test_graph_retrieval_edge_cases() -> None:
     )
     assert empty_rank.chunks == []
     assert empty_rank.reasons == []
+
+
+def test_collect_graph_candidates_attaches_symbol_context() -> None:
+    store, chunks, engine = _build_store_for_retrieval()
+    seed = chunks[0]
+
+    candidates, _, intent = collect_graph_candidates(
+        query="Which section documents helper implementation?",
+        engine=engine,  # type: ignore[arg-type]
+        store=store,
+        seed_chunks=[seed],
+        depth=2,
+        top_k=4,
+    )
+
+    assert intent == "documentation"
+    helper_candidate = next(
+        item for item in candidates if item.chunk.chunk_id == "helper_chunk"
+    )
+    assert "helper [src/helper.py]" in helper_candidate.related_symbols
+    assert helper_candidate.graph_paths
+    assert any(
+        path.edge_type in {"references", "contains", "documents"}
+        for path in helper_candidate.graph_paths
+    )
+
+
+def test_rerank_biases_documentation_and_architecture_sources() -> None:
+    code_chunk = _chunk(
+        chunk_id="code",
+        source_path=Path("src/main.py"),
+        text="compute helper",
+        source_type="code",
+    )
+    sdd_chunk = _chunk(
+        chunk_id="section",
+        source_path=Path("docs/sdd.md"),
+        text="section text",
+        source_type="sdd_section",
+        section_id="2",
+    )
+    review_chunk = _chunk(
+        chunk_id="review",
+        source_path=Path("artifacts/review.json"),
+        text="review text",
+        source_type="review_artifact",
+    )
+    directory_chunk = _chunk(
+        chunk_id="dir",
+        source_path=Path("hierarchy/src/_directory.md"),
+        text="directory summary",
+        source_type="directory_summary",
+    )
+
+    anchors = AnchorSet(
+        node_ids=set(),
+        file_paths=set(),
+        symbol_ids=set(),
+        symbol_labels=set(),
+        symbol_names=set(),
+        section_ids=set(),
+    )
+    lexical = [
+        ScoredChunk(chunk=code_chunk, score=1.0),
+        ScoredChunk(chunk=sdd_chunk, score=1.0),
+        ScoredChunk(chunk=review_chunk, score=1.0),
+        ScoredChunk(chunk=directory_chunk, score=1.0),
+    ]
+
+    documentation_rank = rerank_evidence(
+        lexical_candidates=lexical,
+        graph_candidates=[],
+        anchors=anchors,
+        intent="documentation",
+        top_k=4,
+    )
+    assert documentation_rank.chunks[0].chunk_id == "section"
+
+    architecture_rank = rerank_evidence(
+        lexical_candidates=lexical,
+        graph_candidates=[],
+        anchors=anchors,
+        intent="architecture",
+        top_k=4,
+    )
+    assert architecture_rank.chunks[0].chunk_id == "dir"

@@ -121,25 +121,29 @@
 `Dependencies:` Phases 1-3.
 `Completion Criteria:` `ask` evidence pack uses graph-grounded related entities and richer inclusion reasons, and prompt consumes them explicitly.
 
-- [ ] **G4-01**  
+- [x] **G4-01**  
   `Outcome:` Derive `related_symbols` from traversed graph symbol nodes and symbol index, not token sweeps from candidate chunk text.  
   `Definition of Done:` Related symbols are stable, relevant, and traceable to graph nodes.  
-  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py tests/test_graph_build_and_retrieval.py`
+  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py tests/test_graph_build_and_retrieval.py`  
+  `Result:` pass
 
-- [ ] **G4-02**  
+- [x] **G4-02**  
   `Outcome:` Add graph-path evidence metadata (edge/path reason) to inclusion reasons used by prompts and audits.  
   `Definition of Done:` Inclusion reasons include deterministic graph rationale beyond `graph:<node_type>:<label>`.  
-  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py`
+  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py`  
+  `Result:` pass
 
-- [ ] **G4-03**  
+- [x] **G4-03**  
   `Outcome:` Update query prompt builder to include `primary_chunks`, `related_files`, `related_symbols`, `related_sections`, and inclusion score breakdowns.  
   `Definition of Done:` Prompt inputs reflect full evidence pack shape.  
-  `Verification Command(s):` `pytest tests/test_render_and_workflow_misc.py tests/test_workflow_generate_and_ask.py`
+  `Verification Command(s):` `pytest tests/test_render_and_workflow_misc.py tests/test_workflow_generate_and_ask.py`  
+  `Result:` pass
 
-- [ ] **G4-04**  
+- [x] **G4-04**  
   `Outcome:` Tighten rerank signal definitions and validate deterministic tie-break behavior under mixed lexical/graph evidence.  
   `Definition of Done:` Rerank math and tie-break rules are test-covered and documented.  
-  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_graph_index_and_candidate_sources.py`
+  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_graph_index_and_candidate_sources.py`  
+  `Result:` pass
 
 ### Phase 5 — Vector-Readiness Formalization (Disabled By Default)
 

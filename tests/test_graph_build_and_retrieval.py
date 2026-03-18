@@ -469,6 +469,11 @@ def test_ask_graph_fallback_and_graph_augmented_selection(
         reason.source == "graph"
         for reason in ask_result.evidence_pack.inclusion_reasons
     )
+    assert any(
+        reason.graph_paths
+        for reason in ask_result.evidence_pack.inclusion_reasons
+        if reason.source == "graph"
+    )
     assert Path("src/module.py") in ask_result.evidence_pack.related_files
 
 
@@ -487,6 +492,8 @@ def test_rerank_is_deterministic_with_tie_breaks() -> None:
         anchors=AnchorSet(
             node_ids=set(),
             file_paths=set(),
+            symbol_ids=set(),
+            symbol_labels=set(),
             symbol_names=set(),
             section_ids=set(),
         ),

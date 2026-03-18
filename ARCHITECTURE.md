@@ -257,6 +257,17 @@ resolution. Ambiguous/external dependencies are intentionally left unresolved.
 6. structured evidence pack assembly
 7. grounded answer generation
 
+Graph anchor extraction is symbol-first: related symbols come from traversed
+graph symbol nodes and symbol index lookups tied to anchor files/chunks rather
+than token sweeps over chunk text.
+
+Re-ranking combines lexical + anchor + graph signals with explicit deterministic
+weights (`0.65 lexical`, `0.20 anchor`, `0.15 graph`) plus source-type bias.
+Tie-breaks are stable by `source_path`, `line_start`, and `chunk_id`.
+
+Inclusion reasons include optional structured graph-path rationale for auditability
+(edge type, source node, target node, and traversal distance).
+
 If hierarchy or graph artifacts are missing/corrupt, `ask` falls back to the
 available deterministic stages and adds an uncertainty note instead of failing.
 

@@ -125,3 +125,7 @@ def test_ask_dependency_question_uses_graph_import_edges_for_javascript(
     assert any(
         reason.source == "graph" for reason in graph_ask.evidence_pack.inclusion_reasons
     )
+    assert any(
+        symbol.endswith("[src/module.js]")
+        for symbol in graph_ask.evidence_pack.related_symbols
+    )

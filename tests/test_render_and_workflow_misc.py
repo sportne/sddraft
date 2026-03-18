@@ -9,14 +9,20 @@ import pytest
 
 from sddraft.domain.errors import RenderingError
 from sddraft.domain.models import (
+    ChunkInclusionReason,
     Citation,
     DirectorySummaryDoc,
     FileDiffSummary,
+    GraphInclusionPath,
+    KnowledgeChunk,
     QueryAnswer,
+    QueryEvidencePack,
+    QueryRequest,
     SectionUpdateProposal,
     SubtreeRollup,
     UpdateProposalReport,
 )
+from sddraft.prompts.builders import build_query_prompt
 from sddraft.render.hierarchy import render_directory_summary_markdown
 from sddraft.render.json_artifacts import write_json_model
 from sddraft.render.markdown import render_sdd_markdown, write_markdown
@@ -80,6 +86,66 @@ def test_render_report_and_query_text_paths() -> None:
     assert "Citations:" in rendered
     assert "Uncertainty:" in rendered
     assert "Missing Information:" in rendered
+
+
+def test_build_query_prompt_includes_extended_evidence_fields() -> None:
+    chunk = KnowledgeChunk(
+        chunk_id="c1",
+        source_type="code",
+        source_path=Path("src/module.py"),
+        text="def compute_distance(x, y): return x + y",
+        line_start=1,
+        line_end=1,
+    )
+    citation = Citation(
+        chunk_id="c1",
+        source_path=Path("src/module.py"),
+        line_start=1,
+        line_end=1,
+        quote="def compute_distance(x, y): return x + y",
+    )
+    inclusion_reason = ChunkInclusionReason(
+        chunk_id="c1",
+        source="graph",
+        lexical_score=0.9,
+        anchor_score=1.0,
+        graph_score=0.5,
+        type_bias=0.07,
+        final_score=1.0,
+        reason="lexical+graph:symbol:compute_distance",
+        graph_paths=[
+            GraphInclusionPath(
+                distance=1,
+                edge_type="references",
+                source_node_id="chunk::c1",
+                source_node_type="chunk",
+                source_label="c1",
+                target_node_id="sym::src/module.py::function::compute_distance",
+                target_node_type="symbol",
+                target_label="compute_distance",
+            )
+        ],
+    )
+    pack = QueryEvidencePack(
+        request=QueryRequest(question="Where is compute_distance implemented?"),
+        chunks=[chunk],
+        citations=[citation],
+        primary_chunks=[chunk],
+        related_files=[Path("src/helper.py")],
+        related_symbols=["compute_distance [src/module.py]"],
+        related_sections=["3.2"],
+        inclusion_reasons=[inclusion_reason],
+    )
+
+    _, prompt = build_query_prompt(pack)
+    assert "Primary Chunks:" in prompt
+    assert "Selected Chunks:" in prompt
+    assert "Related Files:" in prompt
+    assert "Related Symbols:" in prompt
+    assert "Related Sections:" in prompt
+    assert "Inclusion Reasons:" in prompt
+    assert "graph_paths" in prompt
+    assert "compute_distance [src/module.py]" in prompt
 
 
 def test_render_directory_summary_includes_subtree_rollup_section() -> None:

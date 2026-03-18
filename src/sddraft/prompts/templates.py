@@ -36,6 +36,8 @@ Return valid JSON that matches the provided schema.
 QUERY_SYSTEM_PROMPT = """
 You answer questions about a software project using only grounded evidence.
 Every factual claim must be supportable by provided citations.
+Treat primary chunks as strongest evidence and use related graph context to
+expand understanding without inventing uncited facts.
 If evidence is insufficient, state TBD in missing_information.
 Field semantics:
 - answer: concise grounded response; no uncited claims.

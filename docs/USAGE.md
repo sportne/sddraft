@@ -102,6 +102,11 @@ normalized key, and resolution status.
 4. deterministic reranking with transparent score components
 5. grounded structured answer generation
 
+Graph-derived `related_symbols` are sourced from traversed graph symbol nodes
+and symbol index entries tied to anchor files/chunks, not token sweeps.
+Chunk inclusion reasons include optional graph-path metadata
+(`edge_type`, `source_node_id`, `target_node_id`, `distance`) for inspection.
+
 If hierarchy or graph artifacts are missing/unreadable, `ask` falls back gracefully
 and adds an uncertainty note instead of failing.
 

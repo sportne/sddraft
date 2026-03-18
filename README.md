@@ -11,6 +11,7 @@ and git history.
 - Answers grounded repository questions with citations via `sddraft ask`.
 - Builds inspectable retrieval, hierarchy, and engineering-graph artifacts.
 - Emits conservative multi-language dependency (`imports`) graph edges to improve cross-file Q&A.
+- Uses graph-grounded evidence reranking with inspectable inclusion rationale paths.
 
 ## Quick Start
 

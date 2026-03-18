@@ -56,8 +56,13 @@ def build_query_prompt(pack: QueryEvidencePack) -> tuple[str, str]:
     user_prompt = (
         f"Question:\n{pack.request.question}\n\n"
         f"Session History:\n{_json(pack.request.session_history)}\n\n"
-        f"Evidence Chunks:\n{_json([chunk.model_dump(mode='json') for chunk in pack.chunks])}\n\n"
-        f"Citations:\n{_json([citation.model_dump(mode='json') for citation in pack.citations])}\n"
+        f"Primary Chunks:\n{_json([chunk.model_dump(mode='json') for chunk in pack.primary_chunks])}\n\n"
+        f"Selected Chunks:\n{_json([chunk.model_dump(mode='json') for chunk in pack.chunks])}\n\n"
+        f"Citations:\n{_json([citation.model_dump(mode='json') for citation in pack.citations])}\n\n"
+        f"Related Files:\n{_json([path.as_posix() for path in pack.related_files])}\n\n"
+        f"Related Symbols:\n{_json(pack.related_symbols)}\n\n"
+        f"Related Sections:\n{_json(pack.related_sections)}\n\n"
+        f"Inclusion Reasons:\n{_json([reason.model_dump(mode='json') for reason in pack.inclusion_reasons])}\n"
     )
     return QUERY_SYSTEM_PROMPT, user_prompt
 
