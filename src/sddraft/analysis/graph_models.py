@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sddraft.domain.models import SourceLanguage
 
 GraphNodeType = Literal["directory", "file", "symbol", "chunk", "sdd_section", "commit"]
+GraphBuildDecision = Literal["no_op", "partial", "full"]
 GraphEdgeType = Literal[
     "contains",
     "defines",
@@ -72,6 +73,26 @@ class GraphSymbolRecord(GraphModel):
     line_end: int | None = None
 
 
+class GraphInputFingerprint(GraphModel):
+    """Deterministic build fingerprint for graph input artifacts."""
+
+    digest: str
+    scan_digest: str
+    retrieval_digest: str
+    hierarchy_digest: str | None = None
+    section_digest: str | None = None
+    commit_digest: str | None = None
+
+
+class GraphBuildPlan(GraphModel):
+    """Planner decision metadata for one graph build attempt."""
+
+    decision: GraphBuildDecision
+    reason: str
+    impacted_fragments: list[str] = Field(default_factory=list)
+    reusable_fragments: list[str] = Field(default_factory=list)
+
+
 class GraphManifest(GraphModel):
     """Manifest for graph store files."""
 
@@ -85,6 +106,12 @@ class GraphManifest(GraphModel):
     adjacency_path: Path
     node_counts: dict[GraphNodeType, int] = Field(default_factory=dict)
     edge_counts: dict[GraphEdgeType, int] = Field(default_factory=dict)
+    build_version: str | None = None
+    input_fingerprint: GraphInputFingerprint | None = None
+    planner_decision: GraphBuildDecision | None = None
+    previous_manifest: Path | None = None
+    fragment_stats: dict[str, int] = Field(default_factory=dict)
+    fragments_path: Path | None = None
 
 
 @dataclass(slots=True)

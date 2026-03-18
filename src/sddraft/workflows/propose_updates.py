@@ -373,6 +373,8 @@ def propose_updates(
             scan_result=scan_result_for_graph,
             update_report=report,
             commit_impact=impact,
+            changed_files={item.path for item in impact.changed_files},
+            impacted_section_ids={item.section_id for item in report.proposals},
         )
         graph_manifest_path = graph_result.manifest_path
         graph_store_path = graph_result.store_root

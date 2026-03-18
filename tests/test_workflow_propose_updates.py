@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -364,3 +366,170 @@ def test_propose_updates_progress_callback_reports_stages(
     assert "Scanning repository" in joined
     assert "Parsing commit range" in joined
     assert "Refreshing hierarchy documentation" in joined
+
+
+def test_propose_updates_uses_partial_graph_build_when_prior_fragments_exist(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    module_path = src_dir / "module.py"
+    helper_path = src_dir / "helper.py"
+    module_path.write_text(
+        "from helper import inc\n\ndef run(x):\n    return inc(x)\n", encoding="utf-8"
+    )
+    helper_path.write_text("def inc(x):\n    return x + 1\n", encoding="utf-8")
+
+    _run(["git", "init"], cwd=tmp_path)
+    _run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path)
+    _run(["git", "config", "user.name", "Test User"], cwd=tmp_path)
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "initial"], cwd=tmp_path)
+
+    module_path.write_text(
+        "from helper import inc\n\ndef run(x, y):\n    return inc(x) + y\n",
+        encoding="utf-8",
+    )
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change module"], cwd=tmp_path)
+
+    existing_sdd = tmp_path / "existing_sdd.md"
+    existing_sdd.write_text(
+        "# NAV_CTRL Software Design Description\n\n## 3 Interface Design\nOld text\n",
+        encoding="utf-8",
+    )
+
+    # First run seeds the graph store and fragment inventory.
+    first = propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+    )
+    assert first.graph_manifest_path is not None
+    first_manifest = json.loads(first.graph_manifest_path.read_text(encoding="utf-8"))
+    assert first_manifest["planner_decision"] == "full"
+
+    helper_path.write_text(
+        "def inc(x, y):\n    return x + y\n",
+        encoding="utf-8",
+    )
+    _run(["git", "add", "src/helper.py"], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change helper"], cwd=tmp_path)
+
+    second = propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+    )
+    assert second.graph_manifest_path is not None
+    second_manifest = json.loads(second.graph_manifest_path.read_text(encoding="utf-8"))
+    assert second_manifest["planner_decision"] == "partial"
+    assert second_manifest["fragment_stats"]["reused_fragments"] > 0
+    assert (
+        second_manifest["fragment_stats"]["rebuilt_fragments"]
+        < second_manifest["fragment_stats"]["total_fragments"]
+    )
+
+    partial_nodes = (second.graph_store_path / "nodes.jsonl").read_text(
+        encoding="utf-8"
+    )
+    partial_edges = (second.graph_store_path / "edges.jsonl").read_text(
+        encoding="utf-8"
+    )
+
+    # Force a full rebuild for the same final inputs and compare canonical outputs.
+    assert second.graph_store_path is not None
+    shutil.rmtree(second.graph_store_path, ignore_errors=True)
+    full_again = propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+    )
+    assert full_again.graph_manifest_path is not None
+    full_manifest = json.loads(
+        full_again.graph_manifest_path.read_text(encoding="utf-8")
+    )
+    assert full_manifest["planner_decision"] == "full"
+    assert full_again.graph_store_path is not None
+    assert (full_again.graph_store_path / "nodes.jsonl").read_text(
+        encoding="utf-8"
+    ) == partial_nodes
+    assert (full_again.graph_store_path / "edges.jsonl").read_text(
+        encoding="utf-8"
+    ) == partial_edges
+
+
+def test_propose_updates_corrupt_fragment_forces_full_rebuild(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "module.py"
+    file_path.write_text("def do_work(x):\n    return x\n", encoding="utf-8")
+
+    _run(["git", "init"], cwd=tmp_path)
+    _run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path)
+    _run(["git", "config", "user.name", "Test User"], cwd=tmp_path)
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "initial"], cwd=tmp_path)
+
+    file_path.write_text("def do_work(x, y):\n    return x + y\n", encoding="utf-8")
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change one"], cwd=tmp_path)
+
+    existing_sdd = tmp_path / "existing_sdd.md"
+    existing_sdd.write_text(
+        "# NAV_CTRL Software Design Description\n\n## 3 Interface Design\nOld text\n",
+        encoding="utf-8",
+    )
+
+    first = propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+    )
+    assert first.graph_store_path is not None
+    fragment_paths = sorted((first.graph_store_path / "fragments").glob("*.jsonl"))
+    assert fragment_paths
+    fragment_paths[0].write_text("not-json\n", encoding="utf-8")
+
+    file_path.write_text(
+        "def do_work(x, y, z):\n    return x + y + z\n", encoding="utf-8"
+    )
+    _run(["git", "add", "src/module.py"], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change two"], cwd=tmp_path)
+
+    second = propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+    )
+    assert second.graph_manifest_path is not None
+    second_manifest = json.loads(second.graph_manifest_path.read_text(encoding="utf-8"))
+    assert second_manifest["planner_decision"] == "full"

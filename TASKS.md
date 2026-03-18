@@ -13,7 +13,7 @@
 - `ask` currently runs lexical retrieval, optional hierarchy expansion, graph expansion, and deterministic reranking with fallback when hierarchy/graph artifacts are missing.
 - Symbol inventory is now analyzer-emitted and symbol-first (`SymbolSummary`), with deterministic owner/span metadata where available; quality remains conservative for some language-specific edge cases.
 - `imports` graph edges now use a normalized multi-language resolver (`python`, `java`, `javascript`, `typescript`, `go`, `rust`, `csharp`, `cpp`) with conservative repo-local resolution and inspectable reason metadata.
-- Graph build is currently full-rebuild per run; no manifest fingerprinting or partial graph reuse yet.
+- Graph build now supports deterministic planner decisions (`no_op`, `partial`, `full`) with manifest fingerprinting and fragment reuse in `graph/fragments/`.
 - Vector readiness is partial: placeholder vector candidate source exists, and generation config has `vector_*` fields, but no real retrieval orchestration path is wired.
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates, but commit-oriented Q&A traversal is not yet intentionally tuned.
 - Docs and tests are good baseline quality, but graph schema/intents/incremental behavior are not yet documented as deeply as implementation now warrants.
@@ -90,25 +90,29 @@
 `Dependencies:` Phases 1-2.
 `Completion Criteria:` Unchanged runs reuse graph state; changed runs update only impacted graph substructures while preserving deterministic output.
 
-- [ ] **G3-01**  
+- [x] **G3-01**  
   `Outcome:` Extend graph manifest with deterministic fingerprints (scan/retrieval/hierarchy inputs and build version).  
   `Definition of Done:` Manifest can detect no-op build conditions and reproducibility context.  
-  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py`
+  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py`  
+  `Result:` pass
 
-- [ ] **G3-02**  
+- [x] **G3-02**  
   `Outcome:` Introduce incremental graph planner (full rebuild vs partial update vs no-op).  
   `Definition of Done:` Planner decisions are deterministic and test-covered.  
-  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_workflow_propose_updates.py`
+  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_workflow_propose_updates.py`  
+  `Result:` pass
 
-- [ ] **G3-03**  
+- [x] **G3-03**  
   `Outcome:` Persist/reuse per-file or per-node graph fragments to avoid rewriting unaffected regions.  
   `Definition of Done:` Propose-updates path updates impacted subtree + related section/commit edges only.  
-  `Verification Command(s):` `pytest tests/test_workflow_propose_updates.py`
+  `Verification Command(s):` `pytest tests/test_workflow_propose_updates.py`  
+  `Result:` pass
 
-- [ ] **G3-04**  
+- [x] **G3-04**  
   `Outcome:` Add deterministic equivalence tests for full rebuild vs incremental rebuild outputs.  
   `Definition of Done:` Outputs match for unchanged inputs; partial changes alter only expected graph regions.  
-  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_graph_index_and_candidate_sources.py`
+  `Verification Command(s):` `pytest tests/test_graph_build_and_retrieval.py tests/test_graph_index_and_candidate_sources.py`  
+  `Result:` pass
 
 ### Phase 4 — Ask Evidence Quality Tightening
 

@@ -79,6 +79,12 @@ def test_generate_writes_deterministic_graph_artifacts(
     graph_root = first.graph_store_path
     manifest = json.loads((graph_root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["version"] == "v1-engineering-graph-jsonl"
+    assert manifest["planner_decision"] == "full"
+    assert manifest["build_version"] == "v3-incremental-fragment"
+    assert manifest["input_fingerprint"]["digest"]
+    assert manifest["fragment_stats"]["rebuilt_fragments"] > 0
+    assert manifest["fragments_path"] == "fragments"
+    assert (graph_root / "fragments").exists()
 
     nodes_path = graph_root / "nodes.jsonl"
     edges_path = graph_root / "edges.jsonl"
@@ -116,6 +122,11 @@ def test_generate_writes_deterministic_graph_artifacts(
     assert (second.graph_store_path / "edges.jsonl").read_text(
         encoding="utf-8"
     ) == edge_snapshot
+    second_manifest = json.loads(
+        (second.graph_store_path / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert second_manifest["planner_decision"] == "no_op"
+    assert second_manifest["fragment_stats"]["reused_fragments"] >= 1
 
 
 def test_generate_writes_multilanguage_import_edges_with_metadata(

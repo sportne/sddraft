@@ -15,12 +15,20 @@ sections:
       - dependencies
 
   - id: "3"
+    title: "Architecture Description"
+    instruction: "Summarize the architectural design of the CSC."
+    evidence_kinds:
+      - code_summary
+      - dependencies
+      - interfaces
+
+  - id: "4"
     title: "Interface Design"
     instruction: "Describe provided and used interfaces based on evidence."
     evidence_kinds:
       - interfaces
 
-  - id: "4"
+  - id: "5"
     title: "Detailed Design"
     instruction: "Document detailed behavior from available code evidence."
     evidence_kinds:
