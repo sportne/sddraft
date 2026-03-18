@@ -183,6 +183,60 @@ def test_generate_flow_honors_runtime_model_and_temperature(
     assert all(request.temperature == override_temperature for request in llm.requests)
 
 
+def test_generate_enforces_template_section_identity(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    llm = MockLLMClient(
+        canned={
+            "SectionDraft": {
+                "section_id": "OFF_TEMPLATE",
+                "title": "Off Template Title",
+                "content": "TBD: intentionally mismatched section identity.",
+                "evidence_refs": [],
+                "assumptions": [],
+                "missing_information": ["TBD"],
+                "confidence": 0.5,
+            }
+        }
+    )
+
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+        hierarchy_docs_enabled=False,
+    )
+
+    assert all(
+        section.section_id != "OFF_TEMPLATE" for section in result.document.sections
+    )
+    assert all(
+        section.title != "Off Template Title" for section in result.document.sections
+    )
+    assert [section.section_id for section in result.document.sections] == [
+        item.id for item in sample_template.sections
+    ]
+    assert [section.title for section in result.document.sections] == [
+        item.title for item in sample_template.sections
+    ]
+
+    markdown = result.markdown_path.read_text(encoding="utf-8")
+    assert "OFF_TEMPLATE" not in markdown
+    assert "Off Template Title" not in markdown
+
+
 def test_generate_reuses_existing_hierarchy_summaries(
     tmp_path: Path,
     sample_project_config,

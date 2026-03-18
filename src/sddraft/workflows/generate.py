@@ -43,13 +43,15 @@ from sddraft.workflows.hierarchy_docs import (
 )
 
 
-def _ensure_section_defaults(
+def _enforce_template_section_identity(
     section: SectionDraft, section_id: str, title: str
 ) -> SectionDraft:
+    """Force generated section identity to match the template contract."""
+
     updates: dict[str, object] = {}
-    if not section.section_id or section.section_id == "TBD":
+    if section.section_id != section_id:
         updates["section_id"] = section_id
-    if not section.title or section.title == "TBD":
+    if section.title != title:
         updates["title"] = title
     if updates:
         return section.model_copy(update=updates)
@@ -298,7 +300,9 @@ def generate_sdd(
         )
 
         section = SectionDraft.model_validate(response.content.model_dump(mode="json"))
-        section = _ensure_section_defaults(section, pack.section.id, pack.section.title)
+        section = _enforce_template_section_identity(
+            section, pack.section.id, pack.section.title
+        )
 
         if not section.evidence_refs:
             section = section.model_copy(
