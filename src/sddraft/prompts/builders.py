@@ -10,6 +10,7 @@ from sddraft.domain.models import (
     FileSummaryDoc,
     QueryEvidencePack,
     SectionEvidencePack,
+    SubtreeRollup,
     SymbolSummary,
 )
 from sddraft.prompts.templates import (
@@ -83,13 +84,24 @@ def build_directory_summary_prompt(
     directory_path: str,
     local_files: list[FileSummaryDoc],
     child_directories: list[DirectorySummaryDoc],
+    subtree_rollup: SubtreeRollup,
 ) -> tuple[str, str]:
-    """Return system and user prompts for bottom-up directory summary generation."""
+    """Return prompts for recursive directory subtree summary generation."""
+
+    role = "project root" if directory_path == "." else "directory subtree"
+    root_instruction = (
+        "This path is the repository root. Write a project-level overview.\n\n"
+        if directory_path == "."
+        else ""
+    )
 
     user_prompt = (
-        "Generate a directory summary from direct evidence only.\n"
+        "Generate a recursive subtree summary for this directory.\n"
         f"Directory Path:\n{directory_path}\n\n"
+        f"Directory Role:\n{role}\n\n"
+        f"{root_instruction}"
         f"Local File Summaries:\n{_json([item.model_dump(mode='json') for item in local_files])}\n\n"
         f"Child Directory Summaries:\n{_json([item.model_dump(mode='json') for item in child_directories])}\n"
+        f"\nSubtree Rollup:\n{_json(subtree_rollup.model_dump(mode='json'))}\n"
     )
     return DIRECTORY_SUMMARY_SYSTEM_PROMPT, user_prompt

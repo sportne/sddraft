@@ -67,6 +67,9 @@ sddraft ask --index-path artifacts/SDDRAFT_CORE/retrieval --question "What inter
 - `artifacts/<CSC>/hierarchy/edges.jsonl`
 - `artifacts/<CSC>/hierarchy/**` markdown summaries for files/directories
 
+Directory summaries are subtree-first: each directory summary describes the full
+content under that directory recursively (not just immediate children).
+
 `ask` uses `retrieval/manifest.json` (or the retrieval directory path) and, when present,
 expands evidence with `hierarchy/manifest.json`.
 If hierarchy artifacts already exist, generation reuses unchanged hierarchy summaries

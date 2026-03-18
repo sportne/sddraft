@@ -17,6 +17,7 @@ from sddraft.domain.models import (
     HierarchyDocArtifact,
     KnowledgeChunk,
     RetrievalIndex,
+    SubtreeRollup,
 )
 
 
@@ -44,6 +45,16 @@ def _sample_artifact() -> HierarchyDocArtifact:
                 path=Path("."),
                 summary="Root overview.",
                 child_directories=[Path("src")],
+                subtree_rollup=SubtreeRollup(
+                    descendant_file_count=2,
+                    descendant_directory_count=2,
+                    language_counts={"python": 2},
+                    key_topics=["workflow", "analysis"],
+                    representative_files=[
+                        Path("src/app.py"),
+                        Path("src/sub/worker.py"),
+                    ],
+                ),
             ),
             DirectorySummaryDoc(
                 node_id=directory_node_id(Path("src")),
@@ -51,12 +62,29 @@ def _sample_artifact() -> HierarchyDocArtifact:
                 summary="Source overview.",
                 local_files=[Path("src/app.py")],
                 child_directories=[Path("src/sub")],
+                subtree_rollup=SubtreeRollup(
+                    descendant_file_count=2,
+                    descendant_directory_count=1,
+                    language_counts={"python": 2},
+                    key_topics=["source", "worker"],
+                    representative_files=[
+                        Path("src/app.py"),
+                        Path("src/sub/worker.py"),
+                    ],
+                ),
             ),
             DirectorySummaryDoc(
                 node_id=directory_node_id(Path("src/sub")),
                 path=Path("src/sub"),
                 summary="Subdirectory overview.",
                 local_files=[Path("src/sub/worker.py")],
+                subtree_rollup=SubtreeRollup(
+                    descendant_file_count=1,
+                    descendant_directory_count=0,
+                    language_counts={"python": 1},
+                    key_topics=["worker"],
+                    representative_files=[Path("src/sub/worker.py")],
+                ),
             ),
         ],
     )
@@ -87,6 +115,10 @@ def test_build_hierarchy_index_and_chunks() -> None:
     assert any(item.source_type == "file_summary" for item in chunks)
     assert any(item.source_type == "directory_summary" for item in chunks)
     assert all("node_id" in item.metadata for item in chunks)
+    assert any(
+        item.source_type == "directory_summary" and "Subtree files:" in item.text
+        for item in chunks
+    )
 
 
 def test_expand_chunks_with_hierarchy_neighbors() -> None:

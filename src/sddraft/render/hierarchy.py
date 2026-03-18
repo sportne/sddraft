@@ -62,6 +62,35 @@ def render_directory_summary_markdown(summary: DirectorySummaryDoc) -> str:
     lines.append(summary.summary)
     lines.append("")
 
+    lines.append("## Subtree At A Glance")
+    lines.append(f"- Descendant Files: {summary.subtree_rollup.descendant_file_count}")
+    lines.append(
+        f"- Descendant Directories: {summary.subtree_rollup.descendant_directory_count}"
+    )
+    if summary.subtree_rollup.language_counts:
+        language_parts = ", ".join(
+            f"{language}={count}"
+            for language, count in sorted(
+                summary.subtree_rollup.language_counts.items()
+            )
+        )
+        lines.append(f"- Language Distribution: {language_parts}")
+    else:
+        lines.append("- Language Distribution: None")
+    if summary.subtree_rollup.key_topics:
+        lines.append(f"- Key Topics: {', '.join(summary.subtree_rollup.key_topics)}")
+    else:
+        lines.append("- Key Topics: None")
+    if summary.subtree_rollup.representative_files:
+        lines.append("- Representative Files:")
+        lines.extend(
+            f"  - {path.as_posix()}"
+            for path in summary.subtree_rollup.representative_files
+        )
+    else:
+        lines.append("- Representative Files: None")
+    lines.append("")
+
     lines.append("## Local Files")
     if summary.local_files:
         lines.extend(f"- {path.as_posix()}" for path in summary.local_files)
@@ -119,6 +148,7 @@ def write_directory_summary_markdown(
         summary=summary.summary,
         local_files=summary.local_files,
         child_directories=summary.child_directories,
+        subtree_rollup=summary.subtree_rollup,
         evidence_refs=summary.evidence_refs,
         missing_information=summary.missing_information,
         confidence=summary.confidence,

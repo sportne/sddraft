@@ -21,6 +21,7 @@ from sddraft.domain.models import (
     HierarchyNodeRecord,
     KnowledgeChunk,
     RetrievalIndex,
+    SubtreeRollup,
 )
 
 
@@ -70,6 +71,25 @@ def _keywords(text: str, limit: int = 8) -> list[str]:
     return ordered
 
 
+def _directory_rollup_text(*, summary: str, subtree_rollup: SubtreeRollup) -> str:
+    language_distribution = ", ".join(
+        f"{language}={count}"
+        for language, count in sorted(subtree_rollup.language_counts.items())
+    )
+    representative_files = ", ".join(
+        path.as_posix() for path in subtree_rollup.representative_files
+    )
+    key_topics = ", ".join(subtree_rollup.key_topics)
+    return (
+        f"{summary}\n"
+        f"Subtree files: {subtree_rollup.descendant_file_count}. "
+        f"Subtree directories: {subtree_rollup.descendant_directory_count}.\n"
+        f"Languages: {language_distribution or 'none'}.\n"
+        f"Key topics: {key_topics or 'none'}.\n"
+        f"Representative files: {representative_files or 'none'}."
+    )
+
+
 def build_hierarchy_index(
     artifact: HierarchyDocArtifact, node_doc_paths: dict[str, Path]
 ) -> HierarchyIndex:
@@ -92,11 +112,26 @@ def build_hierarchy_index(
                 path=path,
                 parent_id=parent_id,
                 doc_path=node_doc_paths[directory_summary.node_id],
-                abstract=directory_summary.summary[:320],
+                abstract=(
+                    f"{directory_summary.summary} "
+                    f"(subtree files={directory_summary.subtree_rollup.descendant_file_count}, "
+                    f"subtree directories={directory_summary.subtree_rollup.descendant_directory_count})"
+                )[:320],
                 keywords=_keywords(
                     " ".join(
                         [
                             directory_summary.summary,
+                            " ".join(directory_summary.subtree_rollup.key_topics),
+                            " ".join(
+                                path.as_posix()
+                                for path in directory_summary.subtree_rollup.representative_files
+                            ),
+                            " ".join(
+                                f"{language} {count}"
+                                for language, count in sorted(
+                                    directory_summary.subtree_rollup.language_counts.items()
+                                )
+                            ),
                             " ".join(
                                 item.as_posix()
                                 for item in directory_summary.local_files
@@ -195,11 +230,20 @@ def hierarchy_chunks(
                 chunk_id=f"hier_dir::{_normalize_dir_path(directory_summary.path).as_posix()}",
                 source_type="directory_summary",
                 source_path=node.doc_path,
-                text=directory_summary.summary,
+                text=_directory_rollup_text(
+                    summary=directory_summary.summary,
+                    subtree_rollup=directory_summary.subtree_rollup,
+                ),
                 metadata={
                     "node_id": directory_summary.node_id,
                     "kind": "directory",
                     "path": _normalize_dir_path(directory_summary.path).as_posix(),
+                    "descendant_file_count": str(
+                        directory_summary.subtree_rollup.descendant_file_count
+                    ),
+                    "descendant_directory_count": str(
+                        directory_summary.subtree_rollup.descendant_directory_count
+                    ),
                 },
             )
         )
@@ -286,11 +330,20 @@ def iter_hierarchy_chunks(manifest_path: Path) -> Iterator[KnowledgeChunk]:
             chunk_id=f"hier_dir::{_normalize_dir_path(directory_summary.path).as_posix()}",
             source_type="directory_summary",
             source_path=doc_path,
-            text=directory_summary.summary,
+            text=_directory_rollup_text(
+                summary=directory_summary.summary,
+                subtree_rollup=directory_summary.subtree_rollup,
+            ),
             metadata={
                 "node_id": directory_summary.node_id,
                 "kind": "directory",
                 "path": _normalize_dir_path(directory_summary.path).as_posix(),
+                "descendant_file_count": str(
+                    directory_summary.subtree_rollup.descendant_file_count
+                ),
+                "descendant_directory_count": str(
+                    directory_summary.subtree_rollup.descendant_directory_count
+                ),
             },
         )
 

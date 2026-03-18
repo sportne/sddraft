@@ -374,6 +374,7 @@ class DirectorySummaryDoc(DomainModel):
     summary: str
     local_files: list[Path] = Field(default_factory=list)
     child_directories: list[Path] = Field(default_factory=list)
+    subtree_rollup: SubtreeRollup = Field(default_factory=lambda: SubtreeRollup())
     evidence_refs: list[EvidenceReference] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
     confidence: float = Field(
@@ -381,8 +382,8 @@ class DirectorySummaryDoc(DomainModel):
         ge=0.0,
         le=1.0,
         description=(
-            "Confidence in the directory summary based on local files and direct "
-            "child directory summaries."
+            "Confidence in the directory subtree summary based on supplied local "
+            "evidence and descendant rollups."
         ),
     )
 
@@ -424,6 +425,7 @@ class DirectorySummaryRecord(DomainModel):
     summary: str
     local_files: list[Path] = Field(default_factory=list)
     child_directories: list[Path] = Field(default_factory=list)
+    subtree_rollup: SubtreeRollup = Field(default_factory=lambda: SubtreeRollup())
     evidence_refs: list[EvidenceReference] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
     confidence: float = Field(
@@ -432,6 +434,16 @@ class DirectorySummaryRecord(DomainModel):
         le=1.0,
         description="Confidence in the generated directory summary.",
     )
+
+
+class SubtreeRollup(DomainModel):
+    """Deterministic recursive metadata for one directory subtree."""
+
+    descendant_file_count: int = 0
+    descendant_directory_count: int = 0
+    language_counts: dict[str, int] = Field(default_factory=dict)
+    key_topics: list[str] = Field(default_factory=list)
+    representative_files: list[Path] = Field(default_factory=list)
 
 
 class HierarchyNodeRecord(DomainModel):
@@ -459,7 +471,7 @@ class HierarchyManifest(DomainModel):
 
     csc_id: str
     root: Path
-    version: Literal["v2-stream-jsonl"] = "v2-stream-jsonl"
+    version: Literal["v2-stream-jsonl", "v3-stream-jsonl"] = "v3-stream-jsonl"
     file_summaries_path: Path
     directory_summaries_path: Path
     nodes_path: Path

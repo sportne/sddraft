@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.domain.models import QueryRequest
+from sddraft.domain.models import (
+    DirectorySummaryRecord,
+    HierarchyManifest,
+    QueryRequest,
+)
 from sddraft.llm.base import StructuredGenerationRequest
 from sddraft.llm.mock import MockLLMClient
 from sddraft.workflows.ask import answer_question
@@ -219,6 +223,103 @@ def test_generate_reuses_existing_hierarchy_summaries(
         not in {"_FileSummaryDraft", "_DirectorySummaryDraft"}
         for request in llm.requests
     )
+
+
+def test_generate_hierarchy_directory_rollups_are_recursive(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    nested_dir = src_dir / "sub"
+    nested_dir.mkdir(parents=True)
+
+    (src_dir / "module.py").write_text(
+        "def a() -> int:\n    return 1\n", encoding="utf-8"
+    )
+    (nested_dir / "worker.py").write_text(
+        "def b() -> int:\n    return 2\n", encoding="utf-8"
+    )
+
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        repo_root=tmp_path,
+    )
+    assert result.hierarchy_manifest_path is not None
+
+    manifest = HierarchyManifest.model_validate_json(
+        result.hierarchy_manifest_path.read_text(encoding="utf-8")
+    )
+    directory_records = [
+        DirectorySummaryRecord.model_validate_json(line)
+        for line in (
+            result.hierarchy_manifest_path.parent / manifest.directory_summaries_path
+        )
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    ]
+    by_path = {item.path: item for item in directory_records}
+
+    root_rollup = by_path[Path(".")].subtree_rollup
+    src_rollup = by_path[Path("src")].subtree_rollup
+    sub_rollup = by_path[Path("src/sub")].subtree_rollup
+
+    assert root_rollup.descendant_file_count == 2
+    assert root_rollup.descendant_directory_count == 2
+    assert root_rollup.language_counts.get("python") == 2
+    assert Path("src/module.py") in root_rollup.representative_files
+    assert Path("src/sub/worker.py") in root_rollup.representative_files
+
+    assert src_rollup.descendant_file_count == 2
+    assert src_rollup.descendant_directory_count == 1
+    assert src_rollup.language_counts.get("python") == 2
+
+    assert sub_rollup.descendant_file_count == 1
+    assert sub_rollup.descendant_directory_count == 0
+    assert sub_rollup.language_counts.get("python") == 1
+
+
+def test_generate_root_directory_prompt_uses_project_level_subtree_context(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    nested_dir = src_dir / "sub"
+    nested_dir.mkdir(parents=True)
+
+    (src_dir / "module.py").write_text(
+        "def a() -> int:\n    return 1\n", encoding="utf-8"
+    )
+    (nested_dir / "worker.py").write_text(
+        "def b() -> int:\n    return 2\n", encoding="utf-8"
+    )
+
+    llm = RecordingMockLLMClient()
+    generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+    )
+
+    root_prompt = next(
+        request.user_prompt
+        for request in llm.requests
+        if request.response_model.__name__ == "_DirectorySummaryDraft"
+        and "Directory Path:\n." in request.user_prompt
+    )
+    assert "Directory Role:\nproject root" in root_prompt
+    assert "Subtree Rollup" in root_prompt
+    assert "project-level overview" in root_prompt
+    assert "src/sub/worker.py" in root_prompt
 
 
 def test_generate_progress_callback_reports_stages(

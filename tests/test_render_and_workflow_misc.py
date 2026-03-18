@@ -10,11 +10,14 @@ import pytest
 from sddraft.domain.errors import RenderingError
 from sddraft.domain.models import (
     Citation,
+    DirectorySummaryDoc,
     FileDiffSummary,
     QueryAnswer,
     SectionUpdateProposal,
+    SubtreeRollup,
     UpdateProposalReport,
 )
+from sddraft.render.hierarchy import render_directory_summary_markdown
 from sddraft.render.json_artifacts import write_json_model
 from sddraft.render.markdown import render_sdd_markdown, write_markdown
 from sddraft.render.reports import (
@@ -77,6 +80,28 @@ def test_render_report_and_query_text_paths() -> None:
     assert "Citations:" in rendered
     assert "Uncertainty:" in rendered
     assert "Missing Information:" in rendered
+
+
+def test_render_directory_summary_includes_subtree_rollup_section() -> None:
+    summary = DirectorySummaryDoc(
+        node_id="dir::src",
+        path=Path("src"),
+        summary="Source subtree summary.",
+        local_files=[Path("src/app.py")],
+        child_directories=[Path("src/sub")],
+        subtree_rollup=SubtreeRollup(
+            descendant_file_count=3,
+            descendant_directory_count=1,
+            language_counts={"python": 2, "unknown": 1},
+            key_topics=["workflow", "analysis"],
+            representative_files=[Path("src/app.py"), Path("src/sub/worker.py")],
+        ),
+    )
+    rendered = render_directory_summary_markdown(summary)
+    assert "## Subtree At A Glance" in rendered
+    assert "Descendant Files: 3" in rendered
+    assert "Language Distribution: python=2, unknown=1" in rendered
+    assert "src/sub/worker.py" in rendered
 
 
 def test_write_render_error_paths(tmp_path: Path, monkeypatch) -> None:

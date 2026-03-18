@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +27,7 @@ from sddraft.domain.models import (
     HierarchyManifest,
     HierarchyNodeRecord,
     ScanResult,
+    SubtreeRollup,
     SymbolSummary,
 )
 from sddraft.llm.base import LLMClient, StructuredGenerationRequest
@@ -69,8 +70,8 @@ class _FileSummaryDraft(BaseModel):
 class _DirectorySummaryDraft(BaseModel):
     summary: str = Field(
         description=(
-            "Concise directory summary based only on local file summaries and direct "
-            "child directory summaries."
+            "Concise recursive subtree summary for this directory based on local "
+            "file summaries, child directory summaries, and subtree rollup data."
         )
     )
     missing_information: list[str] = Field(
@@ -179,6 +180,97 @@ def _keywords(text: str, limit: int = 8) -> list[str]:
         if len(ordered) >= limit:
             break
     return ordered
+
+
+_MAX_ROLLUP_TOPICS = 16
+_MAX_REPRESENTATIVE_FILES = 12
+
+
+def _stable_unique_paths(values: list[Path], limit: int) -> list[Path]:
+    ordered: list[Path] = []
+    seen: set[str] = set()
+    for path in values:
+        key = path.as_posix()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(path)
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _stable_unique_topics(values: list[str], limit: int) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        normalized = item.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _build_subtree_rollup(
+    *,
+    local_files: list[FileSummaryRecord],
+    child_summaries: list[DirectorySummaryRecord],
+) -> SubtreeRollup:
+    language_counts: Counter[str] = Counter()
+    for file_item in local_files:
+        language_counts[file_item.language] += 1
+    for child in child_summaries:
+        language_counts.update(child.subtree_rollup.language_counts)
+
+    descendant_file_count = len(local_files) + sum(
+        child.subtree_rollup.descendant_file_count for child in child_summaries
+    )
+    descendant_directory_count = len(child_summaries) + sum(
+        child.subtree_rollup.descendant_directory_count for child in child_summaries
+    )
+
+    topic_candidates: list[str] = []
+    for file_item in local_files:
+        topic_candidates.extend(
+            _keywords(
+                " ".join(
+                    [
+                        file_item.summary,
+                        " ".join(file_item.functions),
+                        " ".join(file_item.classes),
+                        " ".join(file_item.imports),
+                    ]
+                ),
+                limit=8,
+            )
+        )
+    for child in child_summaries:
+        topic_candidates.extend(_keywords(child.summary, limit=8))
+        topic_candidates.extend(child.subtree_rollup.key_topics)
+
+    representative_candidates: list[Path] = [
+        item.path
+        for item in sorted(local_files, key=lambda value: value.path.as_posix())
+    ]
+    for child in sorted(child_summaries, key=lambda value: value.path.as_posix()):
+        representative_candidates.extend(child.subtree_rollup.representative_files)
+
+    return SubtreeRollup(
+        descendant_file_count=descendant_file_count,
+        descendant_directory_count=descendant_directory_count,
+        language_counts={
+            key: language_counts[key]
+            for key in sorted(language_counts)
+            if language_counts[key] > 0
+        },
+        key_topics=_stable_unique_topics(topic_candidates, limit=_MAX_ROLLUP_TOPICS),
+        representative_files=_stable_unique_paths(
+            representative_candidates, limit=_MAX_REPRESENTATIVE_FILES
+        ),
+    )
 
 
 def _collect_tree(
@@ -320,7 +412,7 @@ def _read_existing_records(
     except (OSError, ValueError, json.JSONDecodeError):
         return None, None
 
-    if manifest.version != "v2-stream-jsonl":
+    if manifest.version != "v3-stream-jsonl":
         return None, None
 
     return file_records, directory_records
@@ -551,10 +643,15 @@ def build_hierarchy_store(
                 child_directory_docs = [
                     _to_directory_summary_doc(item) for item in child_summaries
                 ]
+                subtree_rollup = _build_subtree_rollup(
+                    local_files=local_files,
+                    child_summaries=child_summaries,
+                )
                 system_prompt, user_prompt = build_directory_summary_prompt(
                     directory_path=directory.as_posix(),
                     local_files=local_file_docs,
                     child_directories=child_directory_docs,
+                    subtree_rollup=subtree_rollup,
                 )
                 response = llm_client.generate_structured(
                     StructuredGenerationRequest(
@@ -587,6 +684,7 @@ def build_hierarchy_store(
                     summary=summary_text,
                     local_files=[item.path for item in local_files],
                     child_directories=[item.path for item in child_summaries],
+                    subtree_rollup=subtree_rollup,
                     evidence_refs=refs,
                     missing_information=_ensure_tbd_missing(
                         summary_text,
@@ -619,11 +717,26 @@ def build_hierarchy_store(
                     path=_normalize_dir_path(dir_record.path),
                     parent_id=directory_parent_id,
                     doc_path=doc_path,
-                    abstract=dir_record.summary[:320],
+                    abstract=(
+                        f"{dir_record.summary} "
+                        f"(subtree files={dir_record.subtree_rollup.descendant_file_count}, "
+                        f"subtree directories={dir_record.subtree_rollup.descendant_directory_count})"
+                    )[:320],
                     keywords=_keywords(
                         " ".join(
                             [
                                 dir_record.summary,
+                                " ".join(dir_record.subtree_rollup.key_topics),
+                                " ".join(
+                                    f"{lang}:{count}"
+                                    for lang, count in sorted(
+                                        dir_record.subtree_rollup.language_counts.items()
+                                    )
+                                ),
+                                " ".join(
+                                    item.as_posix()
+                                    for item in dir_record.subtree_rollup.representative_files
+                                ),
                                 " ".join(
                                     item.as_posix() for item in dir_record.local_files
                                 ),
@@ -647,6 +760,7 @@ def build_hierarchy_store(
     manifest = HierarchyManifest(
         csc_id=csc_id,
         root=Path("."),
+        version="v3-stream-jsonl",
         file_summaries_path=Path(file_summaries_path.name),
         directory_summaries_path=Path(directory_summaries_path.name),
         nodes_path=Path(nodes_path.name),
