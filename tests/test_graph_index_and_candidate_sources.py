@@ -23,10 +23,14 @@ from sddraft.analysis.graph_models import (
 from sddraft.analysis.graph_retrieval import (
     AnchorSet,
     GraphExpansionCandidateSource,
+    HierarchyCandidateSource,
     LexicalCandidateSource,
+    SourceContext,
     VectorCandidateSource,
     collect_graph_candidates,
+    collect_text_candidates,
     expand_graph_neighbors,
+    flatten_text_candidates,
     infer_query_intent,
     preferred_edge_types,
     rerank_evidence,
@@ -627,3 +631,69 @@ def test_rerank_biases_documentation_and_architecture_sources() -> None:
         top_k=4,
     )
     assert architecture_rank.chunks[0].chunk_id == "dir"
+
+
+def test_collect_text_candidates_and_flatten_are_deterministic() -> None:
+    store, chunks, engine = _build_store_for_retrieval()
+    seed = chunks[0]
+    lexical_rows = LexicalCandidateSource(engine).collect_candidates(
+        SourceContext(
+            query="where is helper documented?",
+            top_k=2,
+            request_top_k=2,
+            seed_chunks=[seed],
+            lexical_scored=[],
+        )
+    )
+    lexical_scored, _, _ = flatten_text_candidates(lexical_rows)
+    context = SourceContext(
+        query="where is helper documented?",
+        top_k=2,
+        request_top_k=2,
+        seed_chunks=chunks,
+        lexical_scored=lexical_scored,
+    )
+    merged = collect_text_candidates(
+        sources=[
+            LexicalCandidateSource(engine),
+            HierarchyCandidateSource(),
+            VectorCandidateSource(),
+        ],
+        context=context,
+    )
+    lexical, hierarchy, vector = flatten_text_candidates(merged)
+    assert lexical
+    assert hierarchy
+    assert vector == []
+    # Stable merge ordering by chunk id then source.
+    assert [item.scored_chunk.chunk.chunk_id for item in merged] == sorted(
+        item.scored_chunk.chunk.chunk_id for item in merged
+    )
+
+
+def test_rerank_accepts_mixed_source_scored_chunks() -> None:
+    chunk = _chunk(
+        chunk_id="mixed",
+        source_path=Path("src/main.py"),
+        text="helper computes output",
+        source_type="code",
+    )
+    lexical = ScoredChunk(chunk=chunk, score=1.0)
+    hierarchy = ScoredChunk(chunk=chunk, score=0.0)
+    vector = ScoredChunk(chunk=chunk, score=0.0)
+    result = rerank_evidence(
+        lexical_candidates=[lexical, hierarchy, vector],
+        graph_candidates=[],
+        anchors=AnchorSet(
+            node_ids=set(),
+            file_paths=set(),
+            symbol_ids=set(),
+            symbol_labels=set(),
+            symbol_names={"helper"},
+            section_ids=set(),
+        ),
+        intent="implementation",
+        top_k=1,
+    )
+    assert result.chunks
+    assert result.reasons[0].chunk_id == "mixed"

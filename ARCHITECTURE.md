@@ -283,6 +283,9 @@ Retrieval orchestration is structured around candidate sources:
 
 This keeps current behavior stable while allowing future vector retrieval
 integration without reworking workflow interfaces.
+`ask` resolves vector settings from optional project config generation defaults
+plus CLI overrides, but vector retrieval remains disabled-by-default and
+placeholder-backed in this phase (no embedding/index backend yet).
 
 ---
 

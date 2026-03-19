@@ -21,6 +21,7 @@ from sddraft.domain.models import (
 )
 
 QueryIntent = Literal["implementation", "dependency", "documentation", "architecture"]
+TextCandidateSourceName = Literal["lexical", "hierarchy", "vector"]
 _LEXICAL_WEIGHT = 0.65
 _ANCHOR_WEIGHT = 0.20
 _GRAPH_WEIGHT = 0.15
@@ -74,14 +75,33 @@ class RerankResult:
     related_sections: list[str]
 
 
-class CandidateSource(Protocol):
-    """Pluggable candidate source (lexical, graph, vector placeholder)."""
+@dataclass(frozen=True, slots=True)
+class SourceContext:
+    """Shared retrieval source context."""
 
-    name: str
+    query: str
+    top_k: int
+    request_top_k: int
+    seed_chunks: list[KnowledgeChunk]
+    lexical_scored: list[ScoredChunk]
 
-    def collect(self, *, query: str, top_k: int) -> list[ScoredChunk]:
-        """Collect scored retrieval candidates."""
-        ...
+
+@dataclass(frozen=True, slots=True)
+class TextSourceCandidate:
+    """One scored text candidate from lexical/hierarchy/vector sources."""
+
+    source: TextCandidateSourceName
+    scored_chunk: ScoredChunk
+
+
+@dataclass(frozen=True, slots=True)
+class GraphSourceResult:
+    """Graph source result with candidates and traversal context."""
+
+    source: Literal["graph"]
+    candidates: list[GraphChunkCandidate]
+    anchors: AnchorSet
+    intent: QueryIntent
 
 
 class LexicalCandidateSource:
@@ -92,10 +112,27 @@ class LexicalCandidateSource:
     def __init__(self, engine: RetrievalQueryEngine) -> None:
         self._engine = engine
 
-    def collect(self, *, query: str, top_k: int) -> list[ScoredChunk]:
+    def collect(
+        self,
+        context: SourceContext | None = None,
+        *,
+        query: str | None = None,
+        top_k: int | None = None,
+    ) -> list[ScoredChunk]:
         """Return lexical BM25 candidates for the user query."""
-
+        if context is not None:
+            return self._engine.search_scored(context.query, top_k=context.top_k)
+        if query is None or top_k is None:
+            raise ValueError("query and top_k are required when context is omitted")
         return self._engine.search_scored(query, top_k=top_k)
+
+    def collect_candidates(self, context: SourceContext) -> list[TextSourceCandidate]:
+        """Return lexical candidates in the shared text-candidate shape."""
+
+        return [
+            TextSourceCandidate(source="lexical", scored_chunk=item)
+            for item in self.collect(context)
+        ]
 
 
 class VectorCandidateSource:
@@ -108,6 +145,22 @@ class VectorCandidateSource:
 
         _ = (query, top_k)
         return []
+
+    def collect_candidates(self, context: SourceContext) -> list[TextSourceCandidate]:
+        """Return vector candidates in the shared text-candidate shape."""
+
+        _ = context
+        return []
+
+
+class TextCandidateSource(Protocol):
+    """Shared contract for lexical/hierarchy/vector text sources."""
+
+    name: str
+
+    def collect_candidates(self, context: SourceContext) -> list[TextSourceCandidate]:
+        """Collect deterministic text candidates for this source."""
+        ...
 
 
 class GraphExpansionCandidateSource:
@@ -134,7 +187,7 @@ class GraphExpansionCandidateSource:
         query: str,
         seed_chunks: list[KnowledgeChunk],
     ) -> tuple[list[GraphChunkCandidate], AnchorSet, QueryIntent]:
-        """Expand graph neighbors from lexical seeds and return graph candidates."""
+        """Backward-compatible graph candidate collector."""
 
         return collect_graph_candidates(
             query=query,
@@ -144,6 +197,59 @@ class GraphExpansionCandidateSource:
             depth=self._depth,
             top_k=self._top_k,
         )
+
+    def collect_result(self, context: SourceContext) -> GraphSourceResult:
+        """Collect graph candidates using shared source context."""
+
+        candidates, anchors, intent = self.collect(
+            query=context.query,
+            seed_chunks=context.seed_chunks,
+        )
+        return GraphSourceResult(
+            source="graph",
+            candidates=candidates,
+            anchors=anchors,
+            intent=intent,
+        )
+
+
+class HierarchyCandidateSource:
+    """Hierarchy-expanded candidates projected into text-source candidates."""
+
+    name = "hierarchy"
+
+    def collect_candidates(self, context: SourceContext) -> list[TextSourceCandidate]:
+        """Return hierarchy-expanded seed chunks as scored hierarchy candidates."""
+
+        lexical_ids = {item.chunk.chunk_id for item in context.lexical_scored}
+        return [
+            TextSourceCandidate(
+                source="hierarchy", scored_chunk=ScoredChunk(chunk=item, score=0.0)
+            )
+            for item in context.seed_chunks
+            if item.chunk_id not in lexical_ids
+        ]
+
+
+def collect_text_candidates(
+    *,
+    sources: list[TextCandidateSource],
+    context: SourceContext,
+) -> list[TextSourceCandidate]:
+    """Collect and deterministically merge text-source candidates."""
+
+    rows: list[TextSourceCandidate] = []
+    for source in sources:
+        source_rows = source.collect_candidates(context)
+        rows.extend(source_rows)
+    rows.sort(
+        key=lambda item: (
+            item.scored_chunk.chunk.chunk_id,
+            item.source,
+            -item.scored_chunk.score,
+        )
+    )
+    return rows
 
 
 def infer_query_intent(question: str) -> QueryIntent:
@@ -787,3 +893,45 @@ def collect_graph_candidates(
         top_k=max(top_k * 2, 6),
     )
     return candidates, anchors, intent
+
+
+def flatten_text_candidates(
+    candidates: list[TextSourceCandidate],
+) -> tuple[list[ScoredChunk], list[ScoredChunk], list[ScoredChunk]]:
+    """Split merged text candidates into lexical/hierarchy/vector scored chunks."""
+
+    lexical: list[ScoredChunk] = []
+    hierarchy: list[ScoredChunk] = []
+    vector: list[ScoredChunk] = []
+    for candidate in candidates:
+        if candidate.source == "lexical":
+            lexical.append(candidate.scored_chunk)
+        elif candidate.source == "hierarchy":
+            hierarchy.append(candidate.scored_chunk)
+        else:
+            vector.append(candidate.scored_chunk)
+    lexical.sort(key=lambda item: item.chunk.chunk_id)
+    hierarchy.sort(key=lambda item: item.chunk.chunk_id)
+    vector.sort(key=lambda item: item.chunk.chunk_id)
+    seen_lexical: set[str] = set()
+    deduped_lexical: list[ScoredChunk] = []
+    for scored_item in lexical:
+        if scored_item.chunk.chunk_id in seen_lexical:
+            continue
+        seen_lexical.add(scored_item.chunk.chunk_id)
+        deduped_lexical.append(scored_item)
+    seen_hierarchy = seen_lexical.copy()
+    deduped_hierarchy: list[ScoredChunk] = []
+    for scored_item in hierarchy:
+        if scored_item.chunk.chunk_id in seen_hierarchy:
+            continue
+        seen_hierarchy.add(scored_item.chunk.chunk_id)
+        deduped_hierarchy.append(scored_item)
+    seen_vector = seen_hierarchy.copy()
+    deduped_vector: list[ScoredChunk] = []
+    for scored_item in vector:
+        if scored_item.chunk.chunk_id in seen_vector:
+            continue
+        seen_vector.add(scored_item.chunk.chunk_id)
+        deduped_vector.append(scored_item)
+    return deduped_lexical, deduped_hierarchy, deduped_vector

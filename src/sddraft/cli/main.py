@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from sddraft.analysis.retrieval import migrate_legacy_index
-from sddraft.config.loader import load_config_bundle
+from sddraft.config.loader import load_config_bundle, load_project_config
 from sddraft.domain.errors import SDDraftError
 from sddraft.domain.models import QueryRequest
 from sddraft.llm.factory import create_llm_client
@@ -58,6 +58,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
     ask_parser = subparsers.add_parser("ask")
     ask_parser.add_argument("--index-path", required=True, type=Path)
+    ask_parser.add_argument("--project-config", type=Path)
     ask_parser.add_argument("--question", type=str)
     ask_parser.add_argument("--interactive", action="store_true")
     ask_parser.add_argument("--provider", type=str, default="mock")
@@ -67,6 +68,21 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ask_parser.add_argument("--no-graph", action="store_true")
     ask_parser.add_argument("--graph-depth", type=int, choices=[1, 2], default=1)
     ask_parser.add_argument("--graph-top-k", type=int, default=12)
+    ask_parser.add_argument(
+        "--vector-enabled",
+        dest="vector_enabled",
+        action="store_const",
+        const=True,
+        default=None,
+    )
+    ask_parser.add_argument(
+        "--no-vector-enabled",
+        dest="vector_enabled",
+        action="store_const",
+        const=False,
+        default=None,
+    )
+    ask_parser.add_argument("--vector-top-k", type=int)
 
     migrate_parser = subparsers.add_parser("migrate-index")
     migrate_parser.add_argument("--index-path", required=True, type=Path)
@@ -185,6 +201,20 @@ def _run_ask(args: argparse.Namespace) -> int:
     resolved_temperature = _resolve_temperature(args.temperature, 0.2)
     if args.graph_top_k <= 0:
         raise SDDraftError("--graph-top-k must be a positive integer")
+    config_vector_enabled = False
+    config_vector_top_k = 8
+    if args.project_config is not None:
+        project = load_project_config(args.project_config)
+        config_vector_enabled = project.generation.vector_enabled
+        config_vector_top_k = project.generation.vector_top_k
+    resolved_vector_enabled = (
+        config_vector_enabled if args.vector_enabled is None else args.vector_enabled
+    )
+    resolved_vector_top_k = (
+        config_vector_top_k if args.vector_top_k is None else args.vector_top_k
+    )
+    if resolved_vector_top_k <= 0:
+        raise SDDraftError("--vector-top-k must be a positive integer")
     llm_client = create_llm_client(
         LLMConfig(
             provider=args.provider,
@@ -211,6 +241,8 @@ def _run_ask(args: argparse.Namespace) -> int:
                 graph_enabled=not args.no_graph,
                 graph_depth=args.graph_depth,
                 graph_top_k=args.graph_top_k,
+                vector_enabled=resolved_vector_enabled,
+                vector_top_k=resolved_vector_top_k,
             )
             print(render_query_answer_text(result.answer))
             history.extend([f"Q: {question}", f"A: {result.answer.answer}"])
@@ -229,6 +261,8 @@ def _run_ask(args: argparse.Namespace) -> int:
         graph_enabled=not args.no_graph,
         graph_depth=args.graph_depth,
         graph_top_k=args.graph_top_k,
+        vector_enabled=resolved_vector_enabled,
+        vector_top_k=resolved_vector_top_k,
     )
     print(render_query_answer_text(result.answer))
     return 0

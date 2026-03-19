@@ -152,20 +152,23 @@
 `Dependencies:` Phase 4.
 `Completion Criteria:` Candidate-source orchestration, config schema, and CLI placeholders are coherent and no-op when vector is disabled.
 
-- [ ] **G5-01**  
+- [x] **G5-01**  
   `Outcome:` Unify candidate-source abstraction so lexical, graph, and vector sources share an orchestration contract.  
   `Definition of Done:` Ask retrieval orchestration is source-pluggable without source-specific branching leaks.  
-  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py`
+  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py`  
+  `Result:` pass
 
-- [ ] **G5-02**  
+- [x] **G5-02**  
   `Outcome:` Thread `vector_enabled`/`vector_top_k` through ask workflow settings and CLI/config resolution paths (still disabled by default).  
   `Definition of Done:` Config and CLI parse/propagate vector placeholders without changing current default behavior.  
-  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_workflow_generate_and_ask.py`
+  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_workflow_generate_and_ask.py`  
+  `Result:` pass
 
-- [ ] **G5-03**  
+- [x] **G5-03**  
   `Outcome:` Document vector extension points in usage + architecture docs with explicit non-goals for current phase.  
   `Definition of Done:` Docs explain how to add vector source later without implying it is active now.  
-  `Verification Command(s):` `rg -n \"vector\" docs/USAGE.md ARCHITECTURE.md`
+  `Verification Command(s):` `rg -n \"vector\" docs/USAGE.md ARCHITECTURE.md`  
+  `Result:` pass
 
 ### Phase 6 — Commit-Aware Q&A Integration
 

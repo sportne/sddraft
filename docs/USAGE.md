@@ -213,6 +213,24 @@ Retrieval orchestration uses candidate-source abstractions:
 - vector candidate source (placeholder interface)
 
 Vector retrieval can be added later without rewriting the `ask` workflow contract.
+Phase 5 does not include a real embedding/vector backend yet.
+
+`ask` vector options:
+
+```bash
+sddraft ask --index-path artifacts/SDDRAFT_CORE/retrieval --question "Where is dependency resolution implemented?" --vector-enabled --vector-top-k 12
+```
+
+`ask` can also read vector defaults from project config:
+
+```bash
+sddraft ask --index-path artifacts/SDDRAFT_CORE/retrieval --project-config examples/project.yaml --question "What are the main workflows?"
+```
+
+Default resolution order:
+1. `--project-config` generation defaults (`vector_enabled`, `vector_top_k`) when provided
+2. explicit CLI overrides (`--vector-enabled`/`--no-vector-enabled`, `--vector-top-k`)
+3. fallback defaults (`False`, `8`) when no project config is supplied
 
 ## Legacy Index Migration
 

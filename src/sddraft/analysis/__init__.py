@@ -9,9 +9,14 @@ from .graph_build import build_graph_store
 from .graph_index import default_graph_manifest_path, load_graph_store
 from .graph_retrieval import (
     GraphExpansionCandidateSource,
+    HierarchyCandidateSource,
     LexicalCandidateSource,
+    SourceContext,
+    TextSourceCandidate,
     VectorCandidateSource,
     collect_graph_candidates,
+    collect_text_candidates,
+    flatten_text_candidates,
     rerank_evidence,
 )
 from .hierarchy import (
@@ -55,8 +60,13 @@ __all__ = [
     "load_graph_store",
     "LexicalCandidateSource",
     "GraphExpansionCandidateSource",
+    "HierarchyCandidateSource",
     "VectorCandidateSource",
+    "SourceContext",
+    "TextSourceCandidate",
+    "collect_text_candidates",
     "collect_graph_candidates",
+    "flatten_text_candidates",
     "rerank_evidence",
     "file_node_id",
     "directory_node_id",

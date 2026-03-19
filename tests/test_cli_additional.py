@@ -433,6 +433,90 @@ def test_cli_no_graph_and_ask_graph_flags_propagate(
     assert captured_ask[0]["graph_top_k"] == 15
 
 
+def test_cli_ask_vector_flags_and_project_config_defaults(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cli_module = importlib.import_module("sddraft.cli.main")
+    monkeypatch.setattr(
+        cli_module, "create_llm_client", lambda *args, **kwargs: object()
+    )
+
+    captured_ask: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        cli_module,
+        "answer_question",
+        lambda **kwargs: (
+            captured_ask.append(kwargs)
+            or AskResult(
+                answer=QueryAnswer(answer="A", citations=[], confidence=0.5),
+                evidence_pack=QueryEvidencePack(
+                    request=QueryRequest(question="Q"),
+                    chunks=[],
+                    citations=[],
+                ),
+            )
+        ),
+    )
+    project = _fake_bundle(tmp_path).project
+    project = project.model_copy(
+        update={
+            "generation": project.generation.model_copy(
+                update={"vector_enabled": True, "vector_top_k": 11}
+            )
+        }
+    )
+    monkeypatch.setattr(cli_module, "load_project_config", lambda *_args: project)
+
+    rc_defaulted = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--question",
+            "what changed?",
+            "--project-config",
+            str(tmp_path / "project.yaml"),
+        ]
+    )
+    assert rc_defaulted == 0
+    assert captured_ask[0]["vector_enabled"] is True
+    assert captured_ask[0]["vector_top_k"] == 11
+
+    rc_overridden = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--question",
+            "what changed?",
+            "--project-config",
+            str(tmp_path / "project.yaml"),
+            "--no-vector-enabled",
+            "--vector-top-k",
+            "4",
+        ]
+    )
+    assert rc_overridden == 0
+    assert captured_ask[1]["vector_enabled"] is False
+    assert captured_ask[1]["vector_top_k"] == 4
+
+
+def test_cli_ask_vector_top_k_validation(tmp_path: Path, capsys) -> None:
+    rc = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--question",
+            "what changed?",
+            "--vector-top-k",
+            "0",
+        ]
+    )
+    assert rc == 2
+    assert "--vector-top-k must be a positive integer" in capsys.readouterr().out
+
+
 def test_cli_migrate_index_command(tmp_path: Path) -> None:
     legacy_path = tmp_path / "retrieval_index.json"
     legacy_index = LexicalIndexer().build(

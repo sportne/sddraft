@@ -7,7 +7,13 @@ from pathlib import Path
 from sddraft.analysis.graph_index import default_graph_manifest_path, load_graph_store
 from sddraft.analysis.graph_retrieval import (
     GraphExpansionCandidateSource,
+    HierarchyCandidateSource,
     LexicalCandidateSource,
+    SourceContext,
+    TextCandidateSource,
+    VectorCandidateSource,
+    collect_text_candidates,
+    flatten_text_candidates,
     rerank_evidence,
 )
 from sddraft.analysis.hierarchy import (
@@ -17,7 +23,6 @@ from sddraft.analysis.hierarchy import (
 )
 from sddraft.analysis.metrics import RunMetricsCollector
 from sddraft.analysis.retrieval import (
-    ScoredChunk,
     open_query_engine,
     resolve_retrieval_store_path,
     to_citations,
@@ -43,6 +48,8 @@ def answer_question(
     graph_enabled: bool = True,
     graph_depth: int = 1,
     graph_top_k: int = 12,
+    vector_enabled: bool = False,
+    vector_top_k: int = 8,
 ) -> AskResult:
     """Retrieve evidence and generate a grounded structured answer."""
 
@@ -52,9 +59,19 @@ def answer_question(
     metrics_collector = RunMetricsCollector(csc_id=retrieval_root.parent.name)
     metrics_collector.start("retrieve")
     engine = open_query_engine(retrieval_root)
-    lexical_scored = LexicalCandidateSource(engine).collect(
-        query=request.question, top_k=request.top_k
+    lexical_source = LexicalCandidateSource(engine)
+    lexical_context = SourceContext(
+        query=request.question,
+        top_k=request.top_k,
+        request_top_k=request.top_k,
+        seed_chunks=[],
+        lexical_scored=[],
     )
+    lexical_candidates = collect_text_candidates(
+        sources=[lexical_source],
+        context=lexical_context,
+    )
+    lexical_scored, _, _ = flatten_text_candidates(lexical_candidates)
     primary_chunks = [item.chunk for item in lexical_scored]
     chunks = list(primary_chunks)
 
@@ -82,6 +99,7 @@ def answer_question(
             "Hierarchy store unavailable; used lexical evidence only."
         )
     graph_fallback_note: str | None = None
+    vector_fallback_note: str | None = None
     rerank_reasons = []
     related_files: list[Path] = []
     related_symbols: list[str] = []
@@ -93,30 +111,39 @@ def answer_question(
             try:
                 # Stage 3: graph expansion + reranking for richer cross-file context.
                 graph_store = load_graph_store(graph_manifest_path)
-                lexical_chunk_ids = {item.chunk.chunk_id for item in lexical_scored}
-                lexical_seed = [
-                    *lexical_scored,
-                    *[
-                        ScoredChunk(chunk=item, score=0.0)
-                        for item in chunks
-                        if item.chunk_id not in lexical_chunk_ids
-                    ],
+                text_context = SourceContext(
+                    query=request.question,
+                    top_k=max(graph_top_k, request.top_k),
+                    request_top_k=request.top_k,
+                    seed_chunks=chunks,
+                    lexical_scored=lexical_scored,
+                )
+                text_sources: list[TextCandidateSource] = [
+                    lexical_source,
+                    HierarchyCandidateSource(),
                 ]
+                if vector_enabled:
+                    text_sources.append(VectorCandidateSource())
+                text_candidates = collect_text_candidates(
+                    sources=text_sources,
+                    context=text_context,
+                )
+                lexical_seed, hierarchy_seed, vector_seed = flatten_text_candidates(
+                    text_candidates
+                )
+                combined_seed = [*lexical_seed, *hierarchy_seed, *vector_seed]
                 graph_source = GraphExpansionCandidateSource(
                     engine=engine,
                     store=graph_store,
                     depth=graph_depth,
                     top_k=max(graph_top_k, request.top_k),
                 )
-                graph_candidates, anchors, intent = graph_source.collect(
-                    query=request.question,
-                    seed_chunks=chunks,
-                )
+                graph_result = graph_source.collect_result(text_context)
                 rerank = rerank_evidence(
-                    lexical_candidates=lexical_seed,
-                    graph_candidates=graph_candidates,
-                    anchors=anchors,
-                    intent=intent,
+                    lexical_candidates=combined_seed,
+                    graph_candidates=graph_result.candidates,
+                    anchors=graph_result.anchors,
+                    intent=graph_result.intent,
                     top_k=max(graph_top_k, request.top_k),
                 )
                 chunks = rerank.chunks
@@ -124,6 +151,11 @@ def answer_question(
                 related_files = rerank.related_files
                 related_symbols = rerank.related_symbols
                 related_sections = rerank.related_sections
+                if vector_enabled and not vector_seed:
+                    vector_fallback_note = (
+                        "Vector source enabled but no vector backend is configured yet; "
+                        "used lexical/hierarchy/graph evidence only."
+                    )
             except (AnalysisError, OSError, ValueError):
                 graph_fallback_note = (
                     "Engineering graph store unavailable or unreadable; "
@@ -177,6 +209,10 @@ def answer_question(
     if graph_fallback_note and graph_fallback_note not in answer.uncertainty:
         answer = answer.model_copy(
             update={"uncertainty": [*answer.uncertainty, graph_fallback_note]}
+        )
+    if vector_fallback_note and vector_fallback_note not in answer.uncertainty:
+        answer = answer.model_copy(
+            update={"uncertainty": [*answer.uncertainty, vector_fallback_note]}
         )
 
     run_metrics_path = retrieval_root.parent / "run_metrics_ask.json"
