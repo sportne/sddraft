@@ -6,11 +6,12 @@ import argparse
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from sddraft.analysis.retrieval import migrate_legacy_index
 from sddraft.config.loader import load_config_bundle, load_project_config
 from sddraft.domain.errors import SDDraftError
-from sddraft.domain.models import QueryRequest
+from sddraft.domain.models import AskMode, QueryRequest
 from sddraft.llm.factory import create_llm_client
 from sddraft.render.reports import render_query_answer_text
 from sddraft.workflows.ask import answer_question
@@ -59,12 +60,14 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     ask_parser = subparsers.add_parser("ask")
     ask_parser.add_argument("--index-path", required=True, type=Path)
     ask_parser.add_argument("--project-config", type=Path)
+    ask_parser.add_argument("--repo-root", type=Path, default=Path("."))
     ask_parser.add_argument("--question", type=str)
     ask_parser.add_argument("--interactive", action="store_true")
     ask_parser.add_argument("--provider", type=str, default="mock")
     ask_parser.add_argument("--model", type=str, default="mock-sddraft")
     ask_parser.add_argument("--temperature", type=float, default=0.2)
     ask_parser.add_argument("--top-k", type=int, default=6)
+    ask_parser.add_argument("--mode", choices=["standard", "intensive"])
     ask_parser.add_argument("--no-graph", action="store_true")
     ask_parser.add_argument("--graph-depth", type=int, choices=[1, 2], default=1)
     ask_parser.add_argument("--graph-top-k", type=int, default=12)
@@ -83,6 +86,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
     )
     ask_parser.add_argument("--vector-top-k", type=int)
+    ask_parser.add_argument("--intensive-chunk-tokens", type=int)
+    ask_parser.add_argument("--intensive-max-selected-excerpts", type=int)
 
     migrate_parser = subparsers.add_parser("migrate-index")
     migrate_parser.add_argument("--index-path", required=True, type=Path)
@@ -203,18 +208,48 @@ def _run_ask(args: argparse.Namespace) -> int:
         raise SDDraftError("--graph-top-k must be a positive integer")
     config_vector_enabled = False
     config_vector_top_k = 8
+    config_mode = "standard"
+    config_intensive_chunk_tokens = 8192
+    config_intensive_max_selected_excerpts = 12
+    project = None
     if args.project_config is not None:
         project = load_project_config(args.project_config)
         config_vector_enabled = project.generation.vector_enabled
         config_vector_top_k = project.generation.vector_top_k
+        config_mode = project.generation.ask_mode_default
+        config_intensive_chunk_tokens = project.generation.intensive_chunk_tokens
+        config_intensive_max_selected_excerpts = (
+            project.generation.intensive_max_selected_excerpts
+        )
+    resolved_mode = cast(AskMode, args.mode or config_mode)
+    if resolved_mode == "intensive" and project is None:
+        raise SDDraftError(
+            "--mode intensive requires --project-config so repository scope is known"
+        )
     resolved_vector_enabled = (
         config_vector_enabled if args.vector_enabled is None else args.vector_enabled
     )
     resolved_vector_top_k = (
         config_vector_top_k if args.vector_top_k is None else args.vector_top_k
     )
+    resolved_intensive_chunk_tokens = (
+        config_intensive_chunk_tokens
+        if args.intensive_chunk_tokens is None
+        else args.intensive_chunk_tokens
+    )
+    resolved_intensive_max_selected_excerpts = (
+        config_intensive_max_selected_excerpts
+        if args.intensive_max_selected_excerpts is None
+        else args.intensive_max_selected_excerpts
+    )
     if resolved_vector_top_k <= 0:
         raise SDDraftError("--vector-top-k must be a positive integer")
+    if resolved_intensive_chunk_tokens <= 0:
+        raise SDDraftError("--intensive-chunk-tokens must be a positive integer")
+    if resolved_intensive_max_selected_excerpts <= 0:
+        raise SDDraftError(
+            "--intensive-max-selected-excerpts must be a positive integer"
+        )
     llm_client = create_llm_client(
         LLMConfig(
             provider=args.provider,
@@ -238,11 +273,17 @@ def _run_ask(args: argparse.Namespace) -> int:
                 llm_client=llm_client,
                 model_name=args.model,
                 temperature=resolved_temperature,
+                mode=resolved_mode,
+                project_config=project,
+                repo_root=args.repo_root.resolve(),
                 graph_enabled=not args.no_graph,
                 graph_depth=args.graph_depth,
                 graph_top_k=args.graph_top_k,
                 vector_enabled=resolved_vector_enabled,
                 vector_top_k=resolved_vector_top_k,
+                intensive_chunk_tokens=resolved_intensive_chunk_tokens,
+                intensive_max_selected_excerpts=resolved_intensive_max_selected_excerpts,
+                progress_callback=_progress,
             )
             print(render_query_answer_text(result.answer))
             history.extend([f"Q: {question}", f"A: {result.answer.answer}"])
@@ -258,11 +299,17 @@ def _run_ask(args: argparse.Namespace) -> int:
         llm_client=llm_client,
         model_name=args.model,
         temperature=resolved_temperature,
+        mode=resolved_mode,
+        project_config=project,
+        repo_root=args.repo_root.resolve(),
         graph_enabled=not args.no_graph,
         graph_depth=args.graph_depth,
         graph_top_k=args.graph_top_k,
         vector_enabled=resolved_vector_enabled,
         vector_top_k=resolved_vector_top_k,
+        intensive_chunk_tokens=resolved_intensive_chunk_tokens,
+        intensive_max_selected_excerpts=resolved_intensive_max_selected_excerpts,
+        progress_callback=_progress,
     )
     print(render_query_answer_text(result.answer))
     return 0

@@ -171,6 +171,106 @@ def test_cli_ask_interactive_and_error_path(tmp_path: Path, monkeypatch) -> None
     assert rc2 == 2
 
 
+def test_cli_ask_intensive_requires_project_config(tmp_path: Path, monkeypatch) -> None:
+    cli_module = importlib.import_module("sddraft.cli.main")
+    monkeypatch.setattr(
+        cli_module, "create_llm_client", lambda *args, **kwargs: object()
+    )
+
+    rc = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--question",
+            "What does this repo do?",
+            "--mode",
+            "intensive",
+        ]
+    )
+    assert rc == 2
+
+
+def test_cli_ask_intensive_mode_uses_config_defaults_and_cli_overrides(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cli_module = importlib.import_module("sddraft.cli.main")
+    project = ProjectConfig(
+        project_name="Example",
+        sources=SourcesConfig(roots=[tmp_path], include=["**/*.py"], exclude=[]),
+        sdd_template=tmp_path / "t.yaml",
+        llm=LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2),
+        generation=GenerationOptions(
+            max_files=10,
+            code_chunk_lines=10,
+            retrieval_top_k=3,
+            ask_mode_default="intensive",
+            intensive_chunk_tokens=128,
+            intensive_max_selected_excerpts=5,
+        ),
+        output_dir=tmp_path / "artifacts",
+    )
+    monkeypatch.setattr(cli_module, "load_project_config", lambda path: project)
+    monkeypatch.setattr(
+        cli_module, "create_llm_client", lambda *args, **kwargs: object()
+    )
+    captured_calls: list[dict[str, object]] = []
+    answer = QueryAnswer(answer="A", citations=[], confidence=0.4)
+    monkeypatch.setattr(
+        cli_module,
+        "answer_question",
+        lambda **kwargs: (
+            captured_calls.append(kwargs)
+            or AskResult(
+                answer=answer,
+                evidence_pack=QueryEvidencePack(
+                    request=QueryRequest(question="Q"), chunks=[], citations=[]
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(cli_module, "render_query_answer_text", lambda answer: "ok")
+
+    rc = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--project-config",
+            str(tmp_path / "project.yaml"),
+            "--question",
+            "What does this repo do?",
+        ]
+    )
+    assert rc == 0
+    assert captured_calls[-1]["mode"] == "intensive"
+    assert captured_calls[-1]["intensive_chunk_tokens"] == 128
+    assert captured_calls[-1]["intensive_max_selected_excerpts"] == 5
+    assert captured_calls[-1]["project_config"] == project
+
+    rc_override = main(
+        [
+            "ask",
+            "--index-path",
+            str(tmp_path / "retrieval"),
+            "--project-config",
+            str(tmp_path / "project.yaml"),
+            "--question",
+            "What does this repo do?",
+            "--mode",
+            "intensive",
+            "--intensive-chunk-tokens",
+            "256",
+            "--intensive-max-selected-excerpts",
+            "7",
+        ]
+    )
+    assert rc_override == 0
+    assert captured_calls[-1]["mode"] == "intensive"
+    assert captured_calls[-1]["intensive_chunk_tokens"] == 256
+    assert captured_calls[-1]["intensive_max_selected_excerpts"] == 7
+
+
 def test_cli_generate_and_propose_apply_runtime_overrides(
     tmp_path: Path, monkeypatch
 ) -> None:

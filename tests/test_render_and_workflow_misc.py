@@ -14,6 +14,8 @@ from sddraft.domain.models import (
     DirectorySummaryDoc,
     FileDiffSummary,
     GraphInclusionPath,
+    IntensiveCorpusChunk,
+    IntensiveCorpusSegment,
     KnowledgeChunk,
     QueryAnswer,
     QueryEvidencePack,
@@ -22,7 +24,10 @@ from sddraft.domain.models import (
     SubtreeRollup,
     UpdateProposalReport,
 )
-from sddraft.prompts.builders import build_query_prompt
+from sddraft.prompts.builders import (
+    build_intensive_screening_prompt,
+    build_query_prompt,
+)
 from sddraft.render.hierarchy import render_directory_summary_markdown
 from sddraft.render.json_artifacts import write_json_model
 from sddraft.render.markdown import render_sdd_markdown, write_markdown
@@ -149,6 +154,40 @@ def test_build_query_prompt_includes_extended_evidence_fields() -> None:
     assert "graph_paths" in prompt
     assert "compute_distance [src/module.py]" in prompt
     assert "HEAD~1..HEAD" in prompt
+
+
+def test_build_intensive_screening_prompt_includes_structured_segments() -> None:
+    chunk = IntensiveCorpusChunk(
+        chunk_id="corpus::00000",
+        token_count=12,
+        segments=[
+            IntensiveCorpusSegment(
+                source_path=Path("src/module.py"),
+                line_start=1,
+                line_end=2,
+                text="def compute_distance(x, y):\n    return x + y",
+                token_count=8,
+            ),
+            IntensiveCorpusSegment(
+                source_path=Path("src/helper.py"),
+                line_start=1,
+                line_end=1,
+                text="VALUE = 1",
+                token_count=4,
+            ),
+        ],
+    )
+
+    _, prompt = build_intensive_screening_prompt(
+        question="Where is compute_distance implemented?",
+        session_history=["Q: previous", "A: previous answer"],
+        chunk=chunk,
+    )
+    assert "Screening Input:" in prompt
+    assert '"question": "Where is compute_distance implemented?"' in prompt
+    assert '"chunk_id": "corpus::00000"' in prompt
+    assert '"source_path": "src/module.py"' in prompt
+    assert '"source_path": "src/helper.py"' in prompt
 
 
 def test_render_directory_summary_includes_subtree_rollup_section() -> None:

@@ -14,9 +14,10 @@
 - Symbol inventory is now analyzer-emitted and symbol-first (`SymbolSummary`), with deterministic owner/span metadata where available; quality remains conservative for some language-specific edge cases.
 - `imports` graph edges now use a normalized multi-language resolver (`python`, `java`, `javascript`, `typescript`, `go`, `rust`, `csharp`, `cpp`) with conservative repo-local resolution and inspectable reason metadata.
 - Graph build now supports deterministic planner decisions (`no_op`, `partial`, `full`) with manifest fingerprinting and fragment reuse in `graph/fragments/`.
-- Vector readiness is partial: placeholder vector candidate source exists, and generation config has `vector_*` fields, but no real retrieval orchestration path is wired.
-- Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates, but commit-oriented Q&A traversal is not yet intentionally tuned.
-- Docs and tests are good baseline quality, but graph schema/intents/incremental behavior are not yet documented as deeply as implementation now warrants.
+- Vector readiness is formalized but still placeholder-only: `ask` can orchestrate lexical, hierarchy, graph, and future vector sources through one contract, while the vector backend remains disabled-by-default and intentionally empty.
+- Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
+- `ask` now also supports an `intensive` mode that screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/<CSC>/ask/intensive/`.
+- Docs and tests are in strong shape through Phase 7, with the next gap now centered on making intensive ask mode and its tradeoffs explicit in the roadmap.
 
 ## 2) Guiding Principles / Scope
 
@@ -202,20 +203,48 @@
 `Dependencies:` Phases 1-6 (can start in parallel for baseline docs).
 `Completion Criteria:` Docs cover graph schema, build modes, ask flow, commit-aware behavior, and extension seams with examples.
 
-- [ ] **G7-01**  
+- [x] **G7-01**  
   `Outcome:` Expand usage docs with graph node/edge schema, stable IDs, artifact examples, and troubleshooting.  
   `Definition of Done:` `docs/USAGE.md` has a dedicated graph section with practical inspection commands.  
-  `Verification Command(s):` `rg -n \"graph/manifest|nodes.jsonl|edges.jsonl|changed_in|impacts_section\" docs/USAGE.md`
+  `Verification Command(s):` `rg -n \"graph/manifest|nodes.jsonl|edges.jsonl|changed_in|impacts_section\" docs/USAGE.md`  
+  `Result:` pass
 
-- [ ] **G7-02**  
+- [x] **G7-02**  
   `Outcome:` Expand architecture docs with graph build lifecycle (full vs incremental), ask evidence flow, and commit-aware routing.  
   `Definition of Done:` `ARCHITECTURE.md` reflects current implementation and next-step architecture boundaries.  
-  `Verification Command(s):` `rg -n \"Engineering Graph|incremental|candidate source|commit-aware\" ARCHITECTURE.md`
+  `Verification Command(s):` `rg -n \"Engineering Graph|incremental|candidate source|commit-aware\" ARCHITECTURE.md`  
+  `Result:` pass
 
-- [ ] **G7-03**  
+- [x] **G7-03**  
   `Outcome:` Add contributor notes linking TASKS roadmap phases to relevant modules/tests for pickup by future agents.  
   `Definition of Done:` Docs map each major phase to code areas and test files.  
-  `Verification Command(s):` `rg -n \"Phase 1|Phase 2|test_graph\" docs/USAGE.md docs/EXTENDING.md TASKS.md`
+  `Verification Command(s):` `rg -n \"Phase 1|Phase 2|test_graph\" docs/USAGE.md docs/EXTENDING.md TASKS.md`  
+  `Result:` pass
+
+### Phase 8 — Intensive Ask Mode (Structured Cross-File Corpus Screening)
+
+`Objective:` Add a high-compute `ask` mode that screens a deterministic whole-repo corpus before the final answer call.
+`Why:` Some questions need broader repo context than lexical/graph retrieval can cheaply surface, especially when larger-context hosted models are available.
+`Dependencies:` Phases 4-7.
+`Completion Criteria:` `ask --mode intensive` builds or reuses a structured corpus, screens each chunk through the provider abstraction, persists artifacts, and returns conservative answers when no excerpts are selected.
+
+- [x] **G8-01**  
+  `Outcome:` Add file-aware intensive corpus building with cross-file chunk packing, whole-file preservation under budget, and oversized-file splitting only when necessary.  
+  `Definition of Done:` Corpus artifacts are deterministic, reusable by fingerprint, and preserve exact file/line provenance via ordered segments.  
+  `Verification Command(s):` `pytest tests/test_intensive_corpus.py`  
+  `Result:` pass
+
+- [x] **G8-02**  
+  `Outcome:` Add structured chunk screening and final-answer orchestration for `ask --mode intensive`.  
+  `Definition of Done:` Intensive mode persists corpus/run artifacts, validates excerpt ranges against chunk segments, and returns `TBD` conservatively when screening finds nothing relevant.  
+  `Verification Command(s):` `pytest tests/test_workflow_generate_and_ask.py`  
+  `Result:` pass
+
+- [x] **G8-03**  
+  `Outcome:` Thread intensive mode through CLI/config defaults and document the public interface.  
+  `Definition of Done:` `ask` accepts `--mode`, `--repo-root`, `--intensive-chunk-tokens`, and `--intensive-max-selected-excerpts`, while `docs/USAGE.md` explains the mode and artifacts.  
+  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_render_and_workflow_misc.py && rg -n \"intensive\" docs/USAGE.md`  
+  `Result:` pass
 
 ## 4) Testing And Validation Requirements (For All Phases)
 

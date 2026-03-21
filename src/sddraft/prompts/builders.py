@@ -8,6 +8,7 @@ from sddraft.domain.models import (
     CodeUnitSummary,
     DirectorySummaryDoc,
     FileSummaryDoc,
+    IntensiveCorpusChunk,
     QueryEvidencePack,
     SectionEvidencePack,
     SubtreeRollup,
@@ -16,6 +17,7 @@ from sddraft.domain.models import (
 from sddraft.prompts.templates import (
     DIRECTORY_SUMMARY_SYSTEM_PROMPT,
     FILE_SUMMARY_SYSTEM_PROMPT,
+    INTENSIVE_SCREENING_SYSTEM_PROMPT,
     QUERY_SYSTEM_PROMPT,
     SECTION_SYSTEM_PROMPT,
     UPDATE_SYSTEM_PROMPT,
@@ -66,6 +68,21 @@ def build_query_prompt(pack: QueryEvidencePack) -> tuple[str, str]:
         f"Inclusion Reasons:\n{_json([reason.model_dump(mode='json') for reason in pack.inclusion_reasons])}\n"
     )
     return QUERY_SYSTEM_PROMPT, user_prompt
+
+
+def build_intensive_screening_prompt(
+    *,
+    question: str,
+    session_history: list[str],
+    chunk: IntensiveCorpusChunk,
+) -> tuple[str, str]:
+    """Return prompts for one intensive corpus chunk screening pass."""
+
+    user_prompt = (
+        "Screen this structured repository chunk for relevance to the question.\n"
+        f"Screening Input:\n{_json({'question': question, 'session_history': session_history, 'chunk': chunk.model_dump(mode='json')})}\n"
+    )
+    return INTENSIVE_SCREENING_SYSTEM_PROMPT, user_prompt
 
 
 def build_file_summary_prompt(

@@ -243,6 +243,46 @@ IDs are deterministic and stable for unchanged inputs.
 JavaScript/TypeScript, Go, Rust, C#, C/C++) and use conservative repo-local
 resolution. Ambiguous/external dependencies are intentionally left unresolved.
 
+The graph manifest also carries build-planning metadata for inspectability:
+
+* `planner_decision`
+* `input_fingerprint`
+* `fragment_stats`
+* `fragments_path`
+
+Graph build currently uses fragment-based composition. Canonical graph outputs
+(`nodes.jsonl`, `edges.jsonl`, `symbol_index.json`, `adjacency.json`) are the
+query-facing artifacts, while `graph/fragments/` is an internal build cache used
+to support deterministic `no_op`, `partial`, and `full` graph builds.
+
+Current fragment categories are:
+
+* `structure`
+* `file::<path>`
+* `section::<section_id>`
+* `commit::<commit_range>`
+* `misc`
+
+Graph build lifecycle:
+
+1. prepare scan, retrieval, hierarchy, section, and commit-impact inputs
+2. compute deterministic input and fragment fingerprints
+3. choose planner decision (`no_op`, `partial`, or `full`)
+4. rebuild only impacted fragments when safe
+5. compose canonical graph artifacts from all current fragments
+6. write manifest metadata describing what happened
+
+Planner decision meanings:
+
+* `no_op`: prior graph artifacts and fingerprints still match current inputs
+* `partial`: a compatible prior graph exists and only a bounded subset of fragments must be rebuilt
+* `full`: first build, incompatible prior state, corrupt/missing fragments, or unsafe partial scope
+
+The graph layer is built during both `generate` and `propose-updates`. The
+commit fragment is only present when commit-impact inputs are available, which is
+why commit-aware `ask` questions are most informative against artifacts produced
+by `propose-updates`.
+
 ---
 
 ## 3.10 Ask Retrieval Pipeline
@@ -257,9 +297,32 @@ resolution. Ambiguous/external dependencies are intentionally left unresolved.
 6. structured evidence pack assembly
 7. grounded answer generation
 
+Text-candidate orchestration is unified behind candidate-source plumbing:
+
+* lexical source
+* hierarchy source
+* graph expansion source
+* vector placeholder source
+
+Lexical retrieval remains the baseline. Hierarchy and graph sources only enrich
+that baseline; they do not replace it.
+
 Graph anchor extraction is symbol-first: related symbols come from traversed
 graph symbol nodes and symbol index lookups tied to anchor files/chunks rather
 than token sweeps over chunk text.
+
+For commit-oriented questions, intent routing also supports a dedicated
+`change_impact` path. That path can auto-anchor the single commit node in the
+graph store, prefer `changed_in` and `impacts_section` traversal, and surface
+`related_commits` in the evidence pack when commit-aware context is available.
+
+Intent-specific graph emphasis is currently:
+
+* `implementation`: `defines`, `contains`, `references`, `parent_of`
+* `dependency`: `imports`, `contains`, `defines`, `references`
+* `documentation`: `documents`, `impacts_section`, `contains`, `references`
+* `architecture`: balanced structural/documentation edges
+* `change_impact`: `changed_in`, `impacts_section`, `documents`, `contains`, `references`
 
 Re-ranking combines lexical + anchor + graph signals with explicit deterministic
 weights (`0.65 lexical`, `0.20 anchor`, `0.15 graph`) plus source-type bias.
@@ -267,6 +330,17 @@ Tie-breaks are stable by `source_path`, `line_start`, and `chunk_id`.
 
 Inclusion reasons include optional structured graph-path rationale for auditability
 (edge type, source node, target node, and traversal distance).
+
+The query evidence pack can include:
+
+* primary chunks
+* selected chunks
+* citations
+* related files
+* related symbols
+* related sections
+* related commits
+* inclusion reasons with score breakdown and graph-path rationale
 
 If hierarchy or graph artifacts are missing/corrupt, `ask` falls back to the
 available deterministic stages and adds an uncertainty note instead of failing.
@@ -286,6 +360,13 @@ integration without reworking workflow interfaces.
 `ask` resolves vector settings from optional project config generation defaults
 plus CLI overrides, but vector retrieval remains disabled-by-default and
 placeholder-backed in this phase (no embedding/index backend yet).
+
+Future extension seams:
+
+* richer symbol and dependency fidelity in `repo/` and graph build
+* additional graph-driven evidence types in `ask`
+* real vector retrieval behind the existing candidate-source abstraction
+* richer commit-to-section impact inference without changing the current file-backed graph model
 
 ---
 

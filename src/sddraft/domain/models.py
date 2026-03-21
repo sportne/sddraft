@@ -27,6 +27,8 @@ SourceLanguage = Literal[
     "unknown",
 ]
 
+AskMode = Literal["standard", "intensive"]
+
 
 class SourcesConfig(DomainModel):
     """Source selection configuration."""
@@ -85,6 +87,9 @@ class GenerationOptions(DomainModel):
     graph_top_k: int = 12
     vector_enabled: bool = False
     vector_top_k: int = 8
+    ask_mode_default: AskMode = "standard"
+    intensive_chunk_tokens: int = 8192
+    intensive_max_selected_excerpts: int = 12
 
     @field_validator(
         "max_files",
@@ -95,6 +100,8 @@ class GenerationOptions(DomainModel):
         "index_shard_size",
         "graph_top_k",
         "vector_top_k",
+        "intensive_chunk_tokens",
+        "intensive_max_selected_excerpts",
     )
     @classmethod
     def validate_positive_ints(cls, value: int) -> int:
@@ -640,7 +647,7 @@ class ChunkInclusionReason(DomainModel):
     """Score breakdown for why a chunk was selected for Q&A evidence."""
 
     chunk_id: str
-    source: Literal["lexical", "hierarchy", "graph", "vector"] = "lexical"
+    source: Literal["lexical", "hierarchy", "graph", "vector", "intensive"] = "lexical"
     lexical_score: float = 0.0
     anchor_score: float = 0.0
     graph_score: float = 0.0
@@ -672,6 +679,99 @@ class QueryRequest(DomainModel):
         if not cleaned:
             raise ValueError("question must not be empty")
         return cleaned
+
+
+class IntensiveCorpusSegment(DomainModel):
+    """One file-bounded segment inside an intensive ask corpus chunk."""
+
+    source_path: Path
+    line_start: int
+    line_end: int
+    text: str
+    token_count: int = Field(
+        ge=0,
+        description="Approximate token count for this segment using the project tokenizer.",
+    )
+
+
+class IntensiveCorpusChunk(DomainModel):
+    """Large structured chunk screened during intensive ask mode."""
+
+    chunk_id: str
+    token_count: int = Field(
+        ge=0,
+        description="Approximate total token count across all ordered segments.",
+    )
+    segments: list[IntensiveCorpusSegment] = Field(default_factory=list)
+
+
+class IntensiveCorpusManifest(DomainModel):
+    """Manifest for the persisted intensive ask corpus store."""
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    version: Literal["v1-intensive-json"] = "v1-intensive-json"
+    csc_id: str
+    corpus_fingerprint: str
+    chunk_tokens: int
+    file_count: int
+    chunk_count: int
+    chunks_path: Path
+
+
+class IntensiveScreeningExcerpt(DomainModel):
+    """One excerpt selected by chunk-level intensive screening."""
+
+    source_path: Path
+    line_start: int = Field(ge=1)
+    line_end: int = Field(ge=1)
+    reason: str
+
+
+class IntensiveChunkScreening(DomainModel):
+    """Structured relevance screening response for one corpus chunk."""
+
+    chunk_id: str
+    is_relevant: bool
+    relevance_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Model-estimated relevance of this chunk to the question.",
+    )
+    rationale: str
+    selected_excerpts: list[IntensiveScreeningExcerpt] = Field(default_factory=list)
+
+
+class IntensiveSelectedExcerpt(DomainModel):
+    """Merged and ranked excerpt retained for the final intensive answer pass."""
+
+    excerpt_id: str
+    source_path: Path
+    line_start: int = Field(ge=1)
+    line_end: int = Field(ge=1)
+    text: str
+    reason: str
+    screening_score: float = Field(ge=0.0, le=1.0)
+    source_chunk_ids: list[str] = Field(default_factory=list)
+
+
+class IntensiveRunManifest(DomainModel):
+    """Manifest for one persisted intensive ask run."""
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    version: Literal["v1-intensive-run-json"] = "v1-intensive-run-json"
+    question_hash: str
+    question: str
+    corpus_manifest_path: Path
+    screenings_path: Path
+    selected_excerpts_path: Path
+    model_name: str
+    temperature: float
+    chunk_tokens: int
+    max_selected_excerpts: int
+    total_chunks_screened: int
+    relevant_chunk_count: int
+    selected_excerpt_count: int
+    corpus_reused: bool = False
 
 
 class QueryEvidencePack(DomainModel):

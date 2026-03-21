@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sddraft.domain.models import (
@@ -219,6 +220,142 @@ def test_ask_change_impact_query_without_commit_context_stays_conservative(
     assert ask_result.answer.answer
     assert ask_result.evidence_pack.related_commits == []
     assert any(item == "TBD" for item in ask_result.answer.missing_information)
+
+
+def test_ask_intensive_mode_writes_artifacts_and_selected_evidence(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n" "    return x + y\n",
+        encoding="utf-8",
+    )
+
+    generate_result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        repo_root=tmp_path,
+    )
+    llm = MockLLMClient(
+        canned={
+            "IntensiveChunkScreening": {
+                "chunk_id": "ignored-by-workflow",
+                "is_relevant": True,
+                "relevance_score": 0.9,
+                "rationale": "The function directly answers the question.",
+                "selected_excerpts": [
+                    {
+                        "source_path": "src/module.py",
+                        "line_start": 1,
+                        "line_end": 2,
+                        "reason": "Defines compute_distance.",
+                    }
+                ],
+            }
+        }
+    )
+
+    ask_result = answer_question(
+        request=QueryRequest(
+            question="Where is compute_distance implemented?",
+            top_k=2,
+        ),
+        index_path=generate_result.retrieval_index_path,
+        llm_client=llm,
+        model_name="mock-sddraft",
+        mode="intensive",
+        project_config=sample_project_config,
+        repo_root=tmp_path,
+        intensive_chunk_tokens=64,
+        intensive_max_selected_excerpts=4,
+    )
+
+    assert ask_result.answer.answer
+    assert ask_result.evidence_pack.chunks
+    assert ask_result.evidence_pack.related_files == [Path("src/module.py")]
+    assert all(
+        item.source == "intensive"
+        for item in ask_result.evidence_pack.inclusion_reasons
+    )
+
+    intensive_root = tmp_path / "artifacts" / sample_csc.csc_id / "ask" / "intensive"
+    corpus_manifest_path = intensive_root / "corpus" / "manifest.json"
+    runs_root = intensive_root / "runs"
+    assert corpus_manifest_path.exists()
+    run_dirs = sorted(path for path in runs_root.iterdir() if path.is_dir())
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "screenings.jsonl").exists()
+    assert (run_dirs[0] / "selected_excerpts.json").exists()
+    run_manifest = json.loads(
+        (run_dirs[0] / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert run_manifest["selected_excerpt_count"] == 1
+    assert run_manifest["corpus_reused"] is False
+
+    ask_result_second = answer_question(
+        request=QueryRequest(
+            question="Where is compute_distance implemented?",
+            top_k=2,
+        ),
+        index_path=generate_result.retrieval_index_path,
+        llm_client=llm,
+        model_name="mock-sddraft",
+        mode="intensive",
+        project_config=sample_project_config,
+        repo_root=tmp_path,
+        intensive_chunk_tokens=64,
+        intensive_max_selected_excerpts=4,
+    )
+    assert ask_result_second.evidence_pack.chunks
+    run_manifest_second = json.loads(
+        (run_dirs[0] / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert run_manifest_second["corpus_reused"] is True
+
+
+def test_ask_intensive_mode_without_selected_excerpts_stays_conservative(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n" "    return x + y\n",
+        encoding="utf-8",
+    )
+
+    generate_result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=MockLLMClient(),
+        repo_root=tmp_path,
+    )
+
+    ask_result = answer_question(
+        request=QueryRequest(question="Where is telemetry persisted?", top_k=2),
+        index_path=generate_result.retrieval_index_path,
+        llm_client=MockLLMClient(),
+        model_name="mock-sddraft",
+        mode="intensive",
+        project_config=sample_project_config,
+        repo_root=tmp_path,
+        intensive_chunk_tokens=64,
+        intensive_max_selected_excerpts=4,
+    )
+
+    assert ask_result.answer.answer.startswith("TBD:")
+    assert ask_result.answer.citations == []
+    assert ask_result.evidence_pack.chunks == []
+    assert ask_result.answer.missing_information == ["TBD"]
 
 
 def test_generate_flow_honors_runtime_model_and_temperature(

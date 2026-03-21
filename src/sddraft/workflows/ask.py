@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from sddraft.analysis.graph_index import default_graph_manifest_path, load_graph_store
@@ -29,7 +30,9 @@ from sddraft.analysis.retrieval import (
 )
 from sddraft.domain.errors import AnalysisError
 from sddraft.domain.models import (
+    AskMode,
     AskResult,
+    ProjectConfig,
     QueryAnswer,
     QueryEvidencePack,
     QueryRequest,
@@ -37,6 +40,7 @@ from sddraft.domain.models import (
 from sddraft.llm.base import LLMClient, StructuredGenerationRequest
 from sddraft.prompts.builders import build_query_prompt
 from sddraft.render.json_artifacts import write_json_model
+from sddraft.workflows.intensive_ask import answer_question_intensive
 
 
 def answer_question(
@@ -45,13 +49,33 @@ def answer_question(
     llm_client: LLMClient,
     model_name: str,
     temperature: float = 0.2,
+    mode: AskMode = "standard",
+    project_config: ProjectConfig | None = None,
+    repo_root: Path | None = None,
     graph_enabled: bool = True,
     graph_depth: int = 1,
     graph_top_k: int = 12,
     vector_enabled: bool = False,
     vector_top_k: int = 8,
+    intensive_chunk_tokens: int = 8192,
+    intensive_max_selected_excerpts: int = 12,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> AskResult:
     """Retrieve evidence and generate a grounded structured answer."""
+
+    if mode == "intensive":
+        return answer_question_intensive(
+            request=request,
+            index_path=index_path,
+            project_config=project_config,
+            repo_root=repo_root,
+            llm_client=llm_client,
+            model_name=model_name,
+            temperature=temperature,
+            chunk_tokens=intensive_chunk_tokens,
+            max_selected_excerpts=intensive_max_selected_excerpts,
+            progress_callback=progress_callback,
+        )
 
     # Stage 1: always start with lexical retrieval so behavior is predictable
     # even when hierarchy/graph artifacts are missing.
