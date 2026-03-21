@@ -1,0 +1,29 @@
+csc_id: SDDRAFT_CORE
+title: EngLLM Core
+purpose: Generates and updates MIL-STD-498-style SDD documentation from repository evidence.
+
+source_roots:
+  - ../src/
+
+key_files:
+  - ../src/engllm/tools/sdd/generate.py
+  - ../src/engllm/tools/sdd/propose_updates.py
+  - ../src/engllm/tools/ask/ask.py
+  - ../src/engllm/core/repo/scanner.py
+  - ../src/engllm/core/analysis/retrieval.py
+
+provided_interfaces:
+  - engllm CLI
+  - generate_sdd workflow
+  - propose_updates workflow
+  - answer_question workflow
+
+used_interfaces:
+  - Git CLI
+  - Tree-sitter language pack
+  - LLM provider interface
+
+requirements:
+  - SPEC-4.1
+  - SPEC-4.2
+  - SPEC-4.3
