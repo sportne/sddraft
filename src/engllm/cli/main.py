@@ -413,6 +413,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Checkpoint markdown: {result.checkpoint_markdown_path}")
     if result.render_manifest_path is not None:
         print(f"Render manifest: {result.render_manifest_path}")
+    if result.validation_report_path is not None:
+        print(f"Validation report: {result.validation_report_path}")
     return 0
 
 

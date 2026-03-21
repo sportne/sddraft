@@ -456,6 +456,7 @@ Current implemented slice:
 * tool-scoped `algorithm_capsules/index.json` plus one JSON file per capsule
 * tool-scoped `dependencies.json`
 * deterministic `checkpoint.md` output plus `render_manifest.json` debug trace
+* build-integrated `validation_report.json` output for rendered checkpoint docs
 * first-parent diff semantics for merge commits
 * diff-only fallback with `observed` statuses when the previous snapshot
   artifact is unavailable
@@ -467,6 +468,8 @@ Current implemented slice:
   evidence-gated `algorithms_core_logic` / strategy-variant sections
 * deterministic final rendering driven by `section_outline.json` inclusion
   order and existing structured artifacts only
+* deterministic post-render validation with hard-error build failure and
+  warning-only quality findings
 * quarterly auto-selection still deferred
 
 ---

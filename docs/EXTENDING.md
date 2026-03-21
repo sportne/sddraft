@@ -279,7 +279,7 @@ Primary code areas for H1-H2:
 - `src/engllm/tools/history_docs/models.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1-H8:
+Primary tests for H1-H9:
 
 - `tests/test_history_docs_h1.py`
 - `tests/test_history_docs_h2.py`
@@ -289,11 +289,12 @@ Primary tests for H1-H8:
 - `tests/test_history_docs_h6.py`
 - `tests/test_history_docs_h7.py`
 - `tests/test_history_docs_h8.py`
+- `tests/test_history_docs_h9.py`
 - `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
 - `tests/test_diff_and_impact.py`
 
-Current H1-H8 behavior:
+Current H1-H9 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
@@ -336,6 +337,10 @@ Current H1-H8 behavior:
 - H8 renders deterministically from the checkpoint model, scored section
   outline, algorithm capsules, and dependency inventory
 - H8 keeps omitted optional sections out of the final Markdown
+- H9 writes `tools/history_docs/checkpoints/<checkpoint_id>/validation_report.json`
+- H9 validates final rendered artifacts rather than live repo state
+- H9 fails the build only on hard validation errors and preserves the report on
+  failure
 - quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes

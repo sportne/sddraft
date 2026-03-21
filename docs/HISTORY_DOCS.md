@@ -59,7 +59,7 @@ LLM-backed phases are still future work.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 7:
+The current implementation covers History Phases 1 through 9:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -93,6 +93,13 @@ The current implementation covers History Phases 1 through 7:
   - conservative warnings for unsupported or ambiguous manifest syntax
   - LLM-assisted two-paragraph dependency summaries
   - links back into checkpoint dependency-source concepts
+- deterministic final `checkpoint.md` rendering plus `render_manifest.json`
+  trace artifacts built only from H4-H7 structured models
+- build-integrated `validation_report.json` artifacts with:
+  - hard structural/evidence checks that fail the build after the report is
+    written
+  - soft style/quality warnings for `TBD` dependency summaries, thin algorithm
+    capsules, and release-note phrasing
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 
@@ -292,6 +299,7 @@ H1 and H2 currently implement these shared artifacts:
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/*.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint.md`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/render_manifest.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/validation_report.json`
 
 The exact file names can evolve, but the split between shared history traversal
 artifacts and tool-specific rendered/model artifacts should remain.
@@ -327,6 +335,14 @@ Current H8 behavior adds final render outputs:
   dependency summaries
 - `render_manifest.json` as the structured trace of rendered sections, source
   artifact usage, and subsection counts
+
+Current H9 behavior adds build-integrated validation output:
+
+- `validation_report.json` as the deterministic validation artifact for final
+  rendered checkpoint output
+- hard structural/evidence violations fail `engllm history-docs build` only
+  after the validation report is persisted
+- soft quality/style findings remain warnings and do not fail the build
 
 ## Major Internal Models
 

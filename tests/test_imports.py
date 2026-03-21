@@ -32,6 +32,7 @@ MODULES = (
     "engllm.tools.history_docs.render",
     "engllm.tools.history_docs.section_outline",
     "engllm.tools.history_docs.structure",
+    "engllm.tools.history_docs.validation",
     "engllm.core.hierarchy_docs",
     "engllm.tools.sdd.markdown",
     "engllm.core.render.hierarchy",

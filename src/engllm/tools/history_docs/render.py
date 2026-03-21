@@ -345,7 +345,10 @@ def _render_architectural_overview(
     if bullets:
         _bullet_list(lines, bullets)
     else:
-        _paragraph(lines, "No active subsystems were identified for this checkpoint.")
+        _paragraph(
+            lines,
+            "This checkpoint did not yield any active subsystem groupings.",
+        )
     return lines, [], [], 0
 
 
@@ -381,7 +384,10 @@ def _render_subsystems_modules(
                 lines, "No active modules are currently linked to this subsystem."
             )
     if not active_subsystems:
-        _paragraph(lines, "No active subsystems were identified for this checkpoint.")
+        _paragraph(
+            lines,
+            "This checkpoint did not yield any active subsystem groupings.",
+        )
     return lines, [], [], subheading_count
 
 
@@ -522,7 +528,7 @@ def _render_build_infrastructure(
     else:
         _paragraph(
             lines,
-            "No active build-source concepts were identified for this checkpoint.",
+            "This checkpoint did not yield any active build-source concepts.",
         )
 
     rendered_dependency_ids: list[str] = []

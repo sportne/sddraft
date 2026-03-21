@@ -349,6 +349,25 @@ def render_manifest_path(
     )
 
 
+def validation_report_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H9 validation report path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "validation_report.json"
+    )
+
+
 def write_project_config(
     path: Path,
     output_root: Path,

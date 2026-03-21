@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H8: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, and deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output.
+- `engllm history-docs build` now supports H1-H9: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output, and build-integrated `validation_report.json` quality checks that fail only on hard structural/evidence violations.
 
 ## 2) Guiding Principles / Scope
 
@@ -519,17 +519,23 @@ its own internal phases.
 `Dependencies:` History Phases 1-8.
 `Completion Criteria:` The tool has dedicated tests and validation checks for checkpoint quality, evidence coverage, and style.
 
-- [ ] **H9-01**  
-  `Outcome:` Add deterministic tests for checkpoint planning, interval analysis, and checkpoint-model persistence.  
-  `Definition of Done:` History traversal and model-building logic are testable without live LLM access.
+- [x] **H9-01**  
+  `Outcome:` Add deterministic validation-report generation for rendered checkpoint artifacts.  
+  `Definition of Done:` History-docs builds always emit `validation_report.json`, surface validation counts in the workflow result, and fail only after persisting the report when hard errors exist.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h9.py -k "validation_report_path or raises_validation_error"`  
+  `Result:` pass
 
-- [ ] **H9-02**  
-  `Outcome:` Add rendering and style checks that detect release-note phrasing and weak filler sections.  
-  `Definition of Done:` Rendered checkpoint docs are validated as standalone present-state documents.
+- [x] **H9-02**  
+  `Outcome:` Add rendering and style checks that detect release-note phrasing, section mismatches, missing artifact references, and weak filler sections.  
+  `Definition of Done:` Rendered checkpoint docs are validated as standalone present-state documents with deterministic hard-error versus soft-warning behavior.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h9.py -k "release_note or included_and_omitted or two_dependency_paragraphs"`  
+  `Result:` pass
 
-- [ ] **H9-03**  
+- [x] **H9-03**  
   `Outcome:` Add targeted quality sampling for algorithm and dependency sections.  
-  `Definition of Done:` The highest-risk sections have explicit regression coverage and review criteria.
+  `Definition of Done:` Thin algorithm capsules and `TBD` dependency summaries are explicitly reported as warnings, with regression coverage for successful and failing build paths.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h9.py tests/test_history_docs_h8.py`  
+  `Result:` pass
 
 ### History Phase 10 — Future Extensions
 

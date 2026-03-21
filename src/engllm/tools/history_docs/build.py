@@ -39,7 +39,12 @@ from engllm.core.repo.history import (
 )
 from engllm.core.repo.scanner import scan_paths
 from engllm.core.workspaces import build_workspace_context, tool_artifact_root
-from engllm.domain.errors import AnalysisError, GitError, RepositoryError
+from engllm.domain.errors import (
+    AnalysisError,
+    GitError,
+    RepositoryError,
+    ValidationError,
+)
 from engllm.domain.models import ProjectConfig
 from engllm.llm.factory import create_llm_client
 from engllm.tools.history_docs.algorithm_capsules import (
@@ -82,6 +87,10 @@ from engllm.tools.history_docs.section_outline import (
 from engllm.tools.history_docs.structure import (
     build_subsystem_candidates,
     normalize_relative_path,
+)
+from engllm.tools.history_docs.validation import (
+    validate_checkpoint_render,
+    validation_report_path,
 )
 
 ProgressCallback = Callable[[str], None]
@@ -323,7 +332,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> HistoryBuildResult:
-    """Persist checkpoint manifests plus H2-H8 history-docs artifacts."""
+    """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
 
     resolved_repo_root = repo_root.resolve()
     target_metadata = get_commit_metadata(resolved_repo_root, checkpoint_commit)
@@ -683,6 +692,31 @@ def build_history_docs_checkpoint(
     )
     write_json_model(render_manifest_artifact_path, render_manifest)
 
+    _progress(
+        progress_callback,
+        "history-docs: validating rendered checkpoint artifacts",
+    )
+    validation_report_artifact_path = validation_report_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    validation_report = validate_checkpoint_render(
+        checkpoint_dir=checkpoint_root,
+        checkpoint_model=checkpoint_model,
+        section_outline=section_outline,
+        dependency_inventory=dependency_inventory,
+        capsule_index=algorithm_capsule_index,
+        markdown=checkpoint_markdown,
+        render_manifest=render_manifest,
+    )
+    write_json_model(validation_report_artifact_path, validation_report)
+
+    if validation_report.error_count > 0:
+        raise ValidationError(
+            "History-docs validation failed with "
+            f"{validation_report.error_count} error(s); see {validation_report_artifact_path}"
+        )
+
     retired_concept_count = (
         sum(
             concept.lifecycle_status == "retired"
@@ -716,6 +750,7 @@ def build_history_docs_checkpoint(
         dependencies_artifact_path=dependencies_artifact_path,
         checkpoint_markdown_path=checkpoint_markdown_artifact_path,
         render_manifest_path=render_manifest_artifact_path,
+        validation_report_path=validation_report_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -737,4 +772,6 @@ def build_history_docs_checkpoint(
             dependency_inventory
         ),
         rendered_section_count=len(render_manifest.sections),
+        validation_error_count=validation_report.error_count,
+        validation_warning_count=validation_report.warning_count,
     )

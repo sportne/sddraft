@@ -135,6 +135,22 @@ HistorySectionSignalKind = Literal[
     "rationale_change",
     "limitations_tokens",
 ]
+HistoryValidationSeverity = Literal["error", "warning"]
+HistoryValidationCheckId = Literal[
+    "included_section_missing",
+    "omitted_section_rendered",
+    "render_manifest_mismatch",
+    "missing_source_artifact",
+    "unknown_concept_reference",
+    "unknown_dependency_reference",
+    "unknown_algorithm_capsule_reference",
+    "dependency_subsection_shape_invalid",
+    "release_note_phrase",
+    "weak_core_section",
+    "weak_optional_section",
+    "dependency_summary_tbd",
+    "algorithm_capsule_thin",
+]
 
 
 class HistoryEvidenceLink(DomainModel):
@@ -508,6 +524,31 @@ class HistoryRenderManifest(DomainModel):
     sections: list[HistoryRenderedSection] = Field(default_factory=list)
 
 
+class HistoryValidationFinding(DomainModel):
+    """One deterministic validation finding for a rendered checkpoint."""
+
+    check_id: HistoryValidationCheckId
+    severity: HistoryValidationSeverity
+    message: str
+    section_id: str | None = None
+    artifact_path: Path | None = None
+    reference: str | None = None
+    line_number: int | None = None
+
+
+class HistoryValidationReport(DomainModel):
+    """Deterministic validation report for one rendered checkpoint."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    markdown_path: Path
+    render_manifest_path: Path
+    error_count: int = 0
+    warning_count: int = 0
+    findings: list[HistoryValidationFinding] = Field(default_factory=list)
+
+
 class HistoryBuildResult(DomainModel):
     """Result for one history-docs build run."""
 
@@ -528,6 +569,7 @@ class HistoryBuildResult(DomainModel):
     dependencies_artifact_path: Path | None = None
     checkpoint_markdown_path: Path | None = None
     render_manifest_path: Path | None = None
+    validation_report_path: Path | None = None
     file_count: int = 0
     symbol_count: int = 0
     subsystem_count: int = 0
@@ -547,6 +589,8 @@ class HistoryBuildResult(DomainModel):
     dependency_warning_count: int = 0
     dependency_summary_failure_count: int = 0
     rendered_section_count: int = 0
+    validation_error_count: int = 0
+    validation_warning_count: int = 0
 
 
 __all__ = [
@@ -596,4 +640,8 @@ __all__ = [
     "HistorySubsystemConcept",
     "HistorySubsystemChangeCandidate",
     "HistorySubsystemCandidate",
+    "HistoryValidationCheckId",
+    "HistoryValidationFinding",
+    "HistoryValidationReport",
+    "HistoryValidationSeverity",
 ]
