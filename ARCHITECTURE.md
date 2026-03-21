@@ -19,6 +19,10 @@ Today it ships three tool namespaces:
 2. `engllm ask answer ...` / `engllm ask interactive` for grounded repository Q&A
 3. `engllm repo ...` for shared repository utilities such as diff inspection
 
+The next planned tool namespace is `engllm history-docs ...`, which will build
+standalone checkpoint documentation snapshots from repository history. The
+design for that tool lives in `docs/HISTORY_DOCS.md`.
+
 The system intentionally performs deterministic analysis first and LLM generation second.
 
 ---
@@ -57,7 +61,7 @@ The package is organized around a shared platform plus tool namespaces:
 * `core/`: deterministic repository analysis, graph/retrieval/hierarchy, artifact persistence, workspace helpers, and tool registration contracts
 * `llm/`: provider abstraction and concrete adapters only
 * `integrations/`: external-system capability interfaces for future repo host, issue tracker, and CI tooling
-* `prompts/`: centralized prompt namespaces split by `core`, `sdd`, and `ask`
+* `prompts/`: centralized prompt namespaces split by `core`, `sdd`, `ask`, and scaffolded future namespaces such as `history_docs`
 * `tools/`: tool-specific workflows, renderers, and canonical tool model namespaces
 * `cli/`: a thin tool-first command router
 
@@ -204,6 +208,21 @@ index migration.
 
 Tool orchestrators compose shared `core/` services but should keep heavy logic
 in reusable deterministic modules.
+
+### Planned `tools/history_docs/`
+
+The history-walk documentation tool is scaffolded but not implemented yet. It
+will combine:
+
+* checkpoint selection and history traversal
+* checkpoint snapshot analysis
+* interval delta analysis
+* structured checkpoint documentation models
+* final holistic rendering for each checkpoint
+
+Its key architectural rule is that deltas are used to improve generation
+internally, while rendered checkpoint docs remain standalone present-state
+documents rather than release notes.
 
 ---
 
@@ -384,6 +403,37 @@ Future extension seams:
 * additional graph-driven evidence types in `ask`
 * real vector retrieval behind the existing candidate-source abstraction
 * richer commit-to-section impact inference without changing the current file-backed graph model
+
+---
+
+## 3.12 Planned History-Walk Documentation Tool
+
+The planned history-walk documentation tool extends EngLLM beyond current-state
+documentation and Q&A by generating complete documentation snapshots for
+historical checkpoints such as calendar quarters.
+
+The tool should separate:
+
+* update mode: merge prior checkpoint model + current snapshot analysis + interval deltas
+* render mode: emit a complete present-state document for the checkpoint
+
+Expected reusable shared capabilities include:
+
+* checkpoint selection
+* git history traversal
+* snapshot materialization
+* interval diff analysis
+* checkpoint metadata and interval manifests
+
+Expected tool-specific capabilities include:
+
+* checkpoint documentation models
+* section-inference logic
+* algorithm capsule handling
+* holistic checkpoint rendering
+
+The detailed phased plan, artifact vocabulary, section-inclusion rules, and
+first implementation slice for this tool are defined in `docs/HISTORY_DOCS.md`.
 
 ---
 

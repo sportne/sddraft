@@ -15,10 +15,12 @@ MODULES = (
     "engllm.core.analysis.hierarchy",
     "engllm.prompts.ask.builders",
     "engllm.prompts.core.builders",
+    "engllm.prompts.history_docs",
     "engllm.prompts.sdd.builders",
     "engllm.llm.base",
     "engllm.tools.sdd.generate",
     "engllm.tools.ask.ask",
+    "engllm.tools.history_docs",
     "engllm.core.hierarchy_docs",
     "engllm.tools.sdd.markdown",
     "engllm.core.render.hierarchy",
@@ -33,3 +35,27 @@ def test_importable(module_name: str) -> None:
         sys.modules.pop(module_name.split(".", 1)[0], None)
     module = import_module(module_name)
     reload(module)
+
+
+def test_lazy_tool_package_exports() -> None:
+    for module_name in (
+        "engllm.tools.ask.ask",
+        "engllm.tools.ask",
+        "engllm.tools.sdd.generate",
+        "engllm.tools.sdd.propose_updates",
+        "engllm.tools.sdd",
+    ):
+        sys.modules.pop(module_name, None)
+
+    ask_package = import_module("engllm.tools.ask")
+    sdd_package = import_module("engllm.tools.sdd")
+
+    assert callable(ask_package.answer_question)
+    assert callable(sdd_package.generate_sdd)
+    assert callable(sdd_package.propose_updates)
+
+    with pytest.raises(AttributeError):
+        _ = ask_package.missing_export  # type: ignore[attr-defined]
+
+    with pytest.raises(AttributeError):
+        _ = sdd_package.missing_export  # type: ignore[attr-defined]

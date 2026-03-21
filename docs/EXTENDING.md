@@ -30,9 +30,11 @@ src/engllm/
   prompts/
     ask/
     core/
+    history_docs/
     sdd/
   tools/
     ask/
+    history_docs/
     repo/
     sdd/
 ```
@@ -97,6 +99,7 @@ Current tool namespaces:
 - `src/engllm/tools/sdd/`
 - `src/engllm/tools/ask/`
 - `src/engllm/tools/repo/`
+- `src/engllm/tools/history_docs/` scaffold only, not implemented yet
 
 If you add a future tool, keep its workflow, tool-specific models, and renderers
 inside `src/engllm/tools/<tool_name>/`, then register it through the CLI/tooling
@@ -256,6 +259,25 @@ Primary tests:
 - `tests/test_layer_boundaries.py`
 - `tests/test_workflow_generate_and_ask.py`
 - `tests/test_workflow_propose_updates.py`
+
+### History-Walk Documentation Track
+
+Primary design docs:
+
+- `docs/HISTORY_DOCS.md`
+- `TASKS.md`
+- `ARCHITECTURE.md`
+
+Primary existing scaffold:
+
+- `src/engllm/tools/history_docs/`
+- `src/engllm/prompts/history_docs/`
+
+Primary planned code areas for the first implementation slice:
+
+- `src/engllm/core/analysis/` for checkpoint selection and history traversal helpers
+- `src/engllm/tools/history_docs/` for orchestration and rendering
+- future `tests/test_history_*.py` modules for deterministic checkpoint, interval, and rendering behavior
 
 ## Future Tool Notes
 

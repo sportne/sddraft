@@ -1,0 +1,548 @@
+# History-Walk Documentation Tool Design
+
+This document defines the design direction for the planned history-walk
+project-documentation tool in EngLLM.
+
+The goal of the tool is to generate **holistic documentation snapshots** for a
+repository at historical checkpoints, such as every three months. Each snapshot
+should describe the project **as it existed at that point in time**.
+
+The tool uses deltas internally, but its rendered output must not read like
+release notes or a changelog.
+
+## Purpose
+
+The history-walk documentation tool exists to improve project documentation by
+reasoning over smaller windows of change instead of reconstructing a mature code
+base all at once.
+
+The tool should:
+
+- generate multiple historical checkpoint documents for one repository
+- use repo snapshots, interval commits, diffs, and prior checkpoint models as evidence
+- preserve architectural and algorithmic understanding that may fade in mature snapshots
+- produce complete, coherent, standalone docs for each checkpoint
+- stay conservative, evidence-backed, and inspectable
+
+## Non-Goals
+
+This tool is not:
+
+- a release-notes generator
+- a changelog generator
+- a delta-first renderer
+- a prose-only patching system that blindly carries text forward
+- a rigid template filler that emits weak sections by default
+- a file-by-file dependency audit
+
+Future enhancements such as diagrams, evolution timelines, and UI browsing are
+valuable, but they are not part of the initial implementation slice.
+
+## Tool Placement In EngLLM
+
+This tool should live in the EngLLM package as a first-class future tool
+namespace.
+
+Planned package placement:
+
+- `src/engllm/tools/history_docs/`: tool orchestration, tool-facing models, and rendering
+- `src/engllm/prompts/history_docs/`: history-docs-specific prompt builders and templates
+- `src/engllm/core/analysis/`: shared history traversal, checkpoint selection, snapshot analysis, delta analysis, and section-inference helpers that may later be reused by other tools
+
+Planned future CLI surface:
+
+- `engllm history-docs build`
+
+That command is not implemented yet in this planning pass.
+
+## Terminology
+
+Use these terms consistently during implementation.
+
+- `checkpoint`: one selected point in repository history that gets a full standalone documentation snapshot
+- `checkpoint window`: the commit interval between the prior checkpoint and the current checkpoint
+- `snapshot analysis`: structural analysis of the repository as it exists at the checkpoint commit
+- `interval delta analysis`: analysis of the commits and diffs inside the checkpoint window
+- `checkpoint model`: the structured internal documentation model representing the project at one checkpoint
+- `algorithm capsule`: a focused internal artifact describing one meaningful algorithm or algorithm family
+- `section plan`: the evidence-scored outline describing which sections should appear and how deep they should go
+- `render mode`: final holistic rendering of a checkpoint document
+- `update mode`: internal model-update logic that merges prior checkpoint state, current snapshot evidence, and interval deltas
+
+## Core Product Hypothesis
+
+Documentation quality can improve when the system documents a repository
+incrementally over time because smaller windows of change are easier to analyze
+accurately than reconstructing years of design history from a single mature
+snapshot.
+
+This is especially important for:
+
+- architectural decomposition that becomes implicit over time
+- algorithm introductions and reshapes
+- strategy families and variant emergence
+- dependency and build-infrastructure evolution
+- rationale clues that show up in commits, tests, and focused code windows
+
+## Rendering Philosophy
+
+Every checkpoint document must be:
+
+- standalone
+- holistic
+- coherent
+- present-state for that checkpoint
+- written as if it were the current design document at that moment
+
+Internally, the tool should reason over:
+
+- prior checkpoint docs and models
+- interval commits and diffs
+- the repo snapshot at the checkpoint
+
+Rendered output should avoid phrases such as:
+
+- "since last version"
+- "new this quarter"
+- "recently added"
+
+unless the system is explicitly generating a separate history/evolution artifact,
+which is not part of the main checkpoint document.
+
+## Section Inclusion Philosophy
+
+The final checkpoint document should use:
+
+- a stable core
+- optional evidence-driven sections
+
+### Stable core sections
+
+These are expected in most checkpoints:
+
+- Introduction
+- System Context
+- Architectural Overview
+- Subsystems and Modules
+- Interfaces
+- Algorithms and Core Logic
+- Dependencies
+- Build and Development Infrastructure
+
+### Optional evidence-driven sections
+
+These should appear only when evidence supports them:
+
+- Strategy Variants and Design Alternatives
+- Data and State Management
+- Error Handling and Robustness
+- Performance Considerations
+- Security Considerations
+- Design Notes and Rationale
+- Limitations and Constraints
+
+### Inclusion rule
+
+A section must be:
+
+- evidence-triggered
+- confidence-weighted
+- scope-bounded
+
+Implementation should support section scoring using signals such as:
+
+- structural signals
+- behavioral signals
+- historical signals
+- usage signals
+
+A weak section should be omitted rather than rendered as filler.
+
+## Dependency Documentation Rule
+
+Dependencies should come from build and package infrastructure at the checkpoint,
+not from ad hoc token matching.
+
+Each dependency subsection should have exactly two short paragraphs:
+
+1. a short paragraph describing what the dependency is and what it is generally used for
+2. a short paragraph describing what the project uses it for
+
+Dependency documentation should stay general and explanatory. It should not turn
+into a file-by-file or method-by-method usage audit.
+
+## Algorithm Documentation Rule
+
+Algorithm documentation is one of the main reasons to analyze history
+incrementally.
+
+The tool should eventually support detection and documentation of:
+
+- algorithmic modules introduced during a checkpoint window
+- major reshapes of existing algorithms
+- strategy or variant families for the same capability
+- shared abstractions among variants
+- meaningful data structures
+- execution phases
+- invariants or assumptions
+- evidence-backed tradeoff clues from code, tests, and commits
+
+To support that, the architecture should allow internal algorithm capsules that
+feed the main checkpoint model without forcing every algorithm observation
+straight into top-level prose.
+
+## Core Architecture
+
+The tool should separate **update mode** from **render mode**.
+
+### Update mode
+
+Update mode reasons over time.
+
+Responsibilities:
+
+1. select checkpoints
+2. resolve repo snapshot for the current checkpoint
+3. analyze interval commits and diffs since the prior checkpoint
+4. load the prior checkpoint model when available
+5. merge prior model + snapshot evidence + interval deltas into the current checkpoint model
+6. derive section inclusion and depth decisions
+
+### Render mode
+
+Render mode produces the final holistic document.
+
+Responsibilities:
+
+1. load the checkpoint model and section plan
+2. render a complete checkpoint document in present-state style
+3. keep optional sections evidence-bounded
+4. emit human-readable docs plus structured artifacts for inspection
+
+## Planned Artifact Layout
+
+The history-walk tool should use the EngLLM workspace split between shared
+artifacts and tool-specific artifacts.
+
+### Shared history artifacts
+
+These are reusable by future tools such as release or evolution tooling.
+
+- `artifacts/workspaces/<workspace_id>/shared/history/checkpoint_plan.json`
+- `artifacts/workspaces/<workspace_id>/shared/history/intervals.jsonl`
+- `artifacts/workspaces/<workspace_id>/shared/history/checkpoints/<checkpoint_id>/snapshot_manifest.json`
+
+### Tool-specific history-docs artifacts
+
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/manifest.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/snapshot_structural_model.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/interval_delta_model.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/section_outline.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/dependencies.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/*.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint.md`
+
+The exact file names can evolve, but the split between shared history traversal
+artifacts and tool-specific rendered/model artifacts should remain.
+
+## Major Internal Models
+
+These models are planned conceptual anchors for implementation. They do not all
+need to be coded immediately, but the design should stay aligned with them.
+
+### Repository history and checkpoint models
+
+- `CheckpointSelectionPlan`
+  - checkpoint cadence
+  - ordered checkpoint list
+  - commit resolution details
+- `CheckpointDescriptor`
+  - checkpoint id
+  - timestamp
+  - commit hash
+  - prior checkpoint reference
+- `CommitInterval`
+  - start and end checkpoint references
+  - included commits
+  - diff metadata
+
+### Snapshot and delta models
+
+- `CheckpointSnapshotModel`
+  - file inventory
+  - symbol/module inventories
+  - subsystem candidates
+  - build/dependency manifests
+  - structural summaries
+- `IntervalDeltaModel`
+  - commit classifications
+  - design-change candidates
+  - interface changes
+  - dependency changes
+  - algorithm-emergence signals
+
+### Documentation concept models
+
+- `CheckpointDocumentationModel`
+  - project concept state at one checkpoint
+  - structured references to sections and concepts
+- `SubsystemConcept`
+- `ModuleConcept`
+- `InterfaceConcept`
+- `AlgorithmConcept`
+- `StrategyVariantConcept`
+- `DependencyConcept`
+- `BuildInfrastructureConcept`
+- `SectionPlan`
+- `EvidenceLink`
+- `AlgorithmCapsule`
+
+## Recommended First Implementation Slice
+
+The first implementation slice should prove the end-to-end shape with a narrow,
+useful subset rather than attempting the full system.
+
+### First-slice scope
+
+- quarterly checkpoint selection
+- deterministic checkpoint/interval manifest generation
+- one repo snapshot analysis pass per checkpoint using existing EngLLM scanner infrastructure where practical
+- interval diff analysis using existing git/diff helpers where practical
+- a minimal checkpoint documentation model
+- rendering of a narrow but useful section set:
+  - Introduction
+  - Architectural Overview
+  - Subsystems and Modules
+  - Dependencies
+  - Build and Development Infrastructure
+
+### First-slice rationale
+
+This slice validates the main architecture without overcommitting early to the
+hardest parts, especially algorithm capsules and deep section-inference logic.
+It also creates reusable shared artifacts that later phases can enrich.
+
+## Phased Implementation Plan
+
+### Phase 0 — Concept Capture And Scaffolding
+
+Goal:
+
+- capture the concept in repo docs
+- define terms, artifact vocabulary, and non-goals
+- create initial package scaffolding for the future tool
+
+Expected outputs:
+
+- this design doc
+- `TASKS.md` history-docs roadmap
+- initial `tools/history_docs/` and `prompts/history_docs/` package skeletons
+
+### Phase 1 — Checkpoint Selection And Git History Traversal
+
+Goal:
+
+- support checkpoint selection over git history
+- map commits into checkpoint windows
+- establish deterministic checkpoint identifiers
+
+Expected capabilities:
+
+- time-based checkpoints such as every 3 months
+- initial checkpoint handling
+- interval metadata between checkpoints
+- commit resolution for each checkpoint
+
+Expected outputs:
+
+- checkpoint plan manifest
+- interval metadata artifacts
+
+### Phase 2 — Checkpoint Snapshot Analysis
+
+Goal:
+
+- analyze the repository as it exists at each checkpoint
+- identify structure, modules, interfaces, dependencies, and likely subsystems
+
+Expected capabilities:
+
+- language-aware scanning
+- symbol and module extraction
+- build and package file detection
+- dependency source identification
+- subsystem clustering heuristics
+
+Expected outputs:
+
+- checkpoint structural model
+- symbol/module inventories
+- build/dependency manifests
+
+### Phase 3 — Interval Delta Analysis
+
+Goal:
+
+- analyze commits and diffs between checkpoints to find design-meaningful changes
+
+Expected capabilities:
+
+- commit classification
+- diff classification
+- new subsystem detection
+- interface change detection
+- dependency change detection
+- algorithm/strategy emergence signals
+
+Expected outputs:
+
+- interval change model
+- commit evidence summaries
+- design-change candidates
+- algorithm candidate detections
+
+### Phase 4 — Structured Documentation Model
+
+Goal:
+
+- maintain a structured model of the project at each checkpoint
+
+Expected capabilities:
+
+- merge prior checkpoint model + current snapshot + interval deltas
+- preserve stable concepts
+- revise changed concepts
+- introduce new concepts
+- retire stale concepts conservatively
+
+Expected outputs:
+
+- checkpoint documentation model
+- evidence links between concepts and source evidence
+
+### Phase 5 — Section Inference And Inclusion Rules
+
+Goal:
+
+- determine which sections should appear and how deep they should be
+
+Expected capabilities:
+
+- evidence scoring
+- threshold-based inclusion
+- section depth selection
+- omission of weak sections
+
+Expected outputs:
+
+- section inclusion engine
+- section confidence metadata
+- section outline for each checkpoint
+
+### Phase 6 — Algorithm Knowledge Capsules
+
+Goal:
+
+- generate focused internal algorithm artifacts for meaningful algorithmic clusters
+
+Expected capabilities:
+
+- detect algorithm families
+- detect strategy variants
+- infer shared abstractions
+- capture important data structures and phases
+- preserve links back to code, tests, and commits
+
+Expected outputs:
+
+- algorithm capsule artifacts
+- links from capsules into the checkpoint model
+
+### Phase 7 — Dependency Documentation Pipeline
+
+Goal:
+
+- extract direct dependencies and document them concisely
+
+Expected capabilities:
+
+- parse build and dependency infrastructure
+- identify direct dependencies
+- classify important dependencies
+- generate the required two-paragraph summaries
+- attach dependencies to the checkpoint model
+
+Expected outputs:
+
+- dependency inventory per checkpoint
+- dependency summaries for rendering
+
+### Phase 8 — Rendering Engine
+
+Goal:
+
+- render full checkpoint docs from the structured model
+
+Expected capabilities:
+
+- present-state holistic rendering
+- stable core sections plus optional evidence-driven sections
+- avoidance of release-note framing
+- emission of Markdown plus structured debug output
+
+Expected outputs:
+
+- final checkpoint documentation files
+- optional JSON render/debug artifacts
+
+### Phase 9 — Validation And Quality Evaluation
+
+Goal:
+
+- validate that checkpoint docs stay coherent, evidence-backed, and style-correct
+
+Expected capabilities:
+
+- style validation
+- section-presence validation
+- evidence coverage checks
+- regression comparisons across checkpoints
+- focused sampling of algorithm and dependency quality
+
+Expected outputs:
+
+- deterministic tests
+- validation reports
+- quality gates for the tool
+
+### Phase 10 — Future Extensions
+
+This is not an immediate implementation phase. It captures future directions.
+
+Possible future work:
+
+- separate history/evolution reports
+- richer rationale extraction
+- diagram generation
+- deeper dependency role inference
+- checkpoint browsing UI
+- checkpoint-to-checkpoint diff views
+- confidence visualization
+
+## Long-Term Extension Points
+
+The design should leave room for:
+
+- alternate checkpoint cadences beyond calendar quarters
+- history-derived graph or traceability artifacts
+- richer rationale capture from commit messages and tests
+- reuse of checkpoint artifacts by release or review tooling
+- alternate renderers beyond Markdown
+
+## Planning Status
+
+This document is the planning baseline for the history-walk documentation tool.
+The next implementation step should be the narrow first slice described above,
+starting with checkpoint selection, interval metadata, and a minimal checkpoint
+model rather than a full history-docs engine.

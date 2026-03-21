@@ -2,6 +2,9 @@
 
 EngLLM is a deterministic repository-analysis toolkit with LLM-assisted tools on top.
 
+The next planned tool family is history-walk documentation generation, which is
+documented in [docs/HISTORY_DOCS.md](docs/HISTORY_DOCS.md).
+
 Today the repo ships three tool namespaces:
 - `engllm sdd ...`: generate and update Software Design Description artifacts
 - `engllm ask answer ...`: answer grounded repository questions with citations
@@ -47,6 +50,7 @@ For the built-in EngLLM example target, the main paths are:
 ## Documentation
 
 - Usage and operations: [docs/USAGE.md](docs/USAGE.md)
+- History-walk tool design: [docs/HISTORY_DOCS.md](docs/HISTORY_DOCS.md)
 - Extension guide: [docs/EXTENDING.md](docs/EXTENDING.md)
 - Architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
 - Product spec: [SPEC.md](SPEC.md)

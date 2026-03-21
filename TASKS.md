@@ -21,6 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
+- The planned history-walk documentation tool now has a dedicated design spec in `docs/HISTORY_DOCS.md` plus scaffolded package namespaces under `tools/history_docs/` and `prompts/history_docs/`, but no executable workflow yet.
 
 ## 2) Guiding Principles / Scope
 
@@ -274,20 +275,244 @@
   `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_layer_boundaries.py`  
   `Result:` pass
 
-## 4) Testing And Validation Requirements (For All Phases)
+## 4) History-Walk Documentation Tool Roadmap
+
+This roadmap governs the new history-walk documentation tool. It is separate
+from the completed graph/ask phases above because it is a new tool family with
+its own internal phases.
+
+### History Phase 0 — Concept Capture And Scaffolding
+
+`Objective:` Capture the product concept, define terminology, and create the minimum repo scaffolding for future implementation.
+`Why:` Later implementation work will span multiple agents and phases, so the tool needs one authoritative design baseline before deep coding starts.
+`Dependencies:` None.
+`Completion Criteria:` The tool has a dedicated design doc, explicit phase plan, initial package skeleton, and a documented first implementation slice.
+
+- [x] **H0-01**  
+  `Outcome:` Create a dedicated design document that defines purpose, non-goals, rendering philosophy, section-inclusion rules, artifacts, and major planned models.  
+  `Definition of Done:` `docs/HISTORY_DOCS.md` exists and is the canonical planning reference for the tool.  
+  `Verification Command(s):` `rg -n "History-Walk Documentation Tool Design|Section Inclusion Philosophy|Phased Implementation Plan" docs/HISTORY_DOCS.md`  
+  `Result:` pass
+
+- [x] **H0-02**  
+  `Outcome:` Fit the tool into the EngLLM architecture and contributor docs.  
+  `Definition of Done:` `ARCHITECTURE.md`, `docs/EXTENDING.md`, and `README.md` all reference the planned tool and its design location.  
+  `Verification Command(s):` `rg -n "history-docs|HISTORY_DOCS.md" README.md ARCHITECTURE.md docs/EXTENDING.md`  
+  `Result:` pass
+
+- [x] **H0-03**  
+  `Outcome:` Create initial package scaffolding for the future tool and prompt namespace.  
+  `Definition of Done:` `src/engllm/tools/history_docs/` and `src/engllm/prompts/history_docs/` exist and are importable.  
+  `Verification Command(s):` `pytest tests/test_imports.py`  
+  `Result:` pass
+
+- [x] **H0-04**  
+  `Outcome:` Define a narrow first implementation slice instead of attempting the full tool at once.  
+  `Definition of Done:` The design doc and task board both identify quarterly checkpoints + minimal checkpoint docs as the first slice.  
+  `Verification Command(s):` `rg -n "First Implementation Slice|quarterly checkpoint" docs/HISTORY_DOCS.md TASKS.md`  
+  `Result:` pass
+
+### History Phase 1 — Checkpoint Selection And Git History Traversal
+
+`Objective:` Select deterministic checkpoints and map commits into checkpoint windows.
+`Why:` Everything else depends on stable checkpoint identity and interval boundaries.
+`Dependencies:` History Phase 0.
+`Completion Criteria:` The tool can enumerate checkpoints, resolve checkpoint commits, and emit interval metadata without mutating the working tree.
+
+- [ ] **H1-01**  
+  `Outcome:` Define checkpoint cadence and identity rules, starting with quarterly checkpoints.  
+  `Definition of Done:` Checkpoint IDs, timestamps, and commit-resolution rules are deterministic and documented.
+
+- [ ] **H1-02**  
+  `Outcome:` Implement git history traversal for checkpoint and interval enumeration.  
+  `Definition of Done:` The tool can produce an ordered checkpoint plan plus commit windows between checkpoints.
+
+- [ ] **H1-03**  
+  `Outcome:` Persist checkpoint and interval manifests under shared history artifacts.  
+  `Definition of Done:` `shared/history/checkpoint_plan.json` and interval metadata artifacts are written and test-covered.
+
+### History Phase 2 — Checkpoint Snapshot Analysis
+
+`Objective:` Analyze the repository as it existed at each checkpoint.
+`Why:` The final docs must describe the checkpoint snapshot holistically, not just the deltas.
+`Dependencies:` History Phase 1.
+`Completion Criteria:` Snapshot analysis can emit structural inventories, subsystem candidates, and build/dependency source detection for a checkpoint commit.
+
+- [ ] **H2-01**  
+  `Outcome:` Materialize or inspect checkpoint snapshots without disturbing the user’s working tree.  
+  `Definition of Done:` Snapshot analysis can run against checkpoint-resolved repo state safely and deterministically.
+
+- [ ] **H2-02**  
+  `Outcome:` Reuse or adapt existing scanner infrastructure for checkpoint-specific structural analysis.  
+  `Definition of Done:` Snapshot structural models include files, symbols, module candidates, and subsystem signals.
+
+- [ ] **H2-03**  
+  `Outcome:` Detect build/package infrastructure and dependency sources at the checkpoint.  
+  `Definition of Done:` Snapshot artifacts record dependency-manifest sources such as `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, or similar files when present.
+
+### History Phase 3 — Interval Delta Analysis
+
+`Objective:` Analyze the commit window between checkpoints for design-meaningful changes.
+`Why:` Smaller change windows are the core mechanism for improving documentation quality over time.
+`Dependencies:` History Phase 1.
+`Completion Criteria:` Interval analysis produces structured change candidates rather than only raw changed-file lists.
+
+- [ ] **H3-01**  
+  `Outcome:` Classify commits and diffs for architectural, interface, algorithmic, dependency, and infrastructure signals.  
+  `Definition of Done:` Interval analysis emits typed change records instead of prose-only summaries.
+
+- [ ] **H3-02**  
+  `Outcome:` Detect candidate subsystem, interface, and dependency changes from interval evidence.  
+  `Definition of Done:` Interval artifacts include structured design-change candidates with evidence links.
+
+- [ ] **H3-03**  
+  `Outcome:` Add algorithm-emergence and strategy-variant signals without overclaiming.  
+  `Definition of Done:` The tool surfaces candidate algorithm/variant evidence conservatively for later capsule generation.
+
+### History Phase 4 — Structured Documentation Model
+
+`Objective:` Build the internal checkpoint model that represents documentation-worthy concepts at each checkpoint.
+`Why:` The tool should update structured state over time rather than patch prose directly.
+`Dependencies:` History Phases 2-3.
+`Completion Criteria:` A checkpoint model can merge prior checkpoint state, current snapshot evidence, and interval delta evidence deterministically.
+
+- [ ] **H4-01**  
+  `Outcome:` Define the first concrete checkpoint documentation models.  
+  `Definition of Done:` Initial models exist for checkpoints, subsystems/modules, dependencies, sections, and evidence links.
+
+- [ ] **H4-02**  
+  `Outcome:` Implement deterministic merge/update rules for checkpoint concepts.  
+  `Definition of Done:` Stable concepts persist, changed concepts revise cleanly, and stale concepts retire conservatively.
+
+- [ ] **H4-03**  
+  `Outcome:` Persist versioned checkpoint models and evidence links per checkpoint.  
+  `Definition of Done:` Tool artifacts include inspectable checkpoint model JSON for every built checkpoint.
+
+### History Phase 5 — Section Inference And Inclusion Rules
+
+`Objective:` Decide which sections should appear for a checkpoint and how deep they should be.
+`Why:` The rendered docs should use a stable core plus optional evidence-driven sections, not a rigid filler template.
+`Dependencies:` History Phase 4.
+`Completion Criteria:` Section plans are evidence-scored, confidence-weighted, and bounded in depth.
+
+- [ ] **H5-01**  
+  `Outcome:` Implement stable-core section planning for the first slice.  
+  `Definition of Done:` The tool can always plan Introduction, Architectural Overview, Subsystems and Modules, Dependencies, and Build/Development Infrastructure.
+
+- [ ] **H5-02**  
+  `Outcome:` Add optional-section scoring with explicit thresholds.  
+  `Definition of Done:` Optional sections appear only when evidence warrants them.
+
+- [ ] **H5-03**  
+  `Outcome:` Scale section depth using evidence strength instead of fixed prose quotas.  
+  `Definition of Done:` Section plans include confidence and depth metadata for rendering.
+
+### History Phase 6 — Algorithm Knowledge Capsules
+
+`Objective:` Create focused internal algorithm artifacts for meaningful algorithmic clusters.
+`Why:` One of the main product bets is that history windows improve algorithm documentation quality.
+`Dependencies:` History Phases 3-5.
+`Completion Criteria:` The tool can emit algorithm capsules when evidence supports them and link them back into the checkpoint model.
+
+- [ ] **H6-01**  
+  `Outcome:` Detect algorithm families and meaningful algorithm clusters conservatively.  
+  `Definition of Done:` The tool avoids labeling every changed module as an algorithm.
+
+- [ ] **H6-02**  
+  `Outcome:` Capture shared abstractions, strategy variants, data structures, phases, and assumptions when evidence exists.  
+  `Definition of Done:` Capsules preserve structured algorithm evidence rather than only prose summaries.
+
+- [ ] **H6-03**  
+  `Outcome:` Link algorithm capsules into checkpoint sections and concept models.  
+  `Definition of Done:` Final checkpoint docs can incorporate algorithm capsules without requiring every capsule to become a top-level section.
+
+### History Phase 7 — Dependency Documentation Pipeline
+
+`Objective:` Document important direct dependencies for each checkpoint.
+`Why:` Dependency infrastructure is a meaningful part of project understanding and should evolve with checkpoints.
+`Dependencies:` History Phases 2, 4, and 5.
+`Completion Criteria:` Dependencies are extracted from build/package infrastructure and rendered using the required two-short-paragraph format.
+
+- [ ] **H7-01**  
+  `Outcome:` Parse and normalize direct dependencies from build/package files.  
+  `Definition of Done:` The tool can emit a dependency inventory per checkpoint from project manifests and lockfiles where appropriate.
+
+- [ ] **H7-02**  
+  `Outcome:` Classify important dependencies for documentation inclusion.  
+  `Definition of Done:` Weak or incidental dependencies can be omitted when they would only create noise.
+
+- [ ] **H7-03**  
+  `Outcome:` Generate concise general-purpose and project-specific dependency summaries.  
+  `Definition of Done:` Each documented dependency renders as two short paragraphs, not a file-usage audit.
+
+### History Phase 8 — Rendering Engine
+
+`Objective:` Render full checkpoint docs from the structured checkpoint model.
+`Why:` The final deliverable must be a holistic design document for each checkpoint, not a patch report.
+`Dependencies:` History Phases 4-7.
+`Completion Criteria:` Each checkpoint can render to a complete present-state Markdown document plus structured debug outputs.
+
+- [ ] **H8-01**  
+  `Outcome:` Implement checkpoint document rendering from section plans and checkpoint models.  
+  `Definition of Done:` Rendered docs follow present-state, design-document style without release-note framing.
+
+- [ ] **H8-02**  
+  `Outcome:` Support stable core sections plus evidence-driven optional sections.  
+  `Definition of Done:` Omitted sections stay omitted instead of turning into boilerplate.
+
+- [ ] **H8-03**  
+  `Outcome:` Emit structured debug artifacts alongside Markdown renders.  
+  `Definition of Done:` Render inputs and outputs remain inspectable for later agent work.
+
+### History Phase 9 — Validation And Quality Evaluation
+
+`Objective:` Validate style, evidence coverage, and regression quality across checkpoints.
+`Why:` The tool must stay coherent and avoid drifting into filler, speculation, or release-note phrasing.
+`Dependencies:` History Phases 1-8.
+`Completion Criteria:` The tool has dedicated tests and validation checks for checkpoint quality, evidence coverage, and style.
+
+- [ ] **H9-01**  
+  `Outcome:` Add deterministic tests for checkpoint planning, interval analysis, and checkpoint-model persistence.  
+  `Definition of Done:` History traversal and model-building logic are testable without live LLM access.
+
+- [ ] **H9-02**  
+  `Outcome:` Add rendering and style checks that detect release-note phrasing and weak filler sections.  
+  `Definition of Done:` Rendered checkpoint docs are validated as standalone present-state documents.
+
+- [ ] **H9-03**  
+  `Outcome:` Add targeted quality sampling for algorithm and dependency sections.  
+  `Definition of Done:` The highest-risk sections have explicit regression coverage and review criteria.
+
+### History Phase 10 — Future Extensions
+
+`Objective:` Capture non-blocking future directions without mixing them into the first implementation arc.
+`Why:` The tool has a large extension surface, but the initial build should stay narrow and prove the architecture first.
+`Dependencies:` History Phases 1-9.
+`Completion Criteria:` Future work remains documented and bounded instead of leaking into the first implementation slice.
+
+- [ ] **H10-01**  
+  `Outcome:` Document optional evolution-report outputs separate from the main checkpoint docs.  
+  `Definition of Done:` Future diff/timeline views are clearly separated from the core holistic-doc workflow.
+
+- [ ] **H10-02**  
+  `Outcome:` Document future directions for richer rationale extraction, diagrams, checkpoint browsing, and confidence visualization.  
+  `Definition of Done:` Extension ideas remain explicit but non-blocking.
+
+## 5) Testing And Validation Requirements (For All Phases)
 
 - Unit tests for symbol extraction, edge construction, graph loading, traversal, and rerank math.
 - Integration tests for `generate`, `propose-updates`, and `ask` with and without graph artifacts.
 - Deterministic artifact tests for graph IDs, counts, ordering, and full-vs-incremental equivalence.
 - Regression tests for fallback behavior when hierarchy/graph artifacts are missing or corrupt.
 - Commit-aware Q&A tests that assert grounded citations and conservative TBD behavior.
+- History-docs phases should add deterministic tests for checkpoint selection, interval metadata, checkpoint-model persistence, and present-state rendering quality.
 - Quality gates required on every phase PR:
   - `ruff check src tests`
   - `mypy src`
   - `pytest -q`
   - coverage must remain `>= 90%`
 
-## 5) Nice-To-Have / Later (Non-Blocking)
+## 6) Nice-To-Have / Later (Non-Blocking)
 
 - [ ] Real embedding generation and local vector index implementation (still file-backed, deterministic build metadata).
 - [ ] Advanced cross-language semantic/call-graph inference beyond import/dependency-level relations.
@@ -295,19 +520,18 @@
 - [ ] Graph visualization/export tooling for artifact inspection (CLI report or static visualization).
 - [ ] Optional benchmark harness for large mixed-language repos with memory/runtime trend reporting.
 
-## 6) Future Tool Tracks (Planned, Not Implemented Yet)
+## 7) Future Tool Tracks (Planned, Not Implemented Yet)
 
 - [ ] CI log summarizer built on shared repo analysis plus `CiLogClient` integrations.
 - [ ] Code review automation built on `RepoHostClient` and `IssueTrackerClient`, with vendor adapters such as Atlassian and GitLab living behind those interfaces.
 - [ ] Release-note generation from commit ranges with optional issue-enrichment support.
-- [ ] History-walk documentation generation that mines repository evolution over time instead of only the current snapshot.
 
-## 7) Historical Completed Milestones (Preserved)
+## 8) Historical Completed Milestones (Preserved)
 
 - [x] **T-001..T-006** v1 hardening baseline (task board, CLI override parity, error handling, regression coverage).
 - [x] **T-007..T-010** v1 acceptance-proofing baseline (extensibility docs, Gemini optional dependency/docs, acceptance tests, quality gate pass).
 - [x] Graph baseline implemented: graph artifacts + ask graph augmentation + deterministic reranking + CLI graph flags + fallback behavior.
 
-## 8) Blocked
+## 9) Blocked
 
 - [ ] None currently.
