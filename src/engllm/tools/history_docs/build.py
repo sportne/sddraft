@@ -84,6 +84,10 @@ from engllm.tools.history_docs.section_outline import (
     build_section_outline,
     section_outline_path,
 )
+from engllm.tools.history_docs.semantic_planner import (
+    build_semantic_checkpoint_plan,
+    semantic_checkpoint_plan_path,
+)
 from engllm.tools.history_docs.structure import (
     build_subsystem_candidates,
     normalize_relative_path,
@@ -440,6 +444,29 @@ def build_history_docs_checkpoint(
     save_checkpoint_plan(normalized_plan, checkpoint_plan_path)
     save_intervals(ordered_intervals, intervals_path)
 
+    llm_client = create_llm_client(project_config.llm)
+
+    _progress(
+        progress_callback,
+        "history-docs: planning semantic checkpoint candidates",
+    )
+    semantic_plan = build_semantic_checkpoint_plan(
+        repo_root=resolved_repo_root,
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        configured_source_roots=project_config.sources.roots,
+        checkpoints=normalized_plan.checkpoints,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    semantic_plan_artifact_path = semantic_checkpoint_plan_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    write_json_model(semantic_plan_artifact_path, semantic_plan)
+
     _progress(
         progress_callback,
         "history-docs: exporting checkpoint snapshot and analyzing structure",
@@ -643,7 +670,6 @@ def build_history_docs_checkpoint(
         progress_callback,
         "history-docs: documenting direct dependencies",
     )
-    llm_client = create_llm_client(project_config.llm)
     dependency_inventory = build_dependency_inventory(
         repo_root=resolved_repo_root,
         checkpoint_id=checkpoint_id,
@@ -741,6 +767,7 @@ def build_history_docs_checkpoint(
         commit_count=len(interval_commits),
         checkpoint_plan_path=checkpoint_plan_path,
         intervals_path=intervals_path,
+        semantic_checkpoint_plan_path=semantic_plan_artifact_path,
         snapshot_manifest_path=snapshot_manifest_path,
         snapshot_structural_model_path=snapshot_structural_model_path,
         interval_delta_model_path=interval_delta_path,
@@ -755,6 +782,12 @@ def build_history_docs_checkpoint(
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
         build_source_count=len(build_sources),
+        semantic_candidate_count=len(semantic_plan.candidates),
+        semantic_primary_candidate_count=sum(
+            candidate.recommendation == "primary"
+            for candidate in semantic_plan.candidates
+        ),
+        semantic_planner_status=semantic_plan.evaluation_status,
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
         interface_change_count=len(interval_delta_model.interface_changes),
         dependency_change_count=len(interval_delta_model.dependency_changes),

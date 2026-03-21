@@ -258,6 +258,34 @@ Primary tests:
 - `tests/test_cli.py`
 - `tests/test_cli_additional.py`
 - `tests/test_imports.py`
+
+### Phase 10 — History-Docs Benchmark Harness
+
+Primary code areas:
+
+- `src/engllm/tools/history_docs/benchmark.py`
+- `src/engllm/prompts/history_docs/builders.py`
+- `src/engllm/prompts/history_docs/templates.py`
+
+Primary tests:
+
+- `tests/test_history_docs_h10.py`
+- `tests/test_imports.py`
+
+### Phase 11 — Semantic Checkpoint Planning
+
+Primary code areas:
+
+- `src/engllm/tools/history_docs/semantic_planner.py`
+- `src/engllm/core/repo/history.py`
+- `src/engllm/prompts/history_docs/builders.py`
+- `src/engllm/prompts/history_docs/templates.py`
+- `src/engllm/tools/history_docs/build.py`
+
+Primary tests:
+
+- `tests/test_history_docs_h11.py`
+- `tests/test_imports.py`
 - `tests/test_layer_boundaries.py`
 - `tests/test_workflow_generate_and_ask.py`
 - `tests/test_workflow_propose_updates.py`

@@ -145,6 +145,48 @@ def iter_interval_commits(
     return commits
 
 
+def iter_first_parent_commits(
+    repo_root: Path,
+    *,
+    target_commit: str,
+    previous_commit: str | None = None,
+) -> list[GitCommitSummary]:
+    """Return chronological first-parent commit summaries up to one target."""
+
+    args = [
+        "log",
+        "--format=%H%x00%h%x00%cI%x00%s",
+        "--reverse",
+        "--topo-order",
+        "--first-parent",
+    ]
+    if previous_commit is None:
+        args.append(target_commit)
+    else:
+        args.append(f"{previous_commit}..{target_commit}")
+
+    output = _run_git(repo_root, *args)
+    if not output:
+        return []
+
+    commits: list[GitCommitSummary] = []
+    for line in output.splitlines():
+        fields = line.split("\x00")
+        if len(fields) != 4:
+            raise GitError(
+                "Unexpected git log payload while building first-parent commits"
+            )
+        commits.append(
+            GitCommitSummary(
+                sha=fields[0],
+                short_sha=fields[1],
+                timestamp=fields[2],
+                subject=fields[3],
+            )
+        )
+    return commits
+
+
 def export_commit_snapshot(
     repo_root: Path,
     *,
@@ -225,6 +267,58 @@ def read_file_at_commit(
             f"git show failed for {file_path.as_posix()} at {rev}: {message}"
         ) from exc
     return result.stdout.decode("utf-8")
+
+
+def get_commit_parents(repo_root: Path, rev: str) -> list[str]:
+    """Return the parent commit SHAs for one commit."""
+
+    commit_sha = resolve_commit(repo_root, rev)
+    payload = _run_git(repo_root, "rev-list", "--parents", "-n", "1", commit_sha)
+    fields = payload.split()
+    if not fields or fields[0] != commit_sha:
+        raise GitError(f"Unexpected parent payload for revision {rev!r}")
+    return fields[1:]
+
+
+def list_reachable_tags_by_commit(
+    repo_root: Path,
+    *,
+    target_commit: str,
+    commit_shas: list[str],
+) -> dict[str, list[str]]:
+    """Return reachable tag names keyed by commit SHA on the analyzed history."""
+
+    commit_set = set(commit_shas)
+    tag_output = _run_git(repo_root, "tag", "--merged", target_commit)
+    if not tag_output:
+        return {}
+
+    tags_by_commit: dict[str, list[str]] = {}
+    for tag_name in sorted(tag_output.splitlines()):
+        if not tag_name:
+            continue
+        tag_commit = resolve_commit(repo_root, tag_name)
+        if tag_commit not in commit_set:
+            continue
+        tags_by_commit.setdefault(tag_commit, []).append(tag_name)
+    return {key: sorted(value) for key, value in tags_by_commit.items()}
+
+
+def list_tree_paths_at_commit(
+    repo_root: Path,
+    rev: str,
+    *,
+    prefix: Path | None = None,
+) -> list[Path]:
+    """Return tracked file paths at one commit, optionally filtered by prefix."""
+
+    args = ["ls-tree", "-r", "--name-only", rev]
+    if prefix is not None:
+        args.extend(["--", prefix.as_posix()])
+    output = _run_git(repo_root, *args)
+    if not output:
+        return []
+    return sorted(Path(line) for line in output.splitlines() if line)
 
 
 def describe_commit_diff(repo_root: Path, rev: str) -> GitCommitDiffSpec:

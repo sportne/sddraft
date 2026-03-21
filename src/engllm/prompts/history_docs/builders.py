@@ -7,6 +7,7 @@ import json
 from engllm.prompts.history_docs.templates import (
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
+    SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT,
 )
 from engllm.tools.history_docs.models import (
     HistoryCheckpointModel,
@@ -87,3 +88,23 @@ def build_history_docs_quality_judge_prompt(
         f"{markdown}\n"
     )
     return HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT, user_prompt
+
+
+def build_semantic_checkpoint_planner_prompt(
+    *,
+    checkpoint_id: str,
+    target_commit: str,
+    previous_checkpoint_commit: str | None,
+    built_checkpoints: list[dict[str, object]],
+    candidates: list[dict[str, object]],
+) -> tuple[str, str]:
+    """Return prompts for one H11 semantic checkpoint-planning request."""
+
+    user_prompt = (
+        "Recommend meaningful semantic checkpoint anchors using only the supplied "
+        "candidate commits.\n"
+        f"Checkpoint Context:\n{_json({'checkpoint_id': checkpoint_id, 'target_commit': target_commit, 'previous_checkpoint_commit': previous_checkpoint_commit})}\n"
+        f"Existing Built Checkpoints:\n{_json(built_checkpoints)}\n"
+        f"Deterministic Candidate Commits:\n{_json(candidates)}\n"
+    )
+    return SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT, user_prompt

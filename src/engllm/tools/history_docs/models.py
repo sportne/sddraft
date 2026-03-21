@@ -152,6 +152,21 @@ HistoryValidationCheckId = Literal[
     "dependency_summary_tbd",
     "algorithm_capsule_thin",
 ]
+HistorySemanticCheckpointSignalKind = Literal[
+    "tag_anchor",
+    "interface_shift",
+    "dependency_shift",
+    "build_shift",
+    "broad_change",
+    "new_top_level_area",
+    "merge_anchor",
+]
+HistorySemanticCheckpointRecommendation = Literal["primary", "supporting", "skip"]
+HistorySemanticCheckpointEvaluationStatus = Literal[
+    "scored",
+    "heuristic_only",
+    "llm_failed",
+]
 HistoryDocsBenchmarkFocusTag = Literal[
     "small",
     "medium",
@@ -574,6 +589,64 @@ class HistoryValidationReport(DomainModel):
     findings: list[HistoryValidationFinding] = Field(default_factory=list)
 
 
+class HistorySemanticCheckpointCandidate(DomainModel):
+    """Advisory checkpoint candidate derived from first-parent history signals."""
+
+    commit: HistoryCommitSummary
+    window_start_commit: str | None = None
+    window_commit_count: int = 0
+    tag_names: list[str] = Field(default_factory=list)
+    top_level_areas: list[str] = Field(default_factory=list)
+    change_kinds: list[str] = Field(default_factory=list)
+    signal_kinds: list[HistorySemanticCheckpointSignalKind] = Field(
+        default_factory=list
+    )
+    heuristic_score: int = 0
+    recommendation: HistorySemanticCheckpointRecommendation
+    semantic_title: str
+    rationale: str
+    uncertainty: str | None = None
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySemanticCheckpointPlan(DomainModel):
+    """Checkpoint-scoped semantic planning artifact for one target commit."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistorySemanticCheckpointEvaluationStatus
+    current_target_recommended: bool = False
+    candidates: list[HistorySemanticCheckpointCandidate] = Field(default_factory=list)
+
+
+class HistorySemanticCheckpointJudgment(DomainModel):
+    """Structured planner judgment for one deterministic candidate commit."""
+
+    candidate_commit_id: str
+    recommendation: HistorySemanticCheckpointRecommendation
+    semantic_title: str
+    rationale: str
+    uncertainty: str | None = None
+
+
+class HistorySemanticCheckpointJudgmentBatch(DomainModel):
+    """Validated semantic-planner response across candidate commits."""
+
+    judgments: list[HistorySemanticCheckpointJudgment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_candidate_ids(
+        self,
+    ) -> HistorySemanticCheckpointJudgmentBatch:
+        """Reject duplicate planner judgments for the same candidate commit."""
+
+        candidate_ids = [judgment.candidate_commit_id for judgment in self.judgments]
+        if len(candidate_ids) != len(set(candidate_ids)):
+            raise ValueError("judgments must not repeat candidate_commit_id values")
+        return self
+
+
 def _validate_rubric_scores(
     scores: list[HistoryDocsRubricScore],
 ) -> list[HistoryDocsRubricScore]:
@@ -736,6 +809,7 @@ class HistoryBuildResult(DomainModel):
     commit_count: int
     checkpoint_plan_path: Path
     intervals_path: Path
+    semantic_checkpoint_plan_path: Path | None = None
     snapshot_manifest_path: Path | None = None
     snapshot_structural_model_path: Path | None = None
     interval_delta_model_path: Path | None = None
@@ -750,6 +824,9 @@ class HistoryBuildResult(DomainModel):
     symbol_count: int = 0
     subsystem_count: int = 0
     build_source_count: int = 0
+    semantic_candidate_count: int = 0
+    semantic_primary_candidate_count: int = 0
+    semantic_planner_status: HistorySemanticCheckpointEvaluationStatus | None = None
     subsystem_change_count: int = 0
     interface_change_count: int = 0
     dependency_change_count: int = 0
@@ -816,6 +893,13 @@ __all__ = [
     "HistoryModuleConcept",
     "HistoryRenderManifest",
     "HistoryRenderedSection",
+    "HistorySemanticCheckpointCandidate",
+    "HistorySemanticCheckpointEvaluationStatus",
+    "HistorySemanticCheckpointJudgment",
+    "HistorySemanticCheckpointJudgmentBatch",
+    "HistorySemanticCheckpointPlan",
+    "HistorySemanticCheckpointRecommendation",
+    "HistorySemanticCheckpointSignalKind",
     "HistorySectionDepth",
     "HistorySectionId",
     "HistorySectionKind",

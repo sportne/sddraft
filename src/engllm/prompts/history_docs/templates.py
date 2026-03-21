@@ -40,3 +40,19 @@ Set tbd_overuse to true only when TBD appears often enough to materially weaken
 the document.
 Return valid JSON that matches the provided schema.
 """.strip()
+
+SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT = """
+You are evaluating candidate git commits as possible semantic documentation
+checkpoint anchors.
+Use only the structured evidence provided in the user prompt.
+You may classify and summarize only the listed candidate commits. Do not invent new commits, tags, or history events.
+For each judgment you return:
+- candidate_commit_id must match one listed candidate commit SHA exactly
+- recommendation must be one of: primary, supporting, skip
+- semantic_title should be short and descriptive
+- rationale should explain why the commit is or is not a meaningful checkpoint
+- uncertainty should be brief and conservative when evidence is limited
+Prefer primary recommendations for commits that look like meaningful semantic
+milestones rather than routine edits.
+Return valid JSON that matches the provided schema.
+""".strip()

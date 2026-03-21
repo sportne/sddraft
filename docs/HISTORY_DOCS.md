@@ -52,19 +52,26 @@ Planned future CLI surface:
 
 - `engllm history-docs build`
 
-History Phases 1 through 9 now implement that command end to end, from
-single-checkpoint traversal through final rendered checkpoint Markdown and
-build-integrated validation. H10 adds an internal benchmark and evaluation
-harness around those rendered artifacts while keeping the public CLI unchanged.
+History Phases 1 through 11-01 now implement that command end to end, from
+single-checkpoint traversal through semantic checkpoint advisories, final
+rendered checkpoint Markdown, and build-integrated validation. H10 adds an
+internal benchmark and evaluation harness around those rendered artifacts while
+keeping the public CLI unchanged.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 10:
+The current implementation covers History Phases 1 through 11-01:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
 - artifact-derived previous-checkpoint lookup using the latest valid ancestor
 - shared checkpoint and interval manifests under `shared/history/`
+- checkpoint-scoped `semantic_checkpoint_plan.json` artifacts with:
+  - first-parent ancestry analysis up to the requested target commit
+  - deterministic candidate detection from tags, interface/dependency shifts,
+    build-manifest changes, broad changes, new top-level areas, and merge anchors
+  - one structured LLM planning pass over the bounded candidate set
+  - heuristic fallback when planner generation fails or returns no judgments
 - temporary checkpoint snapshot export via `git archive` into a disposable temp
   directory
 - structural scanning of the checkpoint snapshot without mutating the user's
@@ -110,7 +117,9 @@ The current implementation covers History Phases 1 through 10:
     per-case results and coverage tags while leaving `engllm history-docs build`
     unchanged
 
-Quarterly checkpoint auto-selection is still deferred to a later phase.
+Quarterly checkpoint auto-selection is still deferred. H11-01 keeps the
+explicit target commit authoritative and uses the semantic checkpoint plan as
+an advisory artifact only.
 
 ## Terminology
 

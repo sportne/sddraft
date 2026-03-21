@@ -395,6 +395,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
     )
     print(f"Checkpoint plan: {result.checkpoint_plan_path}")
     print(f"Intervals: {result.intervals_path}")
+    if result.semantic_checkpoint_plan_path is not None:
+        print(f"Semantic checkpoint plan: {result.semantic_checkpoint_plan_path}")
     if result.snapshot_manifest_path is not None:
         print(f"Snapshot manifest: {result.snapshot_manifest_path}")
     if result.snapshot_structural_model_path is not None:
