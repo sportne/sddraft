@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sddraft.analysis.commit_impact import build_commit_impact
-from sddraft.repo.diff_parser import parse_diff
+from engllm.core.analysis.commit_impact import build_commit_impact
+from engllm.core.repo.diff_parser import parse_diff
 
 
 def test_parse_diff_and_build_impact() -> None:

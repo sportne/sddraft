@@ -8,18 +8,21 @@ from importlib import import_module, reload
 import pytest
 
 MODULES = (
-    "sddraft",
-    "sddraft.config.loader",
-    "sddraft.repo.scanner",
-    "sddraft.analysis.retrieval",
-    "sddraft.analysis.hierarchy",
-    "sddraft.prompts.builders",
-    "sddraft.llm.base",
-    "sddraft.workflows.generate",
-    "sddraft.workflows.hierarchy_docs",
-    "sddraft.render.markdown",
-    "sddraft.render.hierarchy",
-    "sddraft.cli.main",
+    "engllm",
+    "engllm.core.config.loader",
+    "engllm.core.repo.scanner",
+    "engllm.core.analysis.retrieval",
+    "engllm.core.analysis.hierarchy",
+    "engllm.prompts.ask.builders",
+    "engllm.prompts.core.builders",
+    "engllm.prompts.sdd.builders",
+    "engllm.llm.base",
+    "engllm.tools.sdd.generate",
+    "engllm.tools.ask.ask",
+    "engllm.core.hierarchy_docs",
+    "engllm.tools.sdd.markdown",
+    "engllm.core.render.hierarchy",
+    "engllm.cli.main",
 )
 
 

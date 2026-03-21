@@ -1,35 +1,119 @@
-# Extending SDDraft
+# Extending EngLLM
 
-This guide describes how to add new capabilities while preserving SDDraft
-architecture boundaries, and how to pick up the current roadmap safely.
+This guide is the contributor handoff document for EngLLM. It explains where new
+work should live, which boundaries matter, and which modules and tests are most
+important for each roadmap phase.
 
 ## Design Rules To Preserve
 
-- Keep provider-specific code in `src/sddraft/llm/` only.
-- Keep repository logic out of workflows and renderers.
-- Keep deterministic analysis outside the LLM boundary.
-- Keep structured JSON validation mandatory for LLM outputs.
-- Keep inspectable file-backed artifacts as the source of truth.
+- Keep provider-specific code in `src/engllm/llm/` only.
+- Keep deterministic repo analysis in `src/engllm/core/`.
+- Keep prompt text centralized under `src/engllm/prompts/`.
+- Keep tool orchestration in `src/engllm/tools/<tool_name>/`.
+- Keep external-system abstractions in `src/engllm/integrations/`.
+- Keep structured JSON validation mandatory for every LLM boundary.
+- Keep artifacts file-backed and inspectable.
+
+## Current Package Shape
+
+```text
+src/engllm/
+  cli/
+  core/
+    analysis/
+    config/
+    render/
+    repo/
+  domain/
+  integrations/
+  llm/
+  prompts/
+    ask/
+    core/
+    sdd/
+  tools/
+    ask/
+    repo/
+    sdd/
+```
+
+Use this split when deciding where new code should live:
+
+- `core/`: shared deterministic services used by multiple tools.
+- `tools/`: tool-specific workflows, renderers, and tool-facing models.
+- `integrations/`: reusable external capability interfaces and adapters.
+- `domain/`: cross-tool models and shared errors only.
 
 ## Add an LLM Provider
 
-1. Implement a provider client in `src/sddraft/llm/` that satisfies `LLMClient` from `llm/base.py`.
-2. Ensure provider responses are parsed as structured JSON and validated against `response_model`.
-3. Register the provider in `llm/factory.py` without importing provider SDKs outside `llm/`.
-4. Add provider tests with mocks/fakes so tests remain network-independent.
+1. Implement the provider in `src/engllm/llm/`.
+2. Satisfy the `LLMClient` contract from `src/engllm/llm/base.py`.
+3. Parse and validate structured JSON responses against `response_model`.
+4. Register the provider in `src/engllm/llm/factory.py`.
+5. Add isolated tests in `tests/test_llm_components.py` or a neighboring provider test.
 
 ## Add a Language Analyzer
 
-1. Add a `LanguageAnalyzer` implementation in `src/sddraft/repo/language_analyzers.py`.
-2. Map file extensions to a normalized `SourceLanguage` and register the analyzer.
-3. Ensure analyzer output feeds `CodeUnitSummary` and `SymbolSummary`.
-4. Add scan/diff tests to validate deterministic extraction and classification.
+1. Update `src/engllm/core/repo/language_analyzers.py`.
+2. Register the language in `src/engllm/core/repo/scanner.py` if needed.
+3. Emit `CodeUnitSummary`, `SymbolSummary`, and dependency signals conservatively.
+4. Add deterministic scan and graph tests.
 
-## Add a Renderer Output
+Primary tests:
 
-1. Implement rendering in `src/sddraft/render/` from structured domain models only.
-2. Keep repository inspection out of renderers; workflows provide input models.
-3. Add tests for deterministic output formatting and error behavior.
+- `tests/test_language_analyzers.py`
+- `tests/test_repo_scanner.py`
+- `tests/test_repo_scanner_multilang.py`
+- `tests/test_graph_build_and_retrieval.py`
+
+## Add a Shared Analysis Capability
+
+Use `core/` when the behavior is reusable across tools.
+
+Good fits for `core/`:
+
+- retrieval and indexing
+- hierarchy analysis
+- graph build and traversal
+- diff and commit impact analysis
+- workspace and artifact helpers
+- future history traversal or reusable repo summarization logic
+
+Primary shared-analysis tests:
+
+- `tests/test_retrieval.py`
+- `tests/test_hierarchy_analysis.py`
+- `tests/test_graph_build_and_retrieval.py`
+- `tests/test_graph_build_incremental_helpers.py`
+- `tests/test_diff_and_impact.py`
+- `tests/test_commit_impact_extra.py`
+
+## Add or Change a Tool
+
+Use `tools/` when the behavior is specific to one user-facing capability.
+
+Current tool namespaces:
+
+- `src/engllm/tools/sdd/`
+- `src/engllm/tools/ask/`
+- `src/engllm/tools/repo/`
+
+If you add a future tool, keep its workflow, tool-specific models, and renderers
+inside `src/engllm/tools/<tool_name>/`, then register it through the CLI/tooling
+layer instead of coupling it directly to existing tools.
+
+## Add an Integration
+
+External-system code belongs in `src/engllm/integrations/`.
+
+Current shared interfaces:
+
+- `RepoHostClient`
+- `IssueTrackerClient`
+- `CiLogClient`
+
+Future tools such as review automation or release-note enrichment should depend
+on these capability interfaces rather than on vendor-specific clients.
 
 ## Roadmap Pickup Guide
 
@@ -38,23 +122,27 @@ Use this section when taking over a roadmap phase from `TASKS.md`.
 ### Phase 1 — Symbol Fidelity And Graph Correctness
 
 Primary code areas:
-- `src/sddraft/repo/language_analyzers.py`
-- `src/sddraft/repo/scanner.py`
-- `src/sddraft/analysis/graph_build.py`
+
+- `src/engllm/core/repo/language_analyzers.py`
+- `src/engllm/core/repo/scanner.py`
+- `src/engllm/core/analysis/graph_build.py`
 
 Primary tests:
+
 - `tests/test_language_analyzers.py`
+- `tests/test_repo_scanner_multilang.py`
 - `tests/test_graph_build_and_retrieval.py`
-- `tests/test_graph_index_and_candidate_sources.py`
 
 ### Phase 2 — Multi-Language Dependency Expansion
 
 Primary code areas:
-- `src/sddraft/analysis/dependency_resolution.py`
-- `src/sddraft/repo/language_analyzers.py`
-- `src/sddraft/analysis/graph_build.py`
+
+- `src/engllm/core/analysis/dependency_resolution.py`
+- `src/engllm/core/repo/language_analyzers.py`
+- `src/engllm/core/analysis/graph_build.py`
 
 Primary tests:
+
 - `tests/test_graph_build_and_retrieval.py`
 - `tests/test_workflow_generate_multilang.py`
 - `tests/test_graph_index_and_candidate_sources.py`
@@ -62,11 +150,13 @@ Primary tests:
 ### Phase 3 — Incremental Graph Build And Reuse
 
 Primary code areas:
-- `src/sddraft/analysis/graph_build.py`
-- `src/sddraft/analysis/graph_models.py`
-- `src/sddraft/workflows/propose_updates.py`
+
+- `src/engllm/core/analysis/graph_build.py`
+- `src/engllm/core/analysis/graph_models.py`
+- `src/engllm/tools/sdd/propose_updates.py`
 
 Primary tests:
+
 - `tests/test_graph_build_incremental_helpers.py`
 - `tests/test_workflow_propose_updates.py`
 - `tests/test_graph_build_and_retrieval.py`
@@ -74,11 +164,13 @@ Primary tests:
 ### Phase 4 — Ask Evidence Quality
 
 Primary code areas:
-- `src/sddraft/analysis/graph_retrieval.py`
-- `src/sddraft/workflows/ask.py`
-- `src/sddraft/prompts/builders.py`
+
+- `src/engllm/core/analysis/graph_retrieval.py`
+- `src/engllm/tools/ask/ask.py`
+- `src/engllm/prompts/ask/builders.py`
 
 Primary tests:
+
 - `tests/test_graph_index_and_candidate_sources.py`
 - `tests/test_workflow_generate_and_ask.py`
 - `tests/test_render_and_workflow_misc.py`
@@ -86,11 +178,13 @@ Primary tests:
 ### Phase 5 — Vector-Readiness Formalization
 
 Primary code areas:
-- `src/sddraft/analysis/graph_retrieval.py`
-- `src/sddraft/workflows/ask.py`
-- `src/sddraft/cli/main.py`
+
+- `src/engllm/core/analysis/graph_retrieval.py`
+- `src/engllm/tools/ask/ask.py`
+- `src/engllm/cli/main.py`
 
 Primary tests:
+
 - `tests/test_graph_index_and_candidate_sources.py`
 - `tests/test_workflow_generate_and_ask.py`
 - `tests/test_cli_additional.py`
@@ -98,11 +192,13 @@ Primary tests:
 ### Phase 6 — Commit-Aware Q&A
 
 Primary code areas:
-- `src/sddraft/analysis/graph_retrieval.py`
-- `src/sddraft/workflows/ask.py`
-- `src/sddraft/workflows/propose_updates.py`
+
+- `src/engllm/core/analysis/graph_retrieval.py`
+- `src/engllm/tools/ask/ask.py`
+- `src/engllm/tools/sdd/propose_updates.py`
 
 Primary tests:
+
 - `tests/test_graph_index_and_candidate_sources.py`
 - `tests/test_workflow_propose_updates.py`
 - `tests/test_workflow_generate_and_ask.py`
@@ -110,19 +206,70 @@ Primary tests:
 ### Phase 7 — Docs Hardening
 
 Primary docs:
+
+- `README.md`
 - `docs/USAGE.md`
-- `ARCHITECTURE.md`
 - `docs/EXTENDING.md`
+- `ARCHITECTURE.md`
+- `SPEC.md`
+- `TASKS.md`
 
 Primary validation:
-- `TASKS.md`
+
 - `rg` verification commands recorded in `TASKS.md`
-- normal repo quality gates (`ruff`, `mypy`, `pytest`)
+- `ruff check src tests`
+- `mypy src`
+- `pytest -q`
+
+### Phase 8 — Intensive Ask Mode
+
+Primary code areas:
+
+- `src/engllm/core/analysis/intensive_corpus.py`
+- `src/engllm/tools/ask/intensive.py`
+- `src/engllm/prompts/ask/builders.py`
+- `src/engllm/cli/main.py`
+
+Primary tests:
+
+- `tests/test_intensive_corpus.py`
+- `tests/test_workflow_generate_and_ask.py`
+- `tests/test_cli_additional.py`
+
+### Phase 9 — EngLLM Multi-Tool Restructure
+
+Primary code areas:
+
+- `src/engllm/core/workspaces.py`
+- `src/engllm/core/tooling.py`
+- `src/engllm/cli/main.py`
+- `src/engllm/tools/sdd/`
+- `src/engllm/tools/ask/`
+- `src/engllm/tools/repo/`
+- `src/engllm/integrations/base.py`
+
+Primary tests:
+
+- `tests/test_cli.py`
+- `tests/test_cli_additional.py`
+- `tests/test_imports.py`
+- `tests/test_layer_boundaries.py`
+- `tests/test_workflow_generate_and_ask.py`
+- `tests/test_workflow_propose_updates.py`
+
+## Future Tool Notes
+
+These are planned directions, not implemented tools yet:
+
+- CI log summarizer built on shared repo and CI-log integration surfaces.
+- Code review automation built on `RepoHostClient` and `IssueTrackerClient`.
+- Release-note generation using commit ranges plus optional issue enrichment.
+- History-walk documentation generation built on reusable repo-history analysis.
 
 ## Practical Contributor Workflow
 
 1. Read the matching phase entry in `TASKS.md`.
 2. Inspect the code areas listed above before editing anything.
-3. Use the listed tests first for fast iteration.
-4. Run the full quality gates before marking the phase complete.
-5. Update `TASKS.md` in the same change when task status changes.
+3. Start with the fastest targeted tests for the phase.
+4. Run the full quality gates before marking work complete.
+5. Update `TASKS.md` in the same change when the roadmap status changes.

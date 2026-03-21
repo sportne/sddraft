@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.domain.models import SymbolSummary
-from sddraft.repo.language_analyzers import (
+from engllm.core.repo.language_analyzers import (
     detect_language,
     get_analyzer_for_language,
     get_analyzer_for_path,
 )
+from engllm.domain.models import SymbolSummary
 
 
 def _symbol_names(symbols: list[SymbolSummary]) -> set[str]:

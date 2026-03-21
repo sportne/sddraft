@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.config.loader import (
+from engllm.core.config.loader import (
     load_config_bundle,
     load_csc_descriptor,
     load_project_config,
     load_sdd_template,
 )
-from sddraft.domain.errors import ConfigError, ValidationError
+from engllm.domain.errors import ConfigError, ValidationError
 
 
 def test_load_config_bundle_success(tmp_path: Path) -> None:
@@ -26,15 +26,19 @@ def test_load_config_bundle_success(tmp_path: Path) -> None:
     project_path.write_text(
         """
 project_name: ExampleProject
+workspace:
+  output_root: artifacts
 sources:
   roots: [src]
   include: ["**/*.py"]
   exclude: ["**/tests/**"]
-sdd_template: templates/sdd.yaml
 llm:
   provider: mock
-  model_name: mock-sddraft
+  model_name: mock-engllm
   temperature: 0.2
+tools:
+  sdd:
+    template: templates/sdd.yaml
 """.strip(),
         encoding="utf-8",
     )
@@ -68,8 +72,10 @@ sections:
     bundle = load_config_bundle(project_path, [csc_path])
 
     assert bundle.project.project_name == "ExampleProject"
+    assert bundle.project.workspace.output_root.is_absolute()
     assert bundle.project.sources.roots[0].is_absolute()
     assert bundle.csc_descriptors[0].source_roots[0].is_absolute()
+    assert bundle.project.tools.sdd.template.is_absolute()
     assert bundle.template.sections[0].title == "Scope"
 
 
@@ -124,11 +130,15 @@ def test_invalid_generation_tuning_raises_validation_error(tmp_path: Path) -> No
     project_path.write_text(
         """
 project_name: ExampleProject
+workspace:
+  output_root: artifacts
 sources:
   roots: [src]
   include: ["**/*.py"]
   exclude: []
-sdd_template: templates/sdd.yaml
+tools:
+  sdd:
+    template: templates/sdd.yaml
 generation:
   max_files: 0
 """.strip(),

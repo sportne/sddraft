@@ -1,5 +1,8 @@
 project_name: ExampleProject
 
+workspace:
+  output_root: ../artifacts
+
 sources:
   roots:
     - src/
@@ -22,8 +25,6 @@ sources:
   exclude:
     - "**/tests/**"
 
-sdd_template: ../templates/sdd_default.yaml
-
 llm:
   provider: ollama
   model_name: qwen2.5:14b-instruct-q4_K_M
@@ -37,4 +38,8 @@ generation:
   max_in_memory_records: 2000
   index_shard_size: 1000
 
-output_dir: ../artifacts
+tools:
+  sdd:
+    template: ../templates/sdd_default.yaml
+  ask:
+    interactive_top_k: 6

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.analysis.hierarchy import (
+from engllm.core.analysis.hierarchy import (
     build_hierarchy_index,
     directory_node_id,
     expand_chunks_with_hierarchy,
     file_node_id,
     hierarchy_chunks,
 )
-from sddraft.domain.models import (
+from engllm.domain.models import (
     DirectorySummaryDoc,
     FileSummaryDoc,
     HierarchyDocArtifact,

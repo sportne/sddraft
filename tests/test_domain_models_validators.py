@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sddraft.domain.models import LLMConfig, QueryRequest
+from engllm.domain.models import LLMConfig, QueryRequest
 
 
 def test_llm_config_rejects_out_of_range_temperature() -> None:

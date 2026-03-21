@@ -9,19 +9,19 @@ from dataclasses import dataclass
 import pytest
 from pydantic import BaseModel
 
-from sddraft.domain.errors import LLMError, ValidationError
-from sddraft.domain.models import LLMConfig, QueryAnswer
-from sddraft.llm import gemini as gemini_module
-from sddraft.llm import ollama as ollama_module
-from sddraft.llm.base import (
+from engllm.domain.errors import LLMError, ValidationError
+from engllm.domain.models import LLMConfig, QueryAnswer
+from engllm.llm import gemini as gemini_module
+from engllm.llm import ollama as ollama_module
+from engllm.llm.base import (
     StructuredGenerationRequest,
     validate_json_text,
     validate_payload,
 )
-from sddraft.llm.factory import create_llm_client
-from sddraft.llm.gemini import GeminiLLMClient
-from sddraft.llm.mock import MockLLMClient
-from sddraft.llm.ollama import OllamaLLMClient
+from engllm.llm.factory import create_llm_client
+from engllm.llm.gemini import GeminiLLMClient
+from engllm.llm.mock import MockLLMClient
+from engllm.llm.ollama import OllamaLLMClient
 
 
 class TinyModel(BaseModel):
@@ -55,7 +55,7 @@ def test_validate_payload_and_json_helpers() -> None:
 
 
 def test_factory_and_mock_payload_paths() -> None:
-    config = LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2)
+    config = LLMConfig(provider="mock", model_name="mock-engllm", temperature=0.2)
     client = create_llm_client(config)
     assert isinstance(client, MockLLMClient)
     ollama_client = create_llm_client(config, provider="ollama", model_name="qwen")

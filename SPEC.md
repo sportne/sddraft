@@ -1,15 +1,21 @@
-# SPEC.md — SDDraft Project Specification
+# SPEC.md — EngLLM Project Specification
 
 ## 1. Project Overview
 
-**SDDraft** is a Python CLI tool that generates **initial Software Design Description (SDD) drafts** for software components and proposes **documentation updates based on git commits**.
+**EngLLM** is a Python CLI toolkit for repository-analysis work with
+LLM-assisted tools on top. Its first shipped tools generate **initial Software
+Design Description (SDD) drafts**, propose **documentation updates based on git
+commits**, answer grounded repository questions, and provide shared repository
+utilities.
 
 The tool targets **MIL-STD-498-style SDDs**, but it is not intended to implement the full MIL-STD-498 documentation suite. Instead, it focuses on practical generation of design documentation from existing repositories.
 
-The system must support two primary workflows:
+The system currently ships four primary workflow families:
 
 1. **Initial SDD generation**
 2. **Commit-driven SDD update proposals**
+3. **Grounded repository Q&A**
+4. **Repository utility commands**
 
 LLM usage must be **provider-abstracted**. The initial provider will be **Gemini**, but the rest of the application must not depend directly on Gemini APIs.
 
@@ -25,6 +31,8 @@ The system must:
 * analyze git commits or commit ranges
 * detect design-relevant changes
 * propose updates to existing SDDs
+* answer grounded repository questions with citations
+* support higher-compute whole-repo question answering through intensive screening
 * produce Markdown documentation
 * emit structured JSON review artifacts
 
@@ -69,7 +77,7 @@ The first version does **not** need to support:
 * full requirements traceability inference
 * a web UI
 
-The first deliverable is a **Python CLI tool**.
+The first deliverable is a **Python CLI toolkit**.
 
 ---
 
@@ -116,26 +124,34 @@ The system should optionally generate SDDs for multiple CSC descriptors in one r
 
 # 5. Repository Structure
 
-Recommended structure:
+Current structure:
 
 ```
-sddraft/
+engllm/
   README.md
   SPEC.md
   ARCHITECTURE.md
   AGENTS.md
   pyproject.toml
 
-  src/sddraft/
-    domain/
-    config/
-    repo/
-    analysis/
-    prompts/
-    llm/
-    workflows/
-    render/
+  src/engllm/
     cli/
+    core/
+      analysis/
+      config/
+      render/
+      repo/
+    domain/
+    integrations/
+    llm/
+    prompts/
+      ask/
+      core/
+      sdd/
+    tools/
+      ask/
+      repo/
+      sdd/
 
   templates/
   examples/
@@ -150,16 +166,20 @@ sddraft/
 
 Defines:
 
+* workspace output location
 * source roots
 * file inclusion/exclusion patterns
-* SDD template location
 * LLM configuration
 * generation options
+* per-tool defaults
 
 Example:
 
 ```yaml
 project_name: ExampleProject
+
+workspace:
+  output_root: ../artifacts
 
 sources:
   roots:
@@ -169,12 +189,14 @@ sources:
   exclude:
     - "**/tests/**"
 
-sdd_template: templates/sdd_default.yaml
-
 llm:
   provider: gemini
   model_name: gemini-default
   temperature: 0.2
+
+tools:
+  sdd:
+    template: ../templates/sdd_default.yaml
 ```
 
 ---
@@ -433,10 +455,10 @@ Should include:
 Required commands:
 
 ```
-sddraft generate
-sddraft propose-updates
-sddraft validate-config
-sddraft inspect-diff
+engllm sdd generate
+engllm sdd propose-updates
+engllm sdd validate-config
+engllm repo inspect-diff
 ```
 
 ---
@@ -499,8 +521,8 @@ Testing and documentation
 
 Version 1 is complete when:
 
-* `sddraft generate` produces a Markdown SDD
-* `sddraft propose-updates` produces update proposals
+* `engllm sdd generate` produces a Markdown SDD
+* `engllm sdd propose-updates` produces update proposals
 * LLM integration is provider-abstracted
 * tests run without network access
 * documentation explains how to extend the system

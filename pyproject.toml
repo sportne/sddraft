@@ -3,14 +3,14 @@ requires = ["setuptools>=82.0.1,<83", "wheel>=0.46.3,<0.47"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sddraft"
+name = "engllm"
 version = "0.1.0"
-description = "Generate and update MIL-STD-498-style SDD drafts from repository evidence."
+description = "Repository-analysis toolkit with LLM-assisted SDD generation, grounded Q&A, and shared repo utilities."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-  { name = "SDDraft Contributors" }
+  { name = "EngLLM Contributors" }
 ]
 dependencies = [
   "pydantic>=2.12.5,<3.0",
@@ -35,7 +35,7 @@ gemini = [
 ]
 
 [project.scripts]
-sddraft = "sddraft.cli.main:main"
+engllm = "engllm.cli.main:main"
 
 [tool.black]
 line-length = 88
@@ -55,7 +55,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 88
-known_first_party = ["sddraft"]
+known_first_party = ["engllm"]
 skip = [".venv", ".mypy_cache", ".ruff_cache", "build", "dist"]
 
 [tool.ruff]
@@ -83,7 +83,7 @@ indent-style = "space"
 
 [tool.mypy]
 python_version = "3.11"
-packages = ["sddraft"]
+packages = ["engllm"]
 mypy_path = ["src"]
 ignore_missing_imports = true
 disallow_untyped_defs = true
@@ -105,13 +105,13 @@ disallow_incomplete_defs = false
 minversion = "7.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra --cov=sddraft --cov-report=term-missing --cov-fail-under=90"
+addopts = "-ra --cov=engllm --cov-report=term-missing --cov-fail-under=90"
 
 [tool.coverage.run]
-source = ["sddraft"]
+source = ["engllm"]
 branch = true
 omit = [
-  "src/sddraft/__main__.py",
+  "src/engllm/__main__.py",
 ]
 disable_warnings = [
   "module-not-measured",
@@ -124,4 +124,4 @@ fail_under = 90
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["sddraft*"]
+include = ["engllm*"]

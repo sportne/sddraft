@@ -1,6 +1,6 @@
-# SDDraft Architecture
+# EngLLM Architecture
 
-This document describes the internal architecture of SDDraft.
+This document describes the internal architecture of EngLLM.
 
 It explains how the system is organized internally and how the major subsystems interact.
 
@@ -11,14 +11,13 @@ Development rules are defined in `AGENTS.md`.
 
 # 1. System Overview
 
-SDDraft is a documentation generation pipeline.
+EngLLM is a multi-tool repository analysis toolkit.
 
-It converts repository state plus configuration into SDD documentation artifacts.
+Today it ships three tool namespaces:
 
-The pipeline has two modes:
-
-1. Initial SDD generation
-2. Commit-based update proposals
+1. `engllm sdd ...` for SDD generation and update proposals
+2. `engllm ask answer ...` / `engllm ask interactive` for grounded repository Q&A
+3. `engllm repo ...` for shared repository utilities such as diff inspection
 
 The system intentionally performs deterministic analysis first and LLM generation second.
 
@@ -26,22 +25,22 @@ The system intentionally performs deterministic analysis first and LLM generatio
 
 # 2. Core Pipeline Model
 
-All workflows follow the same high-level pipeline:
+All current tools share the same high-level pattern:
 
 ```text
-Config + CSC Descriptor
+Toolkit Config + Tool-Specific Target/Inputs
 ↓
 Repository Analysis
 ↓
-Retrieval + Hierarchy + Graph Artifact Build
+Shared Artifact Build / Reuse
 ↓
-Evidence Construction
+Tool-Specific Evidence Construction
 ↓
 Prompt Construction
 ↓
 LLM Generation
 ↓
-Document Rendering
+Tool-Specific Rendering / Reporting
 ```
 
 Each stage is implemented by a separate subsystem.
@@ -50,14 +49,26 @@ Each stage is implemented by a separate subsystem.
 
 # 3. Subsystems
 
-## 3.1 Config System
+## 3.1 Toolkit Layout
+
+The package is organized around a shared platform plus tool namespaces:
+
+* `domain/`: shared base models and error types
+* `core/`: deterministic repository analysis, graph/retrieval/hierarchy, artifact persistence, workspace helpers, and tool registration contracts
+* `llm/`: provider abstraction and concrete adapters only
+* `integrations/`: external-system capability interfaces for future repo host, issue tracker, and CI tooling
+* `prompts/`: centralized prompt namespaces split by `core`, `sdd`, and `ask`
+* `tools/`: tool-specific workflows, renderers, and canonical tool model namespaces
+* `cli/`: a thin tool-first command router
+
+## 3.2 Config System
 
 Loads and validates all user-supplied configuration.
 
 Inputs:
 
-* project configuration
-* CSC descriptors
+* toolkit configuration
+* tool-specific target files
 * SDD templates
 
 Outputs:
@@ -74,7 +85,7 @@ This subsystem performs no repository inspection and no generation logic.
 
 ---
 
-## 3.2 Repository Analysis
+## 3.3 Repository Analysis
 
 Extracts structured information from the repository.
 
@@ -88,7 +99,7 @@ Outputs:
 
 * source file inventory
 * code summaries
-* interface summaries
+* symbol summaries
 * dependency summaries
 * diff results
 
@@ -98,7 +109,7 @@ This subsystem must not perform documentation generation.
 
 ---
 
-## 3.3 Commit Impact Analyzer
+## 3.4 Commit Impact Analyzer
 
 Converts raw diff data into a higher-level change model.
 
@@ -133,7 +144,7 @@ Each evidence pack contains:
 * CSC metadata
 * section specification
 * relevant code summaries
-* interface summaries
+* symbol summaries
 * dependency summaries
 * commit impact summary, if applicable
 * existing section text, if applicable
@@ -174,19 +185,25 @@ Concrete providers like Gemini and future providers are implemented behind that 
 
 ---
 
-## 3.7 Workflow Orchestrators
+## 3.7 Tool Orchestrators
 
-Two orchestrators exist:
+Current orchestration is split by tool namespace:
 
-### Generate SDD
+### `tools/sdd/`
 
-Coordinates initial document generation.
+Coordinates initial SDD generation and commit-based update proposals.
 
-### Propose Updates
+### `tools/ask/`
 
-Coordinates commit-based documentation updates.
+Coordinates standard retrieval-backed Q&A and intensive whole-repo screening.
 
-Orchestrators perform the pipeline sequence but do not contain heavy logic.
+### `tools/repo/`
+
+Hosts shared repository utilities such as diff inspection and legacy retrieval
+index migration.
+
+Tool orchestrators compose shared `core/` services but should keep heavy logic
+in reusable deterministic modules.
 
 ---
 
@@ -206,16 +223,16 @@ Renderers must operate only on structured domain models.
 
 ## 3.9 Engineering Graph Layer
 
-SDDraft now builds a deterministic engineering/documentation graph that augments
+EngLLM now builds a deterministic engineering/documentation graph that augments
 repository Q&A and traceability.
 
 Graph artifacts are file-backed and inspectable:
 
-* `artifacts/<CSC>/graph/manifest.json`
-* `artifacts/<CSC>/graph/nodes.jsonl`
-* `artifacts/<CSC>/graph/edges.jsonl`
-* `artifacts/<CSC>/graph/symbol_index.json`
-* `artifacts/<CSC>/graph/adjacency.json`
+* `artifacts/workspaces/<workspace_id>/shared/graph/manifest.json`
+* `artifacts/workspaces/<workspace_id>/shared/graph/nodes.jsonl`
+* `artifacts/workspaces/<workspace_id>/shared/graph/edges.jsonl`
+* `artifacts/workspaces/<workspace_id>/shared/graph/symbol_index.json`
+* `artifacts/workspaces/<workspace_id>/shared/graph/adjacency.json`
 
 Node types include:
 
@@ -498,15 +515,16 @@ The architecture is designed to allow:
 * richer language parsers
 * additional output formats
 * more advanced change detection
-* batch workflows
-* CI integration
+* additional repo-focused tools
+* CI / review / release integrations
 
 The key extension boundaries are:
 
 * `llm/`
-* `render/`
-* `repo/`
-* `analysis/section_mapper`
+* `integrations/`
+* `tools/`
+* `core/repo/`
+* `core/analysis/`
 
 ---
 

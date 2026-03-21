@@ -6,14 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.domain.models import (
+from engllm.domain.models import (
     CSCDescriptor,
     GenerationOptions,
     LLMConfig,
     ProjectConfig,
     SDDSectionSpec,
     SDDTemplate,
+    SDDToolDefaults,
     SourcesConfig,
+    ToolDefaults,
+    WorkspaceConfig,
 )
 
 
@@ -89,10 +92,12 @@ def sample_project_config(tmp_path: Path) -> ProjectConfig:
             ],
             exclude=["**/tests/**"],
         ),
-        sdd_template=tmp_path / "templates" / "sdd_default.yaml",
-        llm=LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2),
+        workspace=WorkspaceConfig(output_root=tmp_path / "artifacts"),
+        tools=ToolDefaults(
+            sdd=SDDToolDefaults(template=tmp_path / "templates" / "sdd_default.yaml")
+        ),
+        llm=LLMConfig(provider="mock", model_name="mock-engllm", temperature=0.2),
         generation=GenerationOptions(
             max_files=100, code_chunk_lines=20, retrieval_top_k=6
         ),
-        output_dir=tmp_path / "artifacts",
     )

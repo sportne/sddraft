@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.analysis.intensive_corpus import (
+from engllm.core.analysis.intensive_corpus import (
     default_intensive_corpus_root,
     iter_intensive_corpus_chunks,
     prepare_intensive_corpus,
@@ -20,7 +20,7 @@ def test_prepare_intensive_corpus_packs_whole_files_across_boundaries(
     (src_dir / "a.py").write_text("alpha beta\ngamma delta\n", encoding="utf-8")
     (src_dir / "b.py").write_text("epsilon zeta\neta theta\n", encoding="utf-8")
 
-    output_root = tmp_path / "artifacts" / "NAV_CTRL"
+    output_root = tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "tools" / "ask"
     manifest, reused = prepare_intensive_corpus(
         project_config=sample_project_config,
         repo_root=tmp_path,
@@ -54,7 +54,7 @@ def test_prepare_intensive_corpus_splits_only_oversized_files_and_reuses_store(
         encoding="utf-8",
     )
 
-    output_root = tmp_path / "artifacts" / "NAV_CTRL"
+    output_root = tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "tools" / "ask"
     first_manifest, first_reused = prepare_intensive_corpus(
         project_config=sample_project_config,
         repo_root=tmp_path,

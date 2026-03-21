@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.analysis.hierarchy import directory_node_id, file_node_id
-from sddraft.domain.errors import ConfigError
-from sddraft.domain.models import (
+from engllm.core.analysis.hierarchy import directory_node_id, file_node_id
+from engllm.domain.errors import ConfigError
+from engllm.domain.models import (
     DirectorySummaryRecord,
     FileSummaryRecord,
     HierarchyEdgeRecord,
@@ -19,10 +19,10 @@ from sddraft.domain.models import (
     HierarchyNodeRecord,
     QueryRequest,
 )
-from sddraft.llm.base import StructuredGenerationRequest
-from sddraft.llm.mock import MockLLMClient
-from sddraft.workflows.ask import answer_question
-from sddraft.workflows.propose_updates import propose_updates
+from engllm.llm.base import StructuredGenerationRequest
+from engllm.llm.mock import MockLLMClient
+from engllm.tools.ask.ask import answer_question
+from engllm.tools.sdd.propose_updates import propose_updates
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -157,7 +157,7 @@ def test_propose_updates_artifacts_support_commit_aware_ask(
         ),
         index_path=result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
     )
 
     assert ask_result.answer.answer
@@ -211,8 +211,10 @@ def test_propose_updates_hierarchy_refresh_preserves_unaffected_file_summary(
     _run(["git", "add", "."], cwd=tmp_path)
     _run(["git", "commit", "-m", "initial"], cwd=tmp_path)
 
-    output_root = sample_project_config.output_dir / sample_csc.csc_id
-    hierarchy_root = output_root / "hierarchy"
+    output_root = (
+        sample_project_config.workspace.output_root / "workspaces" / sample_csc.csc_id
+    )
+    hierarchy_root = output_root / "shared" / "hierarchy"
     hierarchy_root.mkdir(parents=True, exist_ok=True)
 
     manifest = HierarchyManifest(

@@ -1,17 +1,11 @@
-# SDDraft
+# EngLLM
 
-SDDraft is a deterministic CLI for generating and maintaining
-MIL-STD-498-style Software Design Description (SDD) documents from source code
-and git history.
+EngLLM is a deterministic repository-analysis toolkit with LLM-assisted tools on top.
 
-## What It Does
-
-- Generates initial SDD drafts from repository evidence.
-- Proposes section updates from commit impact.
-- Answers grounded repository questions with citations via `sddraft ask`.
-- Builds inspectable retrieval, hierarchy, and engineering-graph artifacts.
-- Emits conservative multi-language dependency (`imports`) graph edges to improve cross-file Q&A.
-- Uses graph-grounded evidence reranking with inspectable inclusion rationale paths.
+Today the repo ships three tool namespaces:
+- `engllm sdd ...`: generate and update Software Design Description artifacts
+- `engllm ask answer ...`: answer grounded repository questions with citations
+- `engllm repo ...`: shared repository utilities such as diff inspection and index migration
 
 ## Quick Start
 
@@ -19,19 +13,36 @@ and git history.
 make setup-venv
 make install-dev
 
-sddraft validate-config --project-config examples/project.yaml --csc examples/csc_sddraft.yaml
-sddraft generate --project-config examples/project.yaml --csc examples/csc_sddraft.yaml --repo-root . --provider mock
-sddraft ask --index-path artifacts/SDDRAFT_CORE/retrieval --question "What are the main workflows?" --provider mock
+engllm sdd validate-config --config examples/project.yaml --target examples/sdd_target_core.yaml
+engllm sdd generate --config examples/project.yaml --target examples/sdd_target_core.yaml --repo-root . --provider mock
+engllm ask answer --index-path artifacts/workspaces/SDDRAFT_CORE/shared/retrieval --question "What are the main workflows?" --provider mock
 ```
 
-## Commands
+## Command Layout
 
-- `sddraft generate`
-- `sddraft propose-updates`
-- `sddraft validate-config`
-- `sddraft inspect-diff`
-- `sddraft ask`
-- `sddraft migrate-index`
+- `engllm sdd validate-config`
+- `engllm sdd generate`
+- `engllm sdd propose-updates`
+- `engllm ask answer`
+- `engllm ask interactive`
+- `engllm repo inspect-diff`
+- `engllm repo migrate-index`
+
+## Artifact Layout
+
+Shared analysis artifacts live under:
+- `artifacts/workspaces/<workspace_id>/shared/`
+
+Tool-specific outputs live under:
+- `artifacts/workspaces/<workspace_id>/tools/sdd/`
+- `artifacts/workspaces/<workspace_id>/tools/ask/`
+
+For the built-in EngLLM example target, the main paths are:
+- `artifacts/workspaces/SDDRAFT_CORE/shared/retrieval/`
+- `artifacts/workspaces/SDDRAFT_CORE/shared/hierarchy/`
+- `artifacts/workspaces/SDDRAFT_CORE/shared/graph/`
+- `artifacts/workspaces/SDDRAFT_CORE/tools/sdd/sdd.md`
+- `artifacts/workspaces/SDDRAFT_CORE/tools/ask/intensive/`
 
 ## Documentation
 

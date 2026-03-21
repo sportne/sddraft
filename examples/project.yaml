@@ -1,5 +1,8 @@
 project_name: ExampleProject
 
+workspace:
+  output_root: ../artifacts
+
 sources:
   roots:
     - src/
@@ -22,11 +25,9 @@ sources:
   exclude:
     - "**/tests/**"
 
-sdd_template: ../templates/sdd_default.yaml
-
 llm:
   provider: mock
-  model_name: mock-sddraft
+  model_name: mock-engllm
   temperature: 0.2
 
 generation:
@@ -37,4 +38,8 @@ generation:
   max_in_memory_records: 2000
   index_shard_size: 1000
 
-output_dir: ../artifacts
+tools:
+  sdd:
+    template: ../templates/sdd_default.yaml
+  ask:
+    interactive_top_k: 6

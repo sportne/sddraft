@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.analysis.commit_impact import build_commit_impact
-from sddraft.domain.models import FileDiffSummary
+from engllm.core.analysis.commit_impact import build_commit_impact
+from engllm.domain.models import FileDiffSummary
 
 
 def test_build_commit_impact_covers_all_classification_paths() -> None:

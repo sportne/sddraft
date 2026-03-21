@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.domain.models import QueryRequest
-from sddraft.llm.mock import MockLLMClient
-from sddraft.workflows.ask import answer_question
-from sddraft.workflows.generate import generate_sdd
+from engllm.domain.models import QueryRequest
+from engllm.llm.mock import MockLLMClient
+from engllm.tools.ask.ask import answer_question
+from engllm.tools.sdd.generate import generate_sdd
 
 
 def test_generate_and_ask_with_multilanguage_sources(
@@ -48,7 +48,7 @@ def test_generate_and_ask_with_multilanguage_sources(
         request=QueryRequest(question="What interfaces exist?", top_k=6),
         index_path=generate_result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
     )
 
     assert ask_result.answer.citations
@@ -89,7 +89,7 @@ def test_ask_dependency_question_uses_graph_import_edges_for_javascript(
         request=QueryRequest(question="What does caller.js depend on?", top_k=1),
         index_path=no_graph.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         graph_enabled=True,
         graph_depth=1,
         graph_top_k=6,
@@ -112,7 +112,7 @@ def test_ask_dependency_question_uses_graph_import_edges_for_javascript(
         request=QueryRequest(question="What does caller.js depend on?", top_k=1),
         index_path=graph.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         graph_enabled=True,
         graph_depth=1,
         graph_top_k=6,

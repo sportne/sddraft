@@ -2,7 +2,7 @@
 
 This repository is designed for AI-assisted development. Coding agents working on this project must follow the guidelines in this document.
 
-This file defines **development rules and behavioral expectations** for agents contributing to SDDraft.
+This file defines **development rules and behavioral expectations** for agents contributing to EngLLM.
 
 If conflicts occur:
 1. `SPEC.md` defines required functionality.
@@ -29,24 +29,23 @@ Agents must preserve the separation between layers.
 
 The repository is structured as:
 
-src/sddraft/
+src/engllm/
 - domain/
-- config/
-- repo/
-- analysis/
+- core/
 - prompts/
 - llm/
-- workflows/
-- render/
+- integrations/
+- tools/
 - cli/
 
 Rules:
 
 • `domain/` must not depend on any other project modules.  
-• `repo/` must not call LLMs.  
-• `analysis/` must not call provider SDKs.  
-• `render/` must not inspect repository files.  
-• `cli/` must remain thin and only invoke workflows.  
+• `core/repo/` must not call LLMs.  
+• `core/analysis/` must not call provider SDKs.  
+• `core/render/` must not inspect repository files.  
+• `tools/` should compose shared services and prompt builders, but must not call provider SDKs directly.  
+• `cli/` must remain thin and route into tool entrypoints.  
 
 ---
 
@@ -196,7 +195,7 @@ Agents must not:
 
 # 12. Design Philosophy
 
-SDDraft is designed to be a **deterministic documentation pipeline with a generative stage**.
+EngLLM is designed to be a **deterministic repository-analysis toolkit with generative stages**.
 
 Agents should prioritize:
 

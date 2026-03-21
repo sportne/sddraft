@@ -6,8 +6,8 @@ import subprocess
 import urllib.error
 from pathlib import Path
 
-from sddraft.cli.main import main
-from sddraft.llm import ollama as ollama_module
+from engllm.cli.main import main
+from engllm.llm import ollama as ollama_module
 
 
 def _write_file(path: Path, content: str) -> Path:
@@ -44,16 +44,19 @@ sections:
         tmp_path / "examples" / "project.yaml",
         """
 project_name: ExampleProject
+workspace:
+  output_root: ../artifacts
 sources:
   roots: [../src]
   include: ["**/*.py"]
   exclude: []
-sdd_template: ../templates/template.yaml
 llm:
   provider: mock
-  model_name: mock-sddraft
+  model_name: mock-engllm
   temperature: 0.2
-output_dir: ../artifacts
+tools:
+  sdd:
+    template: ../templates/template.yaml
 """,
     )
 
@@ -97,10 +100,11 @@ def test_cli_acceptance_required_commands_and_batch_generation(
 
     validate_rc = main(
         [
+            "sdd",
             "validate-config",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_paths[0]),
             str(csc_paths[1]),
         ]
@@ -109,10 +113,11 @@ def test_cli_acceptance_required_commands_and_batch_generation(
 
     generate_rc = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_paths[0]),
             str(csc_paths[1]),
             "--repo-root",
@@ -120,19 +125,19 @@ def test_cli_acceptance_required_commands_and_batch_generation(
             "--provider",
             "mock",
             "--model",
-            "mock-sddraft",
+            "mock-engllm",
             "--temperature",
             "0.2",
         ]
     )
     assert generate_rc == 0
 
-    nav_root = tmp_path / "artifacts" / "NAV_CTRL"
-    power_root = tmp_path / "artifacts" / "POWER_CTRL"
+    nav_root = tmp_path / "artifacts" / "workspaces" / "NAV_CTRL"
+    power_root = tmp_path / "artifacts" / "workspaces" / "POWER_CTRL"
     for root in (nav_root, power_root):
-        assert (root / "sdd.md").exists()
-        assert (root / "review_artifact.json").exists()
-        assert (root / "retrieval" / "manifest.json").exists()
+        assert (root / "tools" / "sdd" / "sdd.md").exists()
+        assert (root / "tools" / "sdd" / "review_artifact.json").exists()
+        assert (root / "shared" / "retrieval" / "manifest.json").exists()
 
 
 def test_cli_acceptance_propose_updates_and_inspect_diff(
@@ -169,10 +174,11 @@ Old text
 
     propose_rc = main(
         [
+            "sdd",
             "propose-updates",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_paths[0]),
             "--existing-sdd",
             str(existing_sdd),
@@ -183,20 +189,21 @@ Old text
             "--provider",
             "mock",
             "--model",
-            "mock-sddraft",
+            "mock-engllm",
             "--temperature",
             "0.2",
         ]
     )
     assert propose_rc == 0
 
-    out_root = tmp_path / "artifacts" / "NAV_CTRL"
-    assert (out_root / "update_report.md").exists()
-    assert (out_root / "update_proposals.json").exists()
-    assert (out_root / "retrieval" / "manifest.json").exists()
+    out_root = tmp_path / "artifacts" / "workspaces" / "NAV_CTRL"
+    assert (out_root / "tools" / "sdd" / "update_report.md").exists()
+    assert (out_root / "tools" / "sdd" / "update_proposals.json").exists()
+    assert (out_root / "shared" / "retrieval" / "manifest.json").exists()
 
     inspect_rc = main(
         [
+            "repo",
             "inspect-diff",
             "--commit-range",
             "HEAD~1..HEAD",
@@ -218,10 +225,11 @@ def test_cli_acceptance_gemini_provider_missing_config_error(
 
     rc = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_paths[0]),
             "--repo-root",
             str(tmp_path),
@@ -254,10 +262,11 @@ def test_cli_acceptance_ollama_provider_unreachable_error(
 
     rc = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_paths[0]),
             "--repo-root",
             str(tmp_path),

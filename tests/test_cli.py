@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sddraft.analysis.retrieval import load_retrieval_manifest
-from sddraft.cli.main import main
+from engllm.cli.main import main
+from engllm.core.analysis.retrieval import load_retrieval_manifest
 
 
 def _write_files(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -37,16 +37,19 @@ sections:
     project_path.write_text(
         """
 project_name: Example
+workspace:
+  output_root: ../artifacts
 sources:
   roots: [../src]
   include: ["**/*.py"]
   exclude: []
-sdd_template: ../templates/template.yaml
 llm:
   provider: mock
-  model_name: mock-sddraft
+  model_name: mock-engllm
   temperature: 0.2
-output_dir: ../artifacts
+tools:
+  sdd:
+    template: ../templates/template.yaml
 """.strip(),
         encoding="utf-8",
     )
@@ -72,10 +75,11 @@ def test_cli_validate_generate_and_ask(tmp_path: Path, monkeypatch) -> None:
 
     validate_exit = main(
         [
+            "sdd",
             "validate-config",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_path),
         ]
     )
@@ -83,25 +87,29 @@ def test_cli_validate_generate_and_ask(tmp_path: Path, monkeypatch) -> None:
 
     generate_exit = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_path),
             "--repo-root",
             str(tmp_path),
             "--provider",
             "mock",
             "--model",
-            "mock-sddraft",
+            "mock-engllm",
         ]
     )
     assert generate_exit == 0
 
-    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval"
+    index_path = (
+        tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "shared" / "retrieval"
+    )
     ask_exit = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(index_path),
             "--question",
@@ -109,7 +117,7 @@ def test_cli_validate_generate_and_ask(tmp_path: Path, monkeypatch) -> None:
             "--provider",
             "mock",
             "--model",
-            "mock-sddraft",
+            "mock-engllm",
         ]
     )
     assert ask_exit == 0
@@ -121,26 +129,31 @@ def test_cli_generate_no_hierarchy_docs_flag(tmp_path: Path, monkeypatch) -> Non
 
     generate_exit = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(project_path),
-            "--csc",
+            "--target",
             str(csc_path),
             "--repo-root",
             str(tmp_path),
             "--provider",
             "mock",
             "--model",
-            "mock-sddraft",
+            "mock-engllm",
             "--no-hierarchy-docs",
         ]
     )
     assert generate_exit == 0
 
-    hierarchy_dir = tmp_path / "artifacts" / "NAV_CTRL" / "hierarchy"
+    hierarchy_dir = (
+        tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "shared" / "hierarchy"
+    )
     assert not hierarchy_dir.exists()
 
-    index_path = tmp_path / "artifacts" / "NAV_CTRL" / "retrieval"
+    index_path = (
+        tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "shared" / "retrieval"
+    )
     manifest, store_root = load_retrieval_manifest(index_path)
     source_types: set[str] = set()
     for shard in manifest.chunk_shards:

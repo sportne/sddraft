@@ -3,7 +3,7 @@ PYTHON = $(VENV)/bin/python
 
 SRC_DIR := src
 TEST_DIR := tests
-PACKAGE := sddraft
+PACKAGE := engllm
 
 .PHONY: \
     help setup-venv install-dev \
@@ -13,7 +13,7 @@ PACKAGE := sddraft
     package clean ci
 
 help:
-	@echo "SDDraft Makefile targets:"
+	@echo "EngLLM Makefile targets:"
 	@echo "  make setup-venv   - Create virtual environment"
 	@echo "  make install-dev  - Install project with dev dependencies"
 	@echo "  make format       - Run black and isort"

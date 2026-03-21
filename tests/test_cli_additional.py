@@ -6,9 +6,9 @@ import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
-from sddraft.analysis.retrieval import LexicalIndexer, save_retrieval_index
-from sddraft.cli.main import main
-from sddraft.domain.models import (
+from engllm.cli.main import main
+from engllm.core.analysis.retrieval import LexicalIndexer, save_retrieval_index
+from engllm.domain.models import (
     AskResult,
     Citation,
     CommitImpact,
@@ -26,8 +26,11 @@ from sddraft.domain.models import (
     RetrievalManifest,
     SDDSectionSpec,
     SDDTemplate,
+    SDDToolDefaults,
     SourcesConfig,
+    ToolDefaults,
     UpdateProposalReport,
+    WorkspaceConfig,
 )
 
 
@@ -35,12 +38,12 @@ def _fake_bundle(tmp_path: Path) -> ConfigBundle:
     project = ProjectConfig(
         project_name="Example",
         sources=SourcesConfig(roots=[tmp_path], include=["**/*.py"], exclude=[]),
-        sdd_template=tmp_path / "t.yaml",
-        llm=LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2),
+        workspace=WorkspaceConfig(output_root=tmp_path / "artifacts"),
+        tools=ToolDefaults(sdd=SDDToolDefaults(template=tmp_path / "t.yaml")),
+        llm=LLMConfig(provider="mock", model_name="mock-engllm", temperature=0.2),
         generation=GenerationOptions(
             max_files=10, code_chunk_lines=10, retrieval_top_k=3
         ),
-        output_dir=tmp_path / "artifacts",
     )
     csc = CSCDescriptor(csc_id="X", title="X", purpose="P")
     template = SDDTemplate(
@@ -61,7 +64,7 @@ def _fake_manifest() -> RetrievalManifest:
 def test_cli_propose_updates_and_inspect_diff_paths(
     tmp_path: Path, monkeypatch
 ) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     bundle = _fake_bundle(tmp_path)
     monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
     monkeypatch.setattr(
@@ -90,10 +93,11 @@ def test_cli_propose_updates_and_inspect_diff_paths(
 
     rc = main(
         [
+            "sdd",
             "propose-updates",
-            "--project-config",
+            "--config",
             str(tmp_path / "p.yaml"),
-            "--csc",
+            "--target",
             str(tmp_path / "c.yaml"),
             "--existing-sdd",
             str(tmp_path / "sdd.md"),
@@ -108,12 +112,12 @@ def test_cli_propose_updates_and_inspect_diff_paths(
         "inspect_diff",
         lambda **kwargs: InspectDiffResult(impact=fake_impact, raw_diff=""),
     )
-    rc2 = main(["inspect-diff", "--commit-range", "HEAD~1..HEAD"])
+    rc2 = main(["repo", "inspect-diff", "--commit-range", "HEAD~1..HEAD"])
     assert rc2 == 0
 
 
 def test_cli_ask_interactive_and_error_path(tmp_path: Path, monkeypatch) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     monkeypatch.setattr(
         cli_module, "create_llm_client", lambda *args, **kwargs: object()
     )
@@ -159,20 +163,20 @@ def test_cli_ask_interactive_and_error_path(tmp_path: Path, monkeypatch) -> None
     rc = main(
         [
             "ask",
+            "interactive",
             "--index-path",
             str(tmp_path / "i.json"),
-            "--interactive",
         ]
     )
     assert rc == 0
     assert rendered == ["A"]
 
-    rc2 = main(["ask", "--index-path", str(tmp_path / "i.json")])
+    rc2 = main(["ask", "answer", "--index-path", str(tmp_path / "i.json")])
     assert rc2 == 2
 
 
 def test_cli_ask_intensive_requires_project_config(tmp_path: Path, monkeypatch) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     monkeypatch.setattr(
         cli_module, "create_llm_client", lambda *args, **kwargs: object()
     )
@@ -180,6 +184,7 @@ def test_cli_ask_intensive_requires_project_config(tmp_path: Path, monkeypatch) 
     rc = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
             "--question",
@@ -194,12 +199,13 @@ def test_cli_ask_intensive_requires_project_config(tmp_path: Path, monkeypatch) 
 def test_cli_ask_intensive_mode_uses_config_defaults_and_cli_overrides(
     tmp_path: Path, monkeypatch
 ) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     project = ProjectConfig(
         project_name="Example",
         sources=SourcesConfig(roots=[tmp_path], include=["**/*.py"], exclude=[]),
-        sdd_template=tmp_path / "t.yaml",
-        llm=LLMConfig(provider="mock", model_name="mock-sddraft", temperature=0.2),
+        workspace=WorkspaceConfig(output_root=tmp_path / "artifacts"),
+        tools=ToolDefaults(sdd=SDDToolDefaults(template=tmp_path / "t.yaml")),
+        llm=LLMConfig(provider="mock", model_name="mock-engllm", temperature=0.2),
         generation=GenerationOptions(
             max_files=10,
             code_chunk_lines=10,
@@ -208,7 +214,6 @@ def test_cli_ask_intensive_mode_uses_config_defaults_and_cli_overrides(
             intensive_chunk_tokens=128,
             intensive_max_selected_excerpts=5,
         ),
-        output_dir=tmp_path / "artifacts",
     )
     monkeypatch.setattr(cli_module, "load_project_config", lambda path: project)
     monkeypatch.setattr(
@@ -234,9 +239,10 @@ def test_cli_ask_intensive_mode_uses_config_defaults_and_cli_overrides(
     rc = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
-            "--project-config",
+            "--config",
             str(tmp_path / "project.yaml"),
             "--question",
             "What does this repo do?",
@@ -251,9 +257,10 @@ def test_cli_ask_intensive_mode_uses_config_defaults_and_cli_overrides(
     rc_override = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
-            "--project-config",
+            "--config",
             str(tmp_path / "project.yaml"),
             "--question",
             "What does this repo do?",
@@ -274,7 +281,7 @@ def test_cli_ask_intensive_mode_uses_config_defaults_and_cli_overrides(
 def test_cli_generate_and_propose_apply_runtime_overrides(
     tmp_path: Path, monkeypatch
 ) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     bundle = _fake_bundle(tmp_path)
     monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
 
@@ -302,10 +309,11 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
 
     rc_generate = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(tmp_path / "p.yaml"),
-            "--csc",
+            "--target",
             str(tmp_path / "c.yaml"),
             "--provider",
             "gemini",
@@ -347,10 +355,11 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
 
     rc_propose = main(
         [
+            "sdd",
             "propose-updates",
-            "--project-config",
+            "--config",
             str(tmp_path / "p.yaml"),
-            "--csc",
+            "--target",
             str(tmp_path / "c.yaml"),
             "--existing-sdd",
             str(tmp_path / "sdd.md"),
@@ -378,10 +387,11 @@ def test_cli_generate_and_propose_apply_runtime_overrides(
     generate_calls.clear()
     rc_generate_no_hierarchy = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(tmp_path / "p.yaml"),
-            "--csc",
+            "--target",
             str(tmp_path / "c.yaml"),
             "--provider",
             "gemini",
@@ -402,6 +412,7 @@ def test_cli_error_messages_for_runtime_paths(
     temp_rc = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "missing_index.json"),
             "--question",
@@ -416,6 +427,7 @@ def test_cli_error_messages_for_runtime_paths(
     ask_rc = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "missing_index.json"),
             "--question",
@@ -425,7 +437,7 @@ def test_cli_error_messages_for_runtime_paths(
     assert ask_rc == 2
     assert "Retrieval store not found" in capsys.readouterr().out
 
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     bundle = _fake_bundle(tmp_path)
     monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
     monkeypatch.setattr(
@@ -434,10 +446,11 @@ def test_cli_error_messages_for_runtime_paths(
 
     propose_rc = main(
         [
+            "sdd",
             "propose-updates",
-            "--project-config",
+            "--config",
             str(tmp_path / "p.yaml"),
-            "--csc",
+            "--target",
             str(tmp_path / "c.yaml"),
             "--existing-sdd",
             str(tmp_path / "missing_sdd.md"),
@@ -450,6 +463,7 @@ def test_cli_error_messages_for_runtime_paths(
 
     diff_rc = main(
         [
+            "repo",
             "inspect-diff",
             "--commit-range",
             "HEAD~1..HEAD",
@@ -464,7 +478,7 @@ def test_cli_error_messages_for_runtime_paths(
 def test_cli_no_graph_and_ask_graph_flags_propagate(
     tmp_path: Path, monkeypatch
 ) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     bundle = _fake_bundle(tmp_path)
     monkeypatch.setattr(cli_module, "load_config_bundle", lambda **kwargs: bundle)
     monkeypatch.setattr(
@@ -486,10 +500,11 @@ def test_cli_no_graph_and_ask_graph_flags_propagate(
     )
     rc_generate = main(
         [
+            "sdd",
             "generate",
-            "--project-config",
+            "--config",
             str(tmp_path / "p.yaml"),
-            "--csc",
+            "--target",
             str(tmp_path / "c.yaml"),
             "--no-graph",
         ]
@@ -516,6 +531,7 @@ def test_cli_no_graph_and_ask_graph_flags_propagate(
     rc_ask = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
             "--question",
@@ -536,7 +552,7 @@ def test_cli_no_graph_and_ask_graph_flags_propagate(
 def test_cli_ask_vector_flags_and_project_config_defaults(
     tmp_path: Path, monkeypatch
 ) -> None:
-    cli_module = importlib.import_module("sddraft.cli.main")
+    cli_module = importlib.import_module("engllm.cli.main")
     monkeypatch.setattr(
         cli_module, "create_llm_client", lambda *args, **kwargs: object()
     )
@@ -570,11 +586,12 @@ def test_cli_ask_vector_flags_and_project_config_defaults(
     rc_defaulted = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
             "--question",
             "what changed?",
-            "--project-config",
+            "--config",
             str(tmp_path / "project.yaml"),
         ]
     )
@@ -585,11 +602,12 @@ def test_cli_ask_vector_flags_and_project_config_defaults(
     rc_overridden = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
             "--question",
             "what changed?",
-            "--project-config",
+            "--config",
             str(tmp_path / "project.yaml"),
             "--no-vector-enabled",
             "--vector-top-k",
@@ -605,6 +623,7 @@ def test_cli_ask_vector_top_k_validation(tmp_path: Path, capsys) -> None:
     rc = main(
         [
             "ask",
+            "answer",
             "--index-path",
             str(tmp_path / "retrieval"),
             "--question",
@@ -634,6 +653,7 @@ def test_cli_migrate_index_command(tmp_path: Path) -> None:
 
     rc = main(
         [
+            "repo",
             "migrate-index",
             "--index-path",
             str(legacy_path),

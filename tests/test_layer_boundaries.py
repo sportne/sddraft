@@ -1,10 +1,10 @@
-"""Architectural boundary tests."""
+"""Architectural boundary tests for the EngLLM package layout."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "src" / "sddraft"
+ROOT = Path(__file__).resolve().parents[1] / "src" / "engllm"
 
 
 def _python_files(path: Path) -> list[Path]:
@@ -14,24 +14,30 @@ def _python_files(path: Path) -> list[Path]:
 def test_domain_does_not_import_project_modules() -> None:
     for file_path in _python_files(ROOT / "domain"):
         text = file_path.read_text(encoding="utf-8")
-        assert "from sddraft." not in text.replace("from sddraft.domain", "")
-        assert "import sddraft." not in text
+        assert "from engllm." not in text.replace("from engllm.domain", "")
+        assert "import engllm." not in text
 
 
-def test_repo_does_not_import_llm_module() -> None:
-    for file_path in _python_files(ROOT / "repo"):
+def test_core_repo_does_not_import_llm_module() -> None:
+    for file_path in _python_files(ROOT / "core" / "repo"):
         text = file_path.read_text(encoding="utf-8")
-        assert "sddraft.llm" not in text
+        assert "engllm.llm" not in text
 
 
-def test_analysis_does_not_import_provider_sdks() -> None:
-    for file_path in _python_files(ROOT / "analysis"):
+def test_core_analysis_does_not_import_provider_sdks() -> None:
+    for file_path in _python_files(ROOT / "core" / "analysis"):
         text = file_path.read_text(encoding="utf-8")
         assert "google.genai" not in text
         assert "from google" not in text
 
 
-def test_render_does_not_import_repo_module() -> None:
-    for file_path in _python_files(ROOT / "render"):
+def test_core_render_does_not_import_repo_module() -> None:
+    for file_path in _python_files(ROOT / "core" / "render"):
         text = file_path.read_text(encoding="utf-8")
-        assert "sddraft.repo" not in text
+        assert "engllm.core.repo" not in text
+
+
+def test_integrations_do_not_import_tool_modules() -> None:
+    for file_path in _python_files(ROOT / "integrations"):
+        text = file_path.read_text(encoding="utf-8")
+        assert "engllm.tools" not in text

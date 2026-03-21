@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.analysis.graph_index import default_graph_manifest_path, load_graph_store
-from sddraft.analysis.graph_models import (
+from engllm.core.analysis.graph_index import (
+    default_graph_manifest_path,
+    load_graph_store,
+)
+from engllm.core.analysis.graph_models import (
     GraphEdgeRecord,
     GraphManifest,
     GraphNodeRecord,
@@ -21,7 +24,7 @@ from sddraft.analysis.graph_models import (
     section_node_id,
     symbol_node_id,
 )
-from sddraft.analysis.graph_retrieval import (
+from engllm.core.analysis.graph_retrieval import (
     AnchorSet,
     GraphExpansionCandidateSource,
     HierarchyCandidateSource,
@@ -36,10 +39,10 @@ from sddraft.analysis.graph_retrieval import (
     preferred_edge_types,
     rerank_evidence,
 )
-from sddraft.analysis.retrieval import ScoredChunk
-from sddraft.domain.errors import AnalysisError
-from sddraft.domain.models import KnowledgeChunk
-from sddraft.render.json_artifacts import write_json_model
+from engllm.core.analysis.retrieval import ScoredChunk
+from engllm.core.render.json_artifacts import write_json_model
+from engllm.domain.errors import AnalysisError
+from engllm.domain.models import KnowledgeChunk
 
 
 def _chunk(
@@ -416,7 +419,7 @@ def _build_store_for_retrieval() -> (
 
 
 def test_default_graph_manifest_path_and_load_fallbacks(tmp_path: Path) -> None:
-    root = tmp_path / "artifacts" / "NAV_CTRL"
+    root = tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "shared"
     graph_root = _seed_graph_files(root)
 
     retrieval_dir = root / "retrieval"
@@ -445,7 +448,7 @@ def test_load_graph_store_error_paths(tmp_path: Path) -> None:
     with pytest.raises(AnalysisError, match="Graph manifest not found"):
         load_graph_store(tmp_path / "missing")
 
-    root = tmp_path / "artifacts" / "NAV_CTRL"
+    root = tmp_path / "artifacts" / "workspaces" / "NAV_CTRL" / "shared"
     graph_root = _seed_graph_files(root)
 
     (graph_root / "nodes.jsonl").write_text("not-json\n", encoding="utf-8")

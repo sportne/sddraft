@@ -1,4 +1,4 @@
-# SDDraft Task Board
+# EngLLM Task Board
 
 ## Update Rules
 
@@ -9,15 +9,18 @@
 
 ## 1) Current State Summary (Grounded In Repo)
 
-- Graph-enhanced retrieval is implemented end-to-end: `generate` and `propose-updates` build `graph/manifest.json`, `nodes.jsonl`, `edges.jsonl`, `symbol_index.json`, and `adjacency.json`.
-- `ask` currently runs lexical retrieval, optional hierarchy expansion, graph expansion, and deterministic reranking with fallback when hierarchy/graph artifacts are missing.
+- EngLLM is now organized as a shared platform plus tool namespaces: `core/`, `tools/`, `integrations/`, `llm/`, and tool-scoped prompt namespaces under `prompts/`.
+- The CLI is now tool-first and breaking by design: `engllm sdd ...`, `engllm ask ...`, and `engllm repo ...`. Legacy flat `sddraft` package and command names are gone.
+- Shared analysis artifacts now live under `artifacts/workspaces/<workspace_id>/shared/`, while tool outputs live under `artifacts/workspaces/<workspace_id>/tools/<tool_name>/`.
+- Graph-enhanced retrieval is implemented end-to-end: SDD workflows build shared `graph/manifest.json`, `nodes.jsonl`, `edges.jsonl`, `symbol_index.json`, and `adjacency.json`.
+- `ask` currently supports both the standard lexical/hierarchy/graph pipeline and an intensive whole-repo screening mode with deterministic corpus artifacts.
 - Symbol inventory is now analyzer-emitted and symbol-first (`SymbolSummary`), with deterministic owner/span metadata where available; quality remains conservative for some language-specific edge cases.
 - `imports` graph edges now use a normalized multi-language resolver (`python`, `java`, `javascript`, `typescript`, `go`, `rust`, `csharp`, `cpp`) with conservative repo-local resolution and inspectable reason metadata.
 - Graph build now supports deterministic planner decisions (`no_op`, `partial`, `full`) with manifest fingerprinting and fragment reuse in `graph/fragments/`.
 - Vector readiness is formalized but still placeholder-only: `ask` can orchestrate lexical, hierarchy, graph, and future vector sources through one contract, while the vector backend remains disabled-by-default and intentionally empty.
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
-- `ask` now also supports an `intensive` mode that screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/<CSC>/ask/intensive/`.
-- Docs and tests are in strong shape through Phase 7, with the next gap now centered on making intensive ask mode and its tradeoffs explicit in the roadmap.
+- `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
+- Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
 
 ## 2) Guiding Principles / Scope
 
@@ -246,6 +249,31 @@
   `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_render_and_workflow_misc.py && rg -n \"intensive\" docs/USAGE.md`  
   `Result:` pass
 
+### Phase 9 — EngLLM Multi-Tool Restructure
+
+`Objective:` Reshape the repo from an SDD-first package into a multi-tool repository-analysis toolkit.
+`Why:` SDD generation, grounded Q&A, and future repo-focused tools need a shared platform instead of continuing to accrete inside one workflow-centric package.
+`Dependencies:` Phases 1-8.
+`Completion Criteria:` Package/CLI rename is complete, shared deterministic logic lives under `core/`, tool orchestration lives under `tools/`, future integrations have explicit capability interfaces, and artifacts use the workspace/tool layout.
+
+- [x] **G9-01**  
+  `Outcome:` Rename the package and CLI from `sddraft` to `engllm` with no compatibility shim.  
+  `Definition of Done:` Imports, package metadata, docs, and CLI entrypoints use `engllm` only.  
+  `Verification Command(s):` `pytest tests/test_imports.py tests/test_cli.py`  
+  `Result:` pass
+
+- [x] **G9-02**  
+  `Outcome:` Split shared deterministic logic into `core/` and tool-specific orchestration into `tools/ask`, `tools/sdd`, and `tools/repo`.  
+  `Definition of Done:` Ask, SDD, and repo utility commands execute from tool namespaces while shared analysis stays reusable in `core/`.  
+  `Verification Command(s):` `pytest tests/test_workflow_generate_and_ask.py tests/test_workflow_propose_updates.py`  
+  `Result:` pass
+
+- [x] **G9-03**  
+  `Outcome:` Introduce workspace-first artifact layout and internal tool/integration contracts.  
+  `Definition of Done:` Shared artifacts write to `artifacts/workspaces/<workspace_id>/shared/`, tool outputs write to `artifacts/workspaces/<workspace_id>/tools/<tool_name>/`, and future integration seams exist under `integrations/`.  
+  `Verification Command(s):` `pytest tests/test_cli_additional.py tests/test_layer_boundaries.py`  
+  `Result:` pass
+
 ## 4) Testing And Validation Requirements (For All Phases)
 
 - Unit tests for symbol extraction, edge construction, graph loading, traversal, and rerank math.
@@ -267,12 +295,19 @@
 - [ ] Graph visualization/export tooling for artifact inspection (CLI report or static visualization).
 - [ ] Optional benchmark harness for large mixed-language repos with memory/runtime trend reporting.
 
-## 6) Historical Completed Milestones (Preserved)
+## 6) Future Tool Tracks (Planned, Not Implemented Yet)
+
+- [ ] CI log summarizer built on shared repo analysis plus `CiLogClient` integrations.
+- [ ] Code review automation built on `RepoHostClient` and `IssueTrackerClient`, with vendor adapters such as Atlassian and GitLab living behind those interfaces.
+- [ ] Release-note generation from commit ranges with optional issue-enrichment support.
+- [ ] History-walk documentation generation that mines repository evolution over time instead of only the current snapshot.
+
+## 7) Historical Completed Milestones (Preserved)
 
 - [x] **T-001..T-006** v1 hardening baseline (task board, CLI override parity, error handling, regression coverage).
 - [x] **T-007..T-010** v1 acceptance-proofing baseline (extensibility docs, Gemini optional dependency/docs, acceptance tests, quality gate pass).
 - [x] Graph baseline implemented: graph artifacts + ask graph augmentation + deterministic reranking + CLI graph flags + fallback behavior.
 
-## 7) Blocked
+## 8) Blocked
 
 - [ ] None currently.

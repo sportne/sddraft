@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sddraft.repo.scanner import scan_repository
+from engllm.core.repo.scanner import scan_repository
 
 
 def test_scan_repository_multilanguage(

@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sddraft.analysis.dependency_resolution import (
+from engllm.core.analysis.dependency_resolution import (
     dependency_reason_payload,
     resolve_dependency_records,
 )
-from sddraft.domain.models import CodeUnitSummary, SymbolSummary
+from engllm.domain.models import CodeUnitSummary, SymbolSummary
 
 
 def _write(path: Path, text: str) -> None:

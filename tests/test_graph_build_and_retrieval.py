@@ -5,18 +5,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sddraft.analysis.graph_retrieval import (
+from engllm.core.analysis.graph_retrieval import (
     AnchorSet,
     GraphChunkCandidate,
     rerank_evidence,
 )
-from sddraft.analysis.retrieval import ScoredChunk
-from sddraft.analysis.symbol_inventory import build_symbol_inventory
-from sddraft.domain.models import KnowledgeChunk, QueryRequest
-from sddraft.llm.mock import MockLLMClient
-from sddraft.repo.scanner import scan_repository
-from sddraft.workflows.ask import answer_question
-from sddraft.workflows.generate import generate_sdd
+from engllm.core.analysis.retrieval import ScoredChunk
+from engllm.core.analysis.symbol_inventory import build_symbol_inventory
+from engllm.core.repo.scanner import scan_repository
+from engllm.domain.models import KnowledgeChunk, QueryRequest
+from engllm.llm.mock import MockLLMClient
+from engllm.tools.ask.ask import answer_question
+from engllm.tools.sdd.generate import generate_sdd
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
@@ -430,7 +430,7 @@ def test_ask_graph_fallback_and_graph_augmented_selection(
         request=QueryRequest(question="What does caller depend on?", top_k=1),
         index_path=no_graph_result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         graph_enabled=True,
         graph_depth=1,
         graph_top_k=4,
@@ -454,7 +454,7 @@ def test_ask_graph_fallback_and_graph_augmented_selection(
         request=QueryRequest(question="What does caller depend on?", top_k=1),
         index_path=graph_result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         graph_enabled=True,
         graph_depth=1,
         graph_top_k=4,

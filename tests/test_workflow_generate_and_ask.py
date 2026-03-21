@@ -5,15 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sddraft.domain.models import (
+from engllm.domain.models import (
     DirectorySummaryRecord,
     HierarchyManifest,
     QueryRequest,
 )
-from sddraft.llm.base import StructuredGenerationRequest
-from sddraft.llm.mock import MockLLMClient
-from sddraft.workflows.ask import answer_question
-from sddraft.workflows.generate import generate_sdd
+from engllm.llm.base import StructuredGenerationRequest
+from engllm.llm.mock import MockLLMClient
+from engllm.tools.ask.ask import answer_question
+from engllm.tools.sdd.generate import generate_sdd
 
 
 class RecordingMockLLMClient(MockLLMClient):
@@ -73,7 +73,7 @@ def compute_distance(x: float, y: float) -> float:
         request=QueryRequest(question="What does navigation control do?", top_k=4),
         index_path=result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
     )
 
     assert ask_result.answer.answer
@@ -106,7 +106,7 @@ def test_ask_uses_hierarchy_expansion_when_available(
         request=QueryRequest(question="compute_distance", top_k=1),
         index_path=result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
     )
 
     assert any(
@@ -143,7 +143,7 @@ def test_ask_fallback_when_hierarchy_store_missing(
         request=QueryRequest(question="compute_distance", top_k=1),
         index_path=result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
     )
 
     assert any(
@@ -178,7 +178,7 @@ def test_ask_with_vector_enabled_placeholder_backend_is_non_fatal(
         ),
         index_path=result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         vector_enabled=True,
         vector_top_k=4,
     )
@@ -214,7 +214,7 @@ def test_ask_change_impact_query_without_commit_context_stays_conservative(
         request=QueryRequest(question="What changed in HEAD~1..HEAD?", top_k=3),
         index_path=result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
     )
 
     assert ask_result.answer.answer
@@ -268,7 +268,7 @@ def test_ask_intensive_mode_writes_artifacts_and_selected_evidence(
         ),
         index_path=generate_result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         mode="intensive",
         project_config=sample_project_config,
         repo_root=tmp_path,
@@ -284,7 +284,15 @@ def test_ask_intensive_mode_writes_artifacts_and_selected_evidence(
         for item in ask_result.evidence_pack.inclusion_reasons
     )
 
-    intensive_root = tmp_path / "artifacts" / sample_csc.csc_id / "ask" / "intensive"
+    intensive_root = (
+        tmp_path
+        / "artifacts"
+        / "workspaces"
+        / sample_csc.csc_id
+        / "tools"
+        / "ask"
+        / "intensive"
+    )
     corpus_manifest_path = intensive_root / "corpus" / "manifest.json"
     runs_root = intensive_root / "runs"
     assert corpus_manifest_path.exists()
@@ -305,7 +313,7 @@ def test_ask_intensive_mode_writes_artifacts_and_selected_evidence(
         ),
         index_path=generate_result.retrieval_index_path,
         llm_client=llm,
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         mode="intensive",
         project_config=sample_project_config,
         repo_root=tmp_path,
@@ -344,7 +352,7 @@ def test_ask_intensive_mode_without_selected_excerpts_stays_conservative(
         request=QueryRequest(question="Where is telemetry persisted?", top_k=2),
         index_path=generate_result.retrieval_index_path,
         llm_client=MockLLMClient(),
-        model_name="mock-sddraft",
+        model_name="mock-engllm",
         mode="intensive",
         project_config=sample_project_config,
         repo_root=tmp_path,

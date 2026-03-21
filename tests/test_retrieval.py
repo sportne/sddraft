@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.analysis.retrieval import (
+from engllm.core.analysis.retrieval import (
     BM25Retriever,
     LexicalIndexer,
     build_retrieval_store,
@@ -18,8 +18,8 @@ from sddraft.analysis.retrieval import (
     to_citations,
     tokenize,
 )
-from sddraft.domain.errors import AnalysisError
-from sddraft.domain.models import KnowledgeChunk
+from engllm.domain.errors import AnalysisError
+from engllm.domain.models import KnowledgeChunk
 
 
 def _sample_chunks() -> list[KnowledgeChunk]:

@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.domain.errors import RenderingError
-from sddraft.domain.models import (
+from engllm.core.render.hierarchy import render_directory_summary_markdown
+from engllm.core.render.json_artifacts import write_json_model
+from engllm.domain.errors import RenderingError
+from engllm.domain.models import (
     ChunkInclusionReason,
     Citation,
     DirectorySummaryDoc,
@@ -24,18 +26,14 @@ from sddraft.domain.models import (
     SubtreeRollup,
     UpdateProposalReport,
 )
-from sddraft.prompts.builders import (
+from engllm.prompts.ask.builders import (
     build_intensive_screening_prompt,
     build_query_prompt,
 )
-from sddraft.render.hierarchy import render_directory_summary_markdown
-from sddraft.render.json_artifacts import write_json_model
-from sddraft.render.markdown import render_sdd_markdown, write_markdown
-from sddraft.render.reports import (
-    render_query_answer_text,
-    render_update_report_markdown,
-)
-from sddraft.workflows.inspect_diff import inspect_diff
+from engllm.tools.ask.render import render_query_answer_text
+from engllm.tools.repo.inspect_diff import inspect_diff
+from engllm.tools.sdd.markdown import render_sdd_markdown, write_markdown
+from engllm.tools.sdd.render import render_update_report_markdown
 
 
 class _SimpleModel(QueryAnswer):
@@ -230,8 +228,8 @@ def test_write_render_error_paths(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_render_sdd_markdown_and_inspect_diff(monkeypatch) -> None:
-    inspect_module = importlib.import_module("sddraft.workflows.inspect_diff")
-    from sddraft.domain.models import SDDDocument, SectionDraft
+    inspect_module = importlib.import_module("engllm.tools.repo.inspect_diff")
+    from engllm.domain.models import SDDDocument, SectionDraft
 
     doc = SDDDocument(
         csc_id="X",

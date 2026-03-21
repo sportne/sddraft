@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sddraft.analysis.graph_build import (
+from engllm.core.analysis.graph_build import (
     _build_fragment,
     _cleanup_stale_fragments,
     _commit_fragment_id,
@@ -21,7 +21,7 @@ from sddraft.analysis.graph_build import (
     _write_fragment,
     _write_manifest,
 )
-from sddraft.analysis.graph_models import (
+from engllm.core.analysis.graph_models import (
     GraphBuildPlan,
     GraphInputFingerprint,
     GraphManifest,
