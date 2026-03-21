@@ -104,6 +104,7 @@ def answer_question(
     related_files: list[Path] = []
     related_symbols: list[str] = []
     related_sections: list[str] = []
+    related_commits: list[str] = []
 
     if graph_enabled:
         graph_manifest_path = default_graph_manifest_path(retrieval_root)
@@ -151,6 +152,7 @@ def answer_question(
                 related_files = rerank.related_files
                 related_symbols = rerank.related_symbols
                 related_sections = rerank.related_sections
+                related_commits = rerank.related_commits
                 if vector_enabled and not vector_seed:
                     vector_fallback_note = (
                         "Vector source enabled but no vector backend is configured yet; "
@@ -176,6 +178,7 @@ def answer_question(
         related_files=related_files,
         related_symbols=related_symbols,
         related_sections=related_sections,
+        related_commits=related_commits,
         inclusion_reasons=rerank_reasons,
     )
 

@@ -62,6 +62,7 @@ def build_query_prompt(pack: QueryEvidencePack) -> tuple[str, str]:
         f"Related Files:\n{_json([path.as_posix() for path in pack.related_files])}\n\n"
         f"Related Symbols:\n{_json(pack.related_symbols)}\n\n"
         f"Related Sections:\n{_json(pack.related_sections)}\n\n"
+        f"Related Commits:\n{_json(pack.related_commits)}\n\n"
         f"Inclusion Reasons:\n{_json([reason.model_dump(mode='json') for reason in pack.inclusion_reasons])}\n"
     )
     return QUERY_SYSTEM_PROMPT, user_prompt

@@ -15,6 +15,7 @@ from sddraft.analysis.graph_models import (
     GraphStore,
     GraphSymbolRecord,
     chunk_node_id,
+    commit_node_id,
     edge_record_id,
     file_node_id,
     section_node_id,
@@ -230,6 +231,7 @@ def _build_store_for_retrieval() -> (
     main_file = file_node_id(Path("src/main.py"))
     helper_file = file_node_id(Path("src/helper.py"))
     section_2 = section_node_id("2")
+    commit_id = commit_node_id("HEAD~1..HEAD")
     seed_node = chunk_node_id("seed")
     extra_node = chunk_node_id("extra")
     compute_sym = symbol_node_id(Path("src/main.py"), "function", "compute")
@@ -255,6 +257,11 @@ def _build_store_for_retrieval() -> (
             node_type="sdd_section",
             label="2 Design Overview",
             section_id="2",
+        ),
+        commit_id: GraphNodeRecord(
+            node_id=commit_id,
+            node_type="commit",
+            label="HEAD~1..HEAD",
         ),
         seed_node: GraphNodeRecord(
             node_id=seed_node,
@@ -342,6 +349,24 @@ def _build_store_for_retrieval() -> (
             edge_type="documents",
             source_id=section_2,
             target_id=helper_file,
+        ),
+        edge_record_id("changed_in", main_file, commit_id): GraphEdgeRecord(
+            edge_id=edge_record_id("changed_in", main_file, commit_id),
+            edge_type="changed_in",
+            source_id=main_file,
+            target_id=commit_id,
+        ),
+        edge_record_id("changed_in", helper_sym, commit_id): GraphEdgeRecord(
+            edge_id=edge_record_id("changed_in", helper_sym, commit_id),
+            edge_type="changed_in",
+            source_id=helper_sym,
+            target_id=commit_id,
+        ),
+        edge_record_id("impacts_section", main_file, section_2): GraphEdgeRecord(
+            edge_id=edge_record_id("impacts_section", main_file, section_2),
+            edge_type="impacts_section",
+            source_id=main_file,
+            target_id=section_2,
         ),
     }
 
@@ -500,10 +525,13 @@ def test_graph_retrieval_edge_cases() -> None:
     seed = chunks[0]
 
     assert infer_query_intent("How do modules depend on imports?") == "dependency"
+    assert infer_query_intent("What changed in HEAD~1..HEAD?") == "change_impact"
     assert infer_query_intent("Show architecture overview") == "architecture"
     assert infer_query_intent("Which section is documented?") == "documentation"
     assert infer_query_intent("Where is compute implemented?") == "implementation"
 
+    assert "changed_in" in preferred_edge_types("change_impact")
+    assert "impacts_section" in preferred_edge_types("change_impact")
     assert "imports" in preferred_edge_types("dependency")
     assert "documents" in preferred_edge_types("documentation")
     assert "parent_of" in preferred_edge_types("architecture")
@@ -570,6 +598,82 @@ def test_collect_graph_candidates_attaches_symbol_context() -> None:
         path.edge_type in {"references", "contains", "documents"}
         for path in helper_candidate.graph_paths
     )
+
+
+def test_collect_graph_candidates_surfaces_commit_context() -> None:
+    store, chunks, engine = _build_store_for_retrieval()
+    seed = chunks[0]
+
+    candidates, anchors, intent = collect_graph_candidates(
+        query="Which sections were impacted by HEAD~1..HEAD?",
+        engine=engine,  # type: ignore[arg-type]
+        store=store,
+        seed_chunks=[seed],
+        depth=2,
+        top_k=4,
+    )
+
+    assert intent == "change_impact"
+    assert anchors.commit_ids == {commit_node_id("HEAD~1..HEAD")}
+    assert any("HEAD~1..HEAD" in item.related_commits for item in candidates)
+
+    reranked = rerank_evidence(
+        lexical_candidates=LexicalCandidateSource(engine).collect(
+            query="Which sections were impacted by HEAD~1..HEAD?",
+            top_k=2,
+        ),
+        graph_candidates=candidates,
+        anchors=anchors,
+        intent=intent,
+        top_k=3,
+    )
+
+    assert reranked.related_commits == ["HEAD~1..HEAD"]
+    assert any(
+        reason.graph_paths for reason in reranked.reasons if reason.source == "graph"
+    )
+
+
+def test_change_impact_queries_without_commit_nodes_remain_deterministic() -> None:
+    store, chunks, engine = _build_store_for_retrieval()
+    filtered_nodes = {
+        node_id: node
+        for node_id, node in store.nodes_by_id.items()
+        if node.node_type != "commit"
+    }
+    filtered_edges = {
+        edge_id: edge
+        for edge_id, edge in store.edges_by_id.items()
+        if edge.edge_type not in {"changed_in", "impacts_section"}
+    }
+    outgoing: dict[str, list[str]] = {}
+    incoming: dict[str, list[str]] = {}
+    for edge in filtered_edges.values():
+        outgoing.setdefault(edge.source_id, []).append(edge.edge_id)
+        incoming.setdefault(edge.target_id, []).append(edge.edge_id)
+    no_commit_store = GraphStore(
+        manifest_path=store.manifest_path,
+        manifest=store.manifest,
+        nodes_by_id=filtered_nodes,
+        edges_by_id=filtered_edges,
+        outgoing={key: sorted(value) for key, value in outgoing.items()},
+        incoming={key: sorted(value) for key, value in incoming.items()},
+        symbols_by_name=store.symbols_by_name,
+        symbol_records=store.symbol_records,
+    )
+
+    candidates, anchors, intent = collect_graph_candidates(
+        query="What changed in HEAD~1..HEAD?",
+        engine=engine,  # type: ignore[arg-type]
+        store=no_commit_store,
+        seed_chunks=[chunks[0]],
+        depth=2,
+        top_k=3,
+    )
+
+    assert intent == "change_impact"
+    assert anchors.commit_ids == set()
+    assert all(not item.related_commits for item in candidates)
 
 
 def test_rerank_biases_documentation_and_architecture_sources() -> None:

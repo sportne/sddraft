@@ -134,6 +134,7 @@ def test_build_query_prompt_includes_extended_evidence_fields() -> None:
         related_files=[Path("src/helper.py")],
         related_symbols=["compute_distance [src/module.py]"],
         related_sections=["3.2"],
+        related_commits=["HEAD~1..HEAD"],
         inclusion_reasons=[inclusion_reason],
     )
 
@@ -143,9 +144,11 @@ def test_build_query_prompt_includes_extended_evidence_fields() -> None:
     assert "Related Files:" in prompt
     assert "Related Symbols:" in prompt
     assert "Related Sections:" in prompt
+    assert "Related Commits:" in prompt
     assert "Inclusion Reasons:" in prompt
     assert "graph_paths" in prompt
     assert "compute_distance [src/module.py]" in prompt
+    assert "HEAD~1..HEAD" in prompt
 
 
 def test_render_directory_summary_includes_subtree_rollup_section() -> None:

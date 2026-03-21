@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -20,7 +20,13 @@ from sddraft.domain.models import (
     KnowledgeChunk,
 )
 
-QueryIntent = Literal["implementation", "dependency", "documentation", "architecture"]
+QueryIntent = Literal[
+    "implementation",
+    "dependency",
+    "documentation",
+    "architecture",
+    "change_impact",
+]
 TextCandidateSourceName = Literal["lexical", "hierarchy", "vector"]
 _LEXICAL_WEIGHT = 0.65
 _ANCHOR_WEIGHT = 0.20
@@ -50,6 +56,7 @@ class GraphChunkCandidate:
     related_files: tuple[Path, ...] = ()
     related_symbols: tuple[str, ...] = ()
     related_sections: tuple[str, ...] = ()
+    related_commits: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +69,7 @@ class AnchorSet:
     symbol_labels: set[str]
     symbol_names: set[str]
     section_ids: set[str]
+    commit_ids: set[str] = field(default_factory=set)
 
 
 @dataclass(slots=True)
@@ -73,6 +81,7 @@ class RerankResult:
     related_files: list[Path]
     related_symbols: list[str]
     related_sections: list[str]
+    related_commits: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +265,25 @@ def infer_query_intent(question: str) -> QueryIntent:
     """Infer deterministic retrieval intent from question keywords."""
 
     tokens = set(tokenize(question))
+    if tokens & {
+        "change",
+        "changed",
+        "changes",
+        "commit",
+        "commits",
+        "diff",
+        "difference",
+        "differences",
+        "update",
+        "updates",
+        "updated",
+        "modify",
+        "modified",
+        "modifies",
+        "impact",
+        "impacted",
+    }:
+        return "change_impact"
     if tokens & {"depend", "dependency", "dependencies", "import", "imports"}:
         return "dependency"
     if tokens & {
@@ -278,6 +306,14 @@ def infer_query_intent(question: str) -> QueryIntent:
 def preferred_edge_types(intent: QueryIntent) -> set[GraphEdgeType]:
     """Return edge-type filters for one intent."""
 
+    if intent == "change_impact":
+        return {
+            "changed_in",
+            "impacts_section",
+            "documents",
+            "contains",
+            "references",
+        }
     if intent == "dependency":
         return {"imports", "contains", "defines", "references"}
     if intent == "documentation":
@@ -363,6 +399,7 @@ def _collect_anchor_symbol_ids(store: GraphStore, node_ids: set[str]) -> set[str
                 "defines",
                 "contains",
                 "documents",
+                "changed_in",
                 "impacts_section",
             }:
                 continue
@@ -377,7 +414,48 @@ def _collect_anchor_symbol_ids(store: GraphStore, node_ids: set[str]) -> set[str
     return symbol_ids
 
 
-def extract_anchors(chunks: list[KnowledgeChunk], store: GraphStore) -> AnchorSet:
+def _question_contains_commit_label(question: str, label: str) -> bool:
+    """Return whether a commit label appears verbatim in the question text."""
+
+    return label.strip().lower() in question.lower()
+
+
+def _collect_commit_anchor_ids(
+    *,
+    question: str,
+    intent: QueryIntent,
+    store: GraphStore,
+) -> set[str]:
+    """Collect deterministic commit anchors for change-impact questions."""
+
+    if intent != "change_impact":
+        return set()
+
+    commit_ids = [
+        node_id
+        for node_id, node in sorted(store.nodes_by_id.items())
+        if node.node_type == "commit"
+    ]
+    if len(commit_ids) == 1:
+        return {commit_ids[0]}
+
+    values: set[str] = set()
+    for node_id in commit_ids:
+        node = store.nodes_by_id.get(node_id)
+        if node is None:
+            continue
+        if _question_contains_commit_label(question, node.label):
+            values.add(node_id)
+    return values
+
+
+def extract_anchors(
+    chunks: list[KnowledgeChunk],
+    store: GraphStore,
+    *,
+    question: str,
+    intent: QueryIntent,
+) -> AnchorSet:
     """Extract anchor entities from current evidence chunks."""
 
     node_ids: set[str] = set()
@@ -386,6 +464,11 @@ def extract_anchors(chunks: list[KnowledgeChunk], store: GraphStore) -> AnchorSe
     symbol_labels: set[str] = set()
     symbol_names: set[str] = set()
     section_ids: set[str] = set()
+    commit_ids = _collect_commit_anchor_ids(
+        question=question,
+        intent=intent,
+        store=store,
+    )
 
     for chunk in chunks:
         chunk_node = chunk_node_id(chunk.chunk_id)
@@ -406,6 +489,7 @@ def extract_anchors(chunks: list[KnowledgeChunk], store: GraphStore) -> AnchorSe
     symbol_ids.update(_collect_anchor_symbol_ids(store, node_ids))
     for path in sorted(file_paths, key=lambda item: item.as_posix()):
         symbol_ids.update(_symbol_ids_for_path(store, path))
+    node_ids.update(commit_ids)
     node_ids.update(symbol_ids)
 
     for symbol_id in sorted(symbol_ids):
@@ -422,6 +506,7 @@ def extract_anchors(chunks: list[KnowledgeChunk], store: GraphStore) -> AnchorSe
         symbol_labels=symbol_labels,
         symbol_names=symbol_names,
         section_ids=section_ids,
+        commit_ids=commit_ids,
     )
 
 
@@ -505,10 +590,22 @@ def _load_graph_candidate_chunks(
             target_label=target_node.label if target_node is not None else None,
         )
 
+    def symbols_for_path(path: Path) -> set[str]:
+        values: set[str] = set()
+        for symbol_id in _symbol_ids_for_path(store, path):
+            label = _symbol_label(store, symbol_id)
+            if label is not None:
+                values.add(label)
+        return values
+
     chunk_ids: set[str] = set()
     source_paths: set[Path] = set()
     section_ids: set[str] = set()
     symbol_hits: list[tuple[GraphTraversalHit, GraphInclusionPath | None]] = []
+    commit_paths_by_id: dict[str, set[Path]] = {}
+    commit_sections_by_id: dict[str, set[str]] = {}
+    commit_symbols_by_id: dict[str, set[str]] = {}
+    commit_labels_by_id: dict[str, str] = {}
 
     for hit in hits:
         node = store.nodes_by_id.get(hit.node_id)
@@ -524,6 +621,44 @@ def _load_graph_candidate_chunks(
             symbol_hits.append((hit, path_from_hit(hit)))
             if node.path is not None:
                 source_paths.add(node.path)
+        elif node.node_type == "commit":
+            commit_labels_by_id[node.node_id] = node.label
+            related_paths: set[Path] = set()
+            related_sections: set[str] = set()
+            related_symbols: set[str] = set()
+            for edge_id, neighbor_id in _iter_neighbor_edges(store, node.node_id):
+                edge = store.edges_by_id.get(edge_id)
+                neighbor = store.nodes_by_id.get(neighbor_id)
+                if edge is None or neighbor is None or edge.edge_type != "changed_in":
+                    continue
+                if neighbor.node_type == "file" and neighbor.path is not None:
+                    related_paths.add(neighbor.path)
+                    related_symbols.update(symbols_for_path(neighbor.path))
+                elif neighbor.node_type == "symbol":
+                    label = _symbol_label(store, neighbor.node_id)
+                    if label is not None:
+                        related_symbols.add(label)
+                    if neighbor.path is not None:
+                        related_paths.add(neighbor.path)
+                for adjacent_edge_id, adjacent_neighbor_id in _iter_neighbor_edges(
+                    store, neighbor.node_id
+                ):
+                    adjacent_edge = store.edges_by_id.get(adjacent_edge_id)
+                    adjacent_neighbor = store.nodes_by_id.get(adjacent_neighbor_id)
+                    if (
+                        adjacent_edge is None
+                        or adjacent_neighbor is None
+                        or adjacent_neighbor.node_type != "sdd_section"
+                        or adjacent_neighbor.section_id is None
+                    ):
+                        continue
+                    if adjacent_edge.edge_type in {"impacts_section", "documents"}:
+                        related_sections.add(adjacent_neighbor.section_id)
+            commit_paths_by_id[node.node_id] = related_paths
+            commit_sections_by_id[node.node_id] = related_sections
+            commit_symbols_by_id[node.node_id] = related_symbols
+            source_paths.update(related_paths)
+            section_ids.update(related_sections)
 
     loaded: dict[str, KnowledgeChunk] = {}
 
@@ -546,6 +681,7 @@ def _load_graph_candidate_chunks(
         related_files: set[Path] | None = None,
         related_symbols: set[str] | None = None,
         related_sections: set[str] | None = None,
+        related_commits: set[str] | None = None,
         graph_paths: list[GraphInclusionPath] | None = None,
     ) -> None:
         current = scored.get(chunk.chunk_id)
@@ -598,6 +734,14 @@ def _load_graph_candidate_chunks(
                 }
             )
         )
+        new_commits = tuple(
+            sorted(
+                {
+                    *(current.related_commits if current is not None else tuple()),
+                    *(related_commits or set()),
+                }
+            )
+        )
         preferred_reason = reason
         preferred_score = score
         if current is not None:
@@ -614,15 +758,8 @@ def _load_graph_candidate_chunks(
             related_files=new_files,
             related_symbols=new_symbols,
             related_sections=new_sections,
+            related_commits=new_commits,
         )
-
-    def symbols_for_path(path: Path) -> set[str]:
-        values: set[str] = set()
-        for symbol_id in _symbol_ids_for_path(store, path):
-            label = _symbol_label(store, symbol_id)
-            if label is not None:
-                values.add(label)
-        return values
 
     for hit in hits:
         node = store.nodes_by_id.get(hit.node_id)
@@ -676,6 +813,33 @@ def _load_graph_candidate_chunks(
                     )
             continue
 
+        if node.node_type == "commit":
+            related_paths = commit_paths_by_id.get(node.node_id, set())
+            related_sections = commit_sections_by_id.get(node.node_id, set())
+            related_symbols = commit_symbols_by_id.get(node.node_id, set())
+            related_commit = commit_labels_by_id.get(node.node_id, node.label)
+            if not related_paths and not related_sections:
+                continue
+            for chunk in loaded.values():
+                if chunk.source_path not in related_paths and (
+                    chunk.section_id is None or chunk.section_id not in related_sections
+                ):
+                    continue
+                candidate_sections = set(related_sections)
+                if chunk.section_id is not None:
+                    candidate_sections.add(chunk.section_id)
+                add_candidate(
+                    chunk=chunk,
+                    score=score,
+                    reason=reason,
+                    related_files=related_paths,
+                    related_symbols=related_symbols,
+                    related_sections=candidate_sections,
+                    related_commits={related_commit},
+                    graph_paths=graph_paths,
+                )
+            continue
+
     for hit, symbol_path in symbol_hits:
         node = store.nodes_by_id.get(hit.node_id)
         if node is None or node.path is None:
@@ -724,6 +888,17 @@ def _load_graph_candidate_chunks(
 
 
 def _type_bias(chunk: KnowledgeChunk, intent: QueryIntent) -> float:
+    if intent == "change_impact":
+        if chunk.source_type == "sdd_section":
+            return 0.08
+        if chunk.source_type == "code":
+            return 0.05
+        if chunk.source_type in {"file_summary", "directory_summary"}:
+            return 0.04
+        if chunk.source_type == "review_artifact":
+            return 0.03
+        return 0.01
+
     if intent == "dependency":
         if chunk.source_type == "code":
             return 0.06
@@ -764,7 +939,7 @@ def rerank_evidence(
     """Combine lexical and graph candidates into deterministic ranked evidence."""
 
     if top_k <= 0:
-        return RerankResult([], [], [], [], [])
+        return RerankResult([], [], [], [], [], [])
 
     # Normalize lexical scores to a 0-1 range so they can be blended with
     # graph proximity and anchor signals in a transparent formula.
@@ -796,6 +971,13 @@ def rerank_evidence(
             anchor_score = max(anchor_score, 0.8)
 
         graph_item = graph_by_chunk_id.get(chunk_id)
+        if graph_item is not None and anchors.commit_ids:
+            if any(
+                path.source_node_id in anchors.commit_ids
+                or path.target_node_id in anchors.commit_ids
+                for path in graph_item.graph_paths
+            ):
+                anchor_score = max(anchor_score, 1.0)
         graph_score = graph_item.graph_score if graph_item is not None else 0.0
         type_bias = _type_bias(chunk, intent)
         # Weighted score tuned for v1:
@@ -844,6 +1026,7 @@ def rerank_evidence(
     related_files: set[Path] = set()
     related_symbols: set[str] = set()
     related_sections: set[str] = set()
+    related_commits: set[str] = set()
 
     # Related entities are supplemental context shown to the prompt/response.
     # They are kept separate from primary selected chunks.
@@ -856,6 +1039,8 @@ def rerank_evidence(
                 related_sections.add(section_id)
         for label in candidate.related_symbols:
             related_symbols.add(label)
+        for commit_label in candidate.related_commits:
+            related_commits.add(commit_label)
 
     return RerankResult(
         chunks=selected_chunks,
@@ -863,6 +1048,7 @@ def rerank_evidence(
         related_files=sorted(related_files, key=lambda item: item.as_posix()),
         related_symbols=sorted(related_symbols),
         related_sections=sorted(related_sections),
+        related_commits=sorted(related_commits),
     )
 
 
@@ -878,7 +1064,12 @@ def collect_graph_candidates(
     """Collect graph-driven chunk candidates from seed evidence."""
 
     intent = infer_query_intent(query)
-    anchors = extract_anchors(seed_chunks, store)
+    anchors = extract_anchors(
+        seed_chunks,
+        store,
+        question=query,
+        intent=intent,
+    )
     hits = expand_graph_neighbors(
         store=store,
         anchors=anchors,
@@ -886,6 +1077,20 @@ def collect_graph_candidates(
         edge_filter=preferred_edge_types(intent),
         limit=max(top_k * 4, 8),
     )
+    if anchors.commit_ids:
+        hits = [
+            *[
+                GraphTraversalHit(
+                    node_id=commit_id,
+                    distance=1,
+                    via_edge_type=None,
+                    edge_source_id=None,
+                    edge_target_id=None,
+                )
+                for commit_id in sorted(anchors.commit_ids)
+            ],
+            *hits,
+        ]
     candidates = _load_graph_candidate_chunks(
         engine=engine,
         store=store,

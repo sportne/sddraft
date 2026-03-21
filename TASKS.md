@@ -177,20 +177,23 @@
 `Dependencies:` Phases 2-4.
 `Completion Criteria:` Change-impact questions reliably retrieve commit/file/section evidence via graph traversal and reranking.
 
-- [ ] **G6-01**  
+- [x] **G6-01**  
   `Outcome:` Add deterministic change-impact intent classification for commit-oriented questions.  
   `Definition of Done:` Intent router explicitly recognizes change/impact/commit question patterns and edge preferences.  
-  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py`
+  `Verification Command(s):` `pytest tests/test_graph_index_and_candidate_sources.py`  
+  `Result:` pass
 
-- [ ] **G6-02**  
+- [x] **G6-02**  
   `Outcome:` Add traversal preferences for `changed_in` and `impacts_section` edges and include commit nodes in related evidence outputs.  
   `Definition of Done:` Ask evidence pack exposes commit-aware context for applicable queries.  
-  `Verification Command(s):` `pytest tests/test_workflow_propose_updates.py tests/test_workflow_generate_and_ask.py`
+  `Verification Command(s):` `pytest tests/test_workflow_propose_updates.py tests/test_workflow_generate_and_ask.py`  
+  `Result:` pass
 
-- [ ] **G6-03**  
+- [x] **G6-03**  
   `Outcome:` Add regression tests for commit-impact Q&A using propose-updates-produced artifacts.  
   `Definition of Done:` Tests assert grounded citations and non-fabricated unknown handling (`TBD`) for change-impact questions.  
-  `Verification Command(s):` `pytest tests/test_workflow_propose_updates.py tests/test_graph_build_and_retrieval.py`
+  `Verification Command(s):` `pytest tests/test_workflow_propose_updates.py tests/test_graph_build_and_retrieval.py`  
+  `Result:` pass
 
 ### Phase 7 — Documentation First-Class Graph Subsystem
 

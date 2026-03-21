@@ -684,6 +684,7 @@ class QueryEvidencePack(DomainModel):
     related_files: list[Path] = Field(default_factory=list)
     related_symbols: list[str] = Field(default_factory=list)
     related_sections: list[str] = Field(default_factory=list)
+    related_commits: list[str] = Field(default_factory=list)
     inclusion_reasons: list[ChunkInclusionReason] = Field(default_factory=list)
 
 

@@ -187,6 +187,40 @@ def test_ask_with_vector_enabled_placeholder_backend_is_non_fatal(
     )
 
 
+def test_ask_change_impact_query_without_commit_context_stays_conservative(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "module.py").write_text(
+        "def compute_distance(x: float, y: float) -> float:\n    return x + y\n",
+        encoding="utf-8",
+    )
+
+    llm = MockLLMClient()
+    result = generate_sdd(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        repo_root=tmp_path,
+    )
+
+    ask_result = answer_question(
+        request=QueryRequest(question="What changed in HEAD~1..HEAD?", top_k=3),
+        index_path=result.retrieval_index_path,
+        llm_client=llm,
+        model_name="mock-sddraft",
+    )
+
+    assert ask_result.answer.answer
+    assert ask_result.evidence_pack.related_commits == []
+    assert any(item == "TBD" for item in ask_result.answer.missing_information)
+
+
 def test_generate_flow_honors_runtime_model_and_temperature(
     tmp_path: Path,
     sample_project_config,

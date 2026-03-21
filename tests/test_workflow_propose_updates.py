@@ -17,9 +17,11 @@ from sddraft.domain.models import (
     HierarchyEdgeRecord,
     HierarchyManifest,
     HierarchyNodeRecord,
+    QueryRequest,
 )
 from sddraft.llm.base import StructuredGenerationRequest
 from sddraft.llm.mock import MockLLMClient
+from sddraft.workflows.ask import answer_question
 from sddraft.workflows.propose_updates import propose_updates
 
 
@@ -102,6 +104,70 @@ def test_propose_updates_flow(
     assert llm.requests
     assert all(request.model_name == override_model for request in llm.requests)
     assert all(request.temperature == override_temperature for request in llm.requests)
+
+
+def test_propose_updates_artifacts_support_commit_aware_ask(
+    tmp_path: Path,
+    sample_project_config,
+    sample_csc,
+    sample_template,
+) -> None:
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+
+    file_path = src_dir / "module.py"
+    file_path.write_text(
+        "import os\n\n\ndef do_work(x):\n    return x\n", encoding="utf-8"
+    )
+
+    _run(["git", "init"], cwd=tmp_path)
+    _run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path)
+    _run(["git", "config", "user.name", "Test User"], cwd=tmp_path)
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "initial"], cwd=tmp_path)
+
+    file_path.write_text(
+        "import sys\n\n\ndef do_work(x, y):\n    return x + y\n",
+        encoding="utf-8",
+    )
+    _run(["git", "add", "."], cwd=tmp_path)
+    _run(["git", "commit", "-m", "change signature"], cwd=tmp_path)
+
+    existing_sdd = tmp_path / "existing_sdd.md"
+    existing_sdd.write_text(
+        "# NAV_CTRL Software Design Description\n\n## 4 Detailed Design\nOld text\n",
+        encoding="utf-8",
+    )
+
+    llm = MockLLMClient()
+    result = propose_updates(
+        project_config=sample_project_config,
+        csc=sample_csc,
+        template=sample_template,
+        llm_client=llm,
+        existing_sdd_path=existing_sdd,
+        commit_range="HEAD~1..HEAD",
+        repo_root=tmp_path,
+    )
+
+    ask_result = answer_question(
+        request=QueryRequest(
+            question="Which sections were impacted by HEAD~1..HEAD?",
+            top_k=4,
+        ),
+        index_path=result.retrieval_index_path,
+        llm_client=llm,
+        model_name="mock-sddraft",
+    )
+
+    assert ask_result.answer.answer
+    assert ask_result.answer.citations
+    assert "HEAD~1..HEAD" in ask_result.evidence_pack.related_commits
+    assert any(
+        path.edge_type in {"changed_in", "impacts_section"}
+        for reason in ask_result.evidence_pack.inclusion_reasons
+        for path in reason.graph_paths
+    )
 
 
 def test_propose_updates_requires_existing_sdd_file(
