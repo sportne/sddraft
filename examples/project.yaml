@@ -5,7 +5,7 @@ workspace:
 
 sources:
   roots:
-    - src/
+    - ../src/
   include:
     - "**/*.py"
     - "**/*.java"
