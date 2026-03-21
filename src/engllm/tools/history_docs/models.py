@@ -71,10 +71,15 @@ HistoryAlgorithmSignalKind = Literal[
 HistoryInterfaceScopeKind = Literal["symbol", "file"]
 HistoryDependencyKind = Literal["build_source", "code_import_signal"]
 HistoryAlgorithmScopeKind = Literal["file", "subsystem"]
+HistoryAlgorithmCapsuleStatus = Literal["introduced", "modified", "observed"]
+HistoryAlgorithmSharedAbstractionKind = Literal["function", "class", "symbol"]
+HistoryAlgorithmDataStructureKind = Literal["class", "symbol"]
+HistoryAlgorithmAssumptionSourceKind = Literal["docstring", "signature_change"]
 HistorySectionId = Literal[
     "introduction",
     "architectural_overview",
     "subsystems_modules",
+    "algorithms_core_logic",
     "dependencies",
     "build_development_infrastructure",
 ]
@@ -82,6 +87,7 @@ HistorySectionPlanId = Literal[
     "introduction",
     "architectural_overview",
     "subsystems_modules",
+    "algorithms_core_logic",
     "dependencies",
     "build_development_infrastructure",
     "strategy_variants_design_alternatives",
@@ -196,6 +202,83 @@ class HistoryAlgorithmCandidate(DomainModel):
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
+class HistoryAlgorithmSharedAbstraction(DomainModel):
+    """Cross-module reusable abstraction referenced by one algorithm capsule."""
+
+    name: str
+    kind: HistoryAlgorithmSharedAbstractionKind
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmDataStructure(DomainModel):
+    """Named data structure signal referenced by one algorithm capsule."""
+
+    name: str
+    kind: HistoryAlgorithmDataStructureKind
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmPhase(DomainModel):
+    """Ordered execution phase inferred for one algorithm capsule."""
+
+    phase_key: str
+    order: int
+    matched_names: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmAssumption(DomainModel):
+    """Evidence-backed assumption or constraint captured for one capsule."""
+
+    text: str
+    source_kind: HistoryAlgorithmAssumptionSourceKind
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmCapsule(DomainModel):
+    """Structured deterministic algorithm capsule for one checkpoint."""
+
+    capsule_id: str
+    title: str
+    status: HistoryAlgorithmCapsuleStatus
+    scope_kind: HistoryAlgorithmScopeKind
+    scope_path: Path
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    source_candidate_ids: list[str] = Field(default_factory=list)
+    commit_ids: list[str] = Field(default_factory=list)
+    changed_symbol_names: list[str] = Field(default_factory=list)
+    variant_names: list[str] = Field(default_factory=list)
+    signal_kinds: list[HistoryAlgorithmSignalKind] = Field(default_factory=list)
+    shared_abstractions: list[HistoryAlgorithmSharedAbstraction] = Field(
+        default_factory=list
+    )
+    data_structures: list[HistoryAlgorithmDataStructure] = Field(default_factory=list)
+    phases: list[HistoryAlgorithmPhase] = Field(default_factory=list)
+    assumptions: list[HistoryAlgorithmAssumption] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmCapsuleIndexEntry(DomainModel):
+    """Index entry for one serialized algorithm capsule artifact."""
+
+    capsule_id: str
+    title: str
+    status: HistoryAlgorithmCapsuleStatus
+    scope_kind: HistoryAlgorithmScopeKind
+    scope_path: Path
+    artifact_path: Path
+
+
+class HistoryAlgorithmCapsuleIndex(DomainModel):
+    """Index of algorithm capsule artifacts for one checkpoint."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    capsules: list[HistoryAlgorithmCapsuleIndexEntry] = Field(default_factory=list)
+
+
 class HistoryIntervalDeltaModel(DomainModel):
     """Tool-scoped interval-delta model for one checkpoint."""
 
@@ -231,6 +314,7 @@ class HistorySubsystemConcept(DomainModel):
     symbol_count: int
     language_counts: dict[str, int] = Field(default_factory=dict)
     representative_files: list[Path] = Field(default_factory=list)
+    algorithm_capsule_ids: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
@@ -250,6 +334,7 @@ class HistoryModuleConcept(DomainModel):
     imports: list[str] = Field(default_factory=list)
     docstrings: list[str] = Field(default_factory=list)
     symbol_names: list[str] = Field(default_factory=list)
+    algorithm_capsule_ids: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
@@ -274,6 +359,7 @@ class HistorySectionState(DomainModel):
     section_id: HistorySectionId
     title: str
     concept_ids: list[str] = Field(default_factory=list)
+    algorithm_capsule_ids: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
@@ -284,6 +370,7 @@ class HistoryCheckpointModel(DomainModel):
     target_commit: str
     previous_checkpoint_commit: str | None = None
     previous_checkpoint_model_available: bool = False
+    algorithm_capsule_ids: list[str] = Field(default_factory=list)
     subsystems: list[HistorySubsystemConcept] = Field(default_factory=list)
     modules: list[HistoryModuleConcept] = Field(default_factory=list)
     dependencies: list[HistoryDependencyConcept] = Field(default_factory=list)
@@ -301,6 +388,7 @@ class HistorySectionPlan(DomainModel):
     evidence_score: int
     depth: HistorySectionDepth | None = None
     concept_ids: list[str] = Field(default_factory=list)
+    algorithm_capsule_ids: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
     trigger_signals: list[HistorySectionSignalKind] = Field(default_factory=list)
     omission_reason: str | None = None
@@ -331,6 +419,7 @@ class HistoryBuildResult(DomainModel):
     interval_delta_model_path: Path | None = None
     checkpoint_model_path: Path | None = None
     section_outline_path: Path | None = None
+    algorithm_capsule_index_path: Path | None = None
     file_count: int = 0
     symbol_count: int = 0
     subsystem_count: int = 0
@@ -345,10 +434,19 @@ class HistoryBuildResult(DomainModel):
     retired_concept_count: int = 0
     included_section_count: int = 0
     omitted_section_count: int = 0
+    algorithm_capsule_count: int = 0
 
 
 __all__ = [
+    "HistoryAlgorithmAssumption",
     "HistoryAlgorithmCandidate",
+    "HistoryAlgorithmCapsule",
+    "HistoryAlgorithmCapsuleIndex",
+    "HistoryAlgorithmCapsuleIndexEntry",
+    "HistoryAlgorithmCapsuleStatus",
+    "HistoryAlgorithmDataStructure",
+    "HistoryAlgorithmPhase",
+    "HistoryAlgorithmSharedAbstraction",
     "HistoryBuildResult",
     "HistoryCommitDelta",
     "HistoryCheckpointModel",

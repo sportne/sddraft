@@ -279,18 +279,19 @@ Primary code areas for H1-H2:
 - `src/engllm/tools/history_docs/models.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1-H5:
+Primary tests for H1-H6:
 
 - `tests/test_history_docs_h1.py`
 - `tests/test_history_docs_h2.py`
 - `tests/test_history_docs_h3.py`
 - `tests/test_history_docs_h4.py`
 - `tests/test_history_docs_h5.py`
+- `tests/test_history_docs_h6.py`
 - `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
 - `tests/test_diff_and_impact.py`
 
-Current H1-H5 behavior:
+Current H1-H6 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
@@ -317,6 +318,11 @@ Current H1-H5 behavior:
   `tools/history_docs/checkpoints/<checkpoint_id>/section_outline.json`
 - H5 keeps checkpoint-model sections as H4 core stubs and writes the scored
   section outline separately
+- H6 writes `tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/index.json`
+  plus one JSON file per capsule
+- H6 links capsule ids into checkpoint concepts, the fixed checkpoint-model
+  section stubs, and the scored `algorithms_core_logic` / strategy-variant
+  section plans
 - quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes

@@ -24,6 +24,7 @@ _SECTION_TITLES: dict[HistorySectionId, str] = {
     "introduction": "Introduction",
     "architectural_overview": "Architectural Overview",
     "subsystems_modules": "Subsystems and Modules",
+    "algorithms_core_logic": "Algorithms and Core Logic",
     "dependencies": "Dependencies",
     "build_development_infrastructure": "Build and Development Infrastructure",
 }

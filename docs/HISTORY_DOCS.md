@@ -59,7 +59,7 @@ LLM-backed phases are still future work.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 5:
+The current implementation covers History Phases 1 through 6:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -83,6 +83,10 @@ The current implementation covers History Phases 1 through 5:
   - fixed-order core and optional section plans
   - conservative evidence-scored inclusion decisions
   - confidence and depth metadata for later rendering
+- tool-scoped `algorithm_capsules/` artifacts with:
+  - `index.json` plus one JSON file per capsule
+  - deterministic capsule linking back into checkpoint concepts and sections
+  - an evidence-gated `algorithms_core_logic` section in the final section plan
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 
@@ -277,6 +281,7 @@ H1 and H2 currently implement these shared artifacts:
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/interval_delta_model.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/section_outline.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/index.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/dependencies.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/*.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint.md`
@@ -514,7 +519,10 @@ Current implementation status:
   scored section outline
 - scores optional sections conservatively from H3/H4 evidence plus token
   heuristics
-- keeps standalone interface and algorithm concepts deferred
+- persists `algorithm_capsules/index.json` plus one per-capsule JSON artifact
+- links capsule ids into checkpoint concepts, section stubs, and the scored
+  `algorithms_core_logic` / strategy-variant section plans
+- keeps standalone interface concepts deferred
 
 ### Phase 5 — Section Inference And Inclusion Rules
 
@@ -552,7 +560,7 @@ Expected capabilities:
 Expected outputs:
 
 - algorithm capsule artifacts
-- links from capsules into the checkpoint model
+- links from capsules into the checkpoint model and section outline
 
 ### Phase 7 — Dependency Documentation Pipeline
 

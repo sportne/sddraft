@@ -405,6 +405,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Checkpoint model: {result.checkpoint_model_path}")
     if result.section_outline_path is not None:
         print(f"Section outline: {result.section_outline_path}")
+    if result.algorithm_capsule_index_path is not None:
+        print(f"Algorithm capsules: {result.algorithm_capsule_index_path}")
     return 0
 
 

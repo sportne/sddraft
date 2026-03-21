@@ -272,6 +272,26 @@ def section_outline_path(
     )
 
 
+def algorithm_capsule_index_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H6 algorithm capsule index path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "algorithm_capsules"
+        / "index.json"
+    )
+
+
 def write_project_config(
     path: Path,
     output_root: Path,

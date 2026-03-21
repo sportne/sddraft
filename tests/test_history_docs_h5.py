@@ -338,14 +338,28 @@ def test_build_history_docs_checkpoint_writes_h5_section_outline_minimal_evidenc
 
     assert result.section_outline_path == outline_path
     assert result.included_section_count == 5
-    assert result.omitted_section_count == 7
-    assert len(outline.sections) == 12
+    assert result.omitted_section_count == 8
+    assert len(outline.sections) == 13
     assert sum(section.status == "included" for section in outline.sections) == 5
-    assert all(section.status == "omitted" for section in outline.sections[5:])
+    assert {
+        section.section_id
+        for section in outline.sections
+        if section.status == "omitted"
+    } == {
+        "algorithms_core_logic",
+        "strategy_variants_design_alternatives",
+        "data_state_management",
+        "error_handling_robustness",
+        "performance_considerations",
+        "security_considerations",
+        "design_notes_rationale",
+        "limitations_constraints",
+    }
     assert [section.section_id for section in checkpoint_model.sections] == [
         "introduction",
         "architectural_overview",
         "subsystems_modules",
+        "algorithms_core_logic",
         "dependencies",
         "build_development_infrastructure",
     ]
@@ -565,6 +579,7 @@ def test_build_history_docs_checkpoint_h5_includes_design_notes_rationale(
         "introduction",
         "architectural_overview",
         "subsystems_modules",
+        "algorithms_core_logic",
         "dependencies",
         "build_development_infrastructure",
     ]

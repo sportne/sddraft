@@ -40,6 +40,12 @@ from engllm.core.repo.scanner import scan_paths
 from engllm.core.workspaces import build_workspace_context, tool_artifact_root
 from engllm.domain.errors import AnalysisError, GitError, RepositoryError
 from engllm.domain.models import ProjectConfig
+from engllm.tools.history_docs.algorithm_capsules import (
+    algorithm_capsule_index_path,
+    build_algorithm_capsules,
+    link_algorithm_capsules_to_checkpoint_model,
+    link_algorithm_capsules_to_section_outline,
+)
 from engllm.tools.history_docs.checkpoint_model import (
     build_checkpoint_model,
     checkpoint_model_path,
@@ -295,7 +301,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> HistoryBuildResult:
-    """Persist checkpoint manifests plus H2-H5 history-docs artifacts."""
+    """Persist checkpoint manifests plus H2-H6 history-docs artifacts."""
 
     resolved_repo_root = repo_root.resolve()
     target_metadata = get_commit_metadata(resolved_repo_root, checkpoint_commit)
@@ -557,7 +563,52 @@ def build_history_docs_checkpoint(
     checkpoint_model_artifact_path = checkpoint_model_path(
         history_tool_root, checkpoint_id
     )
+
+    _progress(
+        progress_callback,
+        "history-docs: planning evidence-scored section outline",
+    )
+    section_outline = build_section_outline(
+        checkpoint_model=checkpoint_model,
+        interval_delta_model=interval_delta_model,
+    )
+    section_outline_artifact_path = section_outline_path(
+        history_tool_root, checkpoint_id
+    )
+    algorithm_capsule_index_artifact_path = algorithm_capsule_index_path(
+        history_tool_root, checkpoint_id
+    )
+
+    _progress(
+        progress_callback,
+        "history-docs: building deterministic algorithm capsules",
+    )
+    algorithm_capsule_index, algorithm_capsules = build_algorithm_capsules(
+        checkpoint_model=checkpoint_model,
+        interval_delta_model=interval_delta_model,
+    )
+    checkpoint_model = link_algorithm_capsules_to_checkpoint_model(
+        checkpoint_model,
+        algorithm_capsules,
+    )
+    section_outline = link_algorithm_capsules_to_section_outline(
+        checkpoint_model,
+        section_outline,
+        interval_delta_model,
+        algorithm_capsules,
+    )
+
+    checkpoint_root = history_tool_root / "checkpoints" / checkpoint_id
+    for index_entry, capsule in zip(
+        algorithm_capsule_index.capsules,
+        algorithm_capsules,
+        strict=True,
+    ):
+        write_json_model(checkpoint_root / index_entry.artifact_path, capsule)
+    write_json_model(algorithm_capsule_index_artifact_path, algorithm_capsule_index)
     write_json_model(checkpoint_model_artifact_path, checkpoint_model)
+    write_json_model(section_outline_artifact_path, section_outline)
+
     retired_concept_count = (
         sum(
             concept.lifecycle_status == "retired"
@@ -573,19 +624,6 @@ def build_history_docs_checkpoint(
         )
     )
 
-    _progress(
-        progress_callback,
-        "history-docs: planning evidence-scored section outline",
-    )
-    section_outline = build_section_outline(
-        checkpoint_model=checkpoint_model,
-        interval_delta_model=interval_delta_model,
-    )
-    section_outline_artifact_path = section_outline_path(
-        history_tool_root, checkpoint_id
-    )
-    write_json_model(section_outline_artifact_path, section_outline)
-
     return HistoryBuildResult(
         workspace_id=resolved_workspace_id,
         checkpoint_id=checkpoint_id,
@@ -600,6 +638,7 @@ def build_history_docs_checkpoint(
         interval_delta_model_path=interval_delta_path,
         checkpoint_model_path=checkpoint_model_artifact_path,
         section_outline_path=section_outline_artifact_path,
+        algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -614,4 +653,5 @@ def build_history_docs_checkpoint(
         retired_concept_count=retired_concept_count,
         included_section_count=_count_section_status(section_outline, "included"),
         omitted_section_count=_count_section_status(section_outline, "omitted"),
+        algorithm_capsule_count=len(algorithm_capsules),
     )

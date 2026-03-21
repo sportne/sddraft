@@ -70,6 +70,7 @@ def test_build_history_docs_checkpoint_initial_run_writes_h4_checkpoint_model(
         "introduction",
         "architectural_overview",
         "subsystems_modules",
+        "algorithms_core_logic",
         "dependencies",
         "build_development_infrastructure",
     ]

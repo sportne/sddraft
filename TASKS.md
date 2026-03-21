@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H5: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, and separate evidence-scored `section_outline.json` planning artifacts.
+- `engllm history-docs build` now supports H1-H6: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, and deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections.
 
 ## 2) Guiding Principles / Scope
 
@@ -444,17 +444,23 @@ its own internal phases.
 `Dependencies:` History Phases 3-5.
 `Completion Criteria:` The tool can emit algorithm capsules when evidence supports them and link them back into the checkpoint model.
 
-- [ ] **H6-01**  
+- [x] **H6-01**  
   `Outcome:` Detect algorithm families and meaningful algorithm clusters conservatively.  
   `Definition of Done:` The tool avoids labeling every changed module as an algorithm.
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h6.py -k "paths_and_filename_are_deterministic or emits_standalone_file_capsule_only_when_qualified"`  
+  `Result:` pass
 
-- [ ] **H6-02**  
+- [x] **H6-02**  
   `Outcome:` Capture shared abstractions, strategy variants, data structures, phases, and assumptions when evidence exists.  
   `Definition of Done:` Capsules preserve structured algorithm evidence rather than only prose summaries.
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h6.py -k "groups_candidates_and_derives_structure or links_variant_capsule_into_models"`  
+  `Result:` pass
 
-- [ ] **H6-03**  
+- [x] **H6-03**  
   `Outcome:` Link algorithm capsules into checkpoint sections and concept models.  
   `Definition of Done:` Final checkpoint docs can incorporate algorithm capsules without requiring every capsule to become a top-level section.
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h6.py tests/test_imports.py`  
+  `Result:` pass
 
 ### History Phase 7 — Dependency Documentation Pipeline
 

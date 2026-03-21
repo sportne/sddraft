@@ -22,9 +22,9 @@ Today it ships four tool namespaces:
    snapshot structural analysis, interval delta analysis, and checkpoint-state
    modeling
 
-The next major expansion for `engllm history-docs ...` is section planning,
-algorithm capsules, and full checkpoint documentation rendering over those
-historical snapshots. The design for that tool lives in `docs/HISTORY_DOCS.md`.
+The next major expansion for `engllm history-docs ...` is dependency
+documentation and full checkpoint rendering over those historical snapshots.
+The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
 
@@ -452,6 +452,7 @@ Current implemented slice:
 * tool-scoped `interval_delta_model.json`
 * tool-scoped `checkpoint_model.json`
 * tool-scoped `section_outline.json`
+* tool-scoped `algorithm_capsules/index.json` plus one JSON file per capsule
 * first-parent diff semantics for merge commits
 * diff-only fallback with `observed` statuses when the previous snapshot
   artifact is unavailable
@@ -459,6 +460,8 @@ Current implemented slice:
   `checkpoint_model.json`
 * separate conservative section planning with scored inclusion and depth
   metadata in `section_outline.json`
+* deterministic algorithm capsule linking into checkpoint concepts and the
+  evidence-gated `algorithms_core_logic` / strategy-variant sections
 * quarterly auto-selection still deferred
 
 ---
