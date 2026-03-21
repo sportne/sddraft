@@ -1,4 +1,4 @@
-"""Shared history-docs manifest models and persistence helpers."""
+"""Shared history-docs models and persistence helpers."""
 
 from __future__ import annotations
 
@@ -11,6 +11,17 @@ from pydantic import Field
 from engllm.domain.models import DomainModel
 
 PreviousCheckpointSource = Literal["initial", "artifact", "explicit_override"]
+HistorySourceRootStatus = Literal["analyzed", "missing_at_checkpoint"]
+HistorySnapshotExportStrategy = Literal["git_archive_temp"]
+
+
+class HistorySourceRootMapping(DomainModel):
+    """One configured source root resolved into checkpoint snapshot space."""
+
+    requested_root: Path
+    snapshot_relative_root: Path
+    status: HistorySourceRootStatus
+    reason: str | None = None
 
 
 class HistoryCommitSummary(DomainModel):
@@ -54,6 +65,33 @@ class HistoryCheckpointPlan(DomainModel):
     checkpoints: list[HistoryCheckpoint] = Field(default_factory=list)
 
 
+class HistoryBuildSource(DomainModel):
+    """Build or dependency manifest source detected at one checkpoint."""
+
+    path: Path
+    ecosystem: str
+    category: Literal["dependency_manifest", "dependency_lockfile", "build_config"]
+
+
+class HistorySnapshotManifest(DomainModel):
+    """Shared metadata for one checkpoint snapshot analysis run."""
+
+    checkpoint_id: str
+    target_commit: str
+    tree_sha: str
+    export_strategy: HistorySnapshotExportStrategy = "git_archive_temp"
+    persisted_snapshot: bool = False
+    source_root_mappings: list[HistorySourceRootMapping] = Field(default_factory=list)
+    requested_source_roots: list[Path] = Field(default_factory=list)
+    analyzed_source_roots: list[Path] = Field(default_factory=list)
+    skipped_source_roots: list[Path] = Field(default_factory=list)
+    manifest_search_directories: list[Path] = Field(default_factory=list)
+    file_count: int = 0
+    symbol_count: int = 0
+    subsystem_count: int = 0
+    build_source_count: int = 0
+
+
 def history_artifact_root(shared_root: Path) -> Path:
     """Return the shared history artifact root for one workspace."""
 
@@ -70,6 +108,20 @@ def default_intervals_path(shared_root: Path) -> Path:
     """Return the default intervals JSONL path for one workspace."""
 
     return history_artifact_root(shared_root) / "intervals.jsonl"
+
+
+def history_checkpoint_root(shared_root: Path, checkpoint_id: str) -> Path:
+    """Return the shared artifact root for one checkpoint."""
+
+    return history_artifact_root(shared_root) / "checkpoints" / checkpoint_id
+
+
+def default_snapshot_manifest_path(shared_root: Path, checkpoint_id: str) -> Path:
+    """Return the shared snapshot manifest path for one checkpoint."""
+
+    return (
+        history_checkpoint_root(shared_root, checkpoint_id) / "snapshot_manifest.json"
+    )
 
 
 def checkpoint_id_for(timestamp: str, short_sha: str) -> str:
@@ -140,3 +192,18 @@ def save_intervals(intervals: list[HistoryInterval], path: Path) -> None:
     if content:
         content += "\n"
     path.write_text(content, encoding="utf-8")
+
+
+def load_snapshot_manifest(path: Path) -> HistorySnapshotManifest | None:
+    """Load a shared snapshot manifest if it exists."""
+
+    if not path.exists():
+        return None
+    return HistorySnapshotManifest.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def save_snapshot_manifest(manifest: HistorySnapshotManifest, path: Path) -> None:
+    """Write a shared snapshot manifest JSON file."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")

@@ -1,6 +1,6 @@
 # History-Walk Documentation Tool Design
 
-This document defines the design direction for the planned history-walk
+This document defines the design direction for the history-walk
 project-documentation tool in EngLLM.
 
 The goal of the tool is to generate **holistic documentation snapshots** for a
@@ -40,8 +40,7 @@ valuable, but they are not part of the initial implementation slice.
 
 ## Tool Placement In EngLLM
 
-This tool should live in the EngLLM package as a first-class future tool
-namespace.
+This tool lives in the EngLLM package as a first-class tool namespace.
 
 Planned package placement:
 
@@ -54,8 +53,26 @@ Planned future CLI surface:
 - `engllm history-docs build`
 
 H1 now implements that command as a single-checkpoint, read-only history
-traversal entrypoint. Snapshot analysis, rendering, and LLM-backed phases are
-still future work.
+traversal entrypoint, and H2 extends it with temporary checkpoint snapshot
+export plus structural analysis. Rendering, interval-delta reasoning, and
+LLM-backed phases are still future work.
+
+## Current Implemented Slice
+
+The current implementation covers History Phases 1 and 2:
+
+- explicit target-commit selection via `engllm history-docs build`
+- optional explicit previous-checkpoint override
+- artifact-derived previous-checkpoint lookup using the latest valid ancestor
+- shared checkpoint and interval manifests under `shared/history/`
+- temporary checkpoint snapshot export via `git archive` into a disposable temp
+  directory
+- structural scanning of the checkpoint snapshot without mutating the user's
+  working tree
+- tool-scoped snapshot structural models with files, code summaries, symbol
+  summaries, subsystem candidates, and build-source metadata
+
+Quarterly checkpoint auto-selection is still deferred to a later phase.
 
 ## Terminology
 
@@ -234,10 +251,12 @@ These are reusable by future tools such as release or evolution tooling.
 - `artifacts/workspaces/<workspace_id>/shared/history/intervals.jsonl`
 - `artifacts/workspaces/<workspace_id>/shared/history/checkpoints/<checkpoint_id>/snapshot_manifest.json`
 
-H1 currently implements the first two shared artifacts only:
+H1 and H2 currently implement these shared artifacts:
 
 - `checkpoint_plan.json` as the authoritative checkpoint registry
 - `intervals.jsonl` as the canonical ordered commit windows per checkpoint
+- `snapshot_manifest.json` as the checkpoint-scoped record of temporary export,
+  source-root mapping, manifest-search scope, and structural counts
 
 ### Tool-specific history-docs artifacts
 
@@ -252,6 +271,12 @@ H1 currently implements the first two shared artifacts only:
 
 The exact file names can evolve, but the split between shared history traversal
 artifacts and tool-specific rendered/model artifacts should remain.
+
+Current H2 behavior intentionally keeps snapshot export temporary:
+
+- the checkpoint tree is exported into a disposable temp directory
+- the exported tree is deleted after structural analysis completes
+- only inspectable manifests and structured models are persisted
 
 ## Major Internal Models
 
@@ -316,14 +341,17 @@ useful subset rather than attempting the full system.
 - artifact-derived previous-checkpoint lookup, with optional explicit override
 - deterministic checkpoint/interval manifest generation
 - read-only git history traversal with no checkout or worktree mutation
-- shared history artifacts only; no snapshot analysis, structured checkpoint
-  model, rendering, or LLM calls yet
+- temporary checkpoint snapshot export and structural analysis with no checkout
+  or worktree mutation
+- shared and tool-scoped artifacts only; no interval-delta reasoning,
+  structured checkpoint model merge, rendering, or LLM calls yet
 
 ### First-slice rationale
 
 This slice validates the main architecture without overcommitting early to the
 hardest parts, especially algorithm capsules and deep section-inference logic.
-It also creates reusable shared artifacts that later phases can enrich.
+It also creates reusable shared artifacts and checkpoint-structural models that
+later phases can enrich.
 
 ## Phased Implementation Plan
 
@@ -364,6 +392,12 @@ Expected outputs:
 - checkpoint plan manifest
 - interval metadata artifacts
 
+Current implementation status:
+
+- implemented
+- single-checkpoint, manual-first
+- quarterly checkpoint auto-selection deferred
+
 ### Phase 2 — Checkpoint Snapshot Analysis
 
 Goal:
@@ -384,6 +418,14 @@ Expected outputs:
 - checkpoint structural model
 - symbol/module inventories
 - build/dependency manifests
+
+Current implementation status:
+
+- implemented via temporary `git archive` export
+- scans configured source roots that still exist at the checkpoint
+- records missing historical roots instead of failing
+- searches build/dependency manifests only within source roots plus their
+  ancestor chain to repo root
 
 ### Phase 3 — Interval Delta Analysis
 

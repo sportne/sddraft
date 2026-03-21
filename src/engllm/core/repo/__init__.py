@@ -2,6 +2,7 @@
 
 from .diff_parser import get_git_diff, parse_diff
 from .history import (
+    export_commit_snapshot,
     get_commit_metadata,
     is_strict_ancestor,
     iter_interval_commits,
@@ -20,6 +21,7 @@ __all__ = [
     "scan_repository",
     "get_git_diff",
     "parse_diff",
+    "export_commit_snapshot",
     "resolve_commit",
     "get_commit_metadata",
     "is_strict_ancestor",

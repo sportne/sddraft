@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import tarfile
 from pathlib import Path
 
 from engllm.domain.errors import GitError
@@ -130,3 +131,50 @@ def iter_interval_commits(
             )
         )
     return commits
+
+
+def export_commit_snapshot(
+    repo_root: Path,
+    *,
+    target_commit: str,
+    destination_root: Path,
+) -> Path:
+    """Export one commit tree into a disposable snapshot directory."""
+
+    archive_path = destination_root.parent / "snapshot.tar"
+    try:
+        subprocess.run(
+            [
+                "git",
+                "archive",
+                "--format=tar",
+                "--output",
+                str(archive_path),
+                target_commit,
+            ],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:  # pragma: no cover - environment issue
+        raise GitError("git executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        message = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise GitError(f"git archive failed: {message}") from exc
+
+    destination_root.mkdir(parents=True, exist_ok=True)
+    try:
+        with tarfile.open(archive_path, mode="r") as archive:
+            try:
+                archive.extractall(destination_root, filter="data")
+            except TypeError:
+                archive.extractall(destination_root)
+    except (tarfile.TarError, OSError) as exc:
+        raise GitError(
+            f"Failed to extract git archive for {target_commit}: {exc}"
+        ) from exc
+    finally:
+        archive_path.unlink(missing_ok=True)
+
+    return destination_root

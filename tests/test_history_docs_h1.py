@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -22,149 +20,10 @@ from engllm.core.repo.history import (
 from engllm.domain.errors import GitError
 from engllm.domain.models import ProjectConfig
 from engllm.tools.history_docs.build import build_history_docs_checkpoint
-
-
-def _git(
-    repo_root: Path,
-    *args: str,
-    env: dict[str, str] | None = None,
-    check: bool = True,
-) -> str:
-    full_env = os.environ.copy()
-    full_env.setdefault("GIT_AUTHOR_NAME", "EngLLM Test")
-    full_env.setdefault("GIT_AUTHOR_EMAIL", "engllm@example.com")
-    full_env.setdefault("GIT_COMMITTER_NAME", "EngLLM Test")
-    full_env.setdefault("GIT_COMMITTER_EMAIL", "engllm@example.com")
-    if env is not None:
-        full_env.update(env)
-    result = subprocess.run(
-        ["git", *args],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=check,
-        env=full_env,
-    )
-    if check:
-        return result.stdout.strip()
-    return (result.stdout + result.stderr).strip()
-
-
-def _init_repo(tmp_path: Path) -> Path:
-    repo_root = tmp_path / "repo"
-    repo_root.mkdir()
-    _git(repo_root, "init")
-    return repo_root
-
-
-def _commit_file(
-    repo_root: Path,
-    relative_path: str,
-    content: str,
-    *,
-    message: str,
-    timestamp: str,
-) -> str:
-    file_path = repo_root / relative_path
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(content, encoding="utf-8")
-    _git(repo_root, "add", relative_path)
-    env = {
-        "GIT_AUTHOR_DATE": timestamp,
-        "GIT_COMMITTER_DATE": timestamp,
-    }
-    _git(repo_root, "commit", "-m", message, env=env)
-    return _git(repo_root, "rev-parse", "HEAD")
-
-
-def _create_linear_repo(tmp_path: Path) -> tuple[Path, list[str]]:
-    repo_root = _init_repo(tmp_path)
-    commits = [
-        _commit_file(
-            repo_root,
-            "src/app.py",
-            "print('one')\n",
-            message="initial commit",
-            timestamp="2024-01-01T10:00:00+00:00",
-        ),
-        _commit_file(
-            repo_root,
-            "src/app.py",
-            "print('two')\n",
-            message="add second step",
-            timestamp="2024-02-01T10:00:00+00:00",
-        ),
-        _commit_file(
-            repo_root,
-            "src/app.py",
-            "print('three')\n",
-            message="add third step",
-            timestamp="2024-03-01T10:00:00+00:00",
-        ),
-    ]
-    return repo_root, commits
-
-
-def _create_forked_repo(tmp_path: Path) -> tuple[Path, str, str]:
-    repo_root = _init_repo(tmp_path)
-    base = _commit_file(
-        repo_root,
-        "src/app.py",
-        "print('base')\n",
-        message="base commit",
-        timestamp="2024-01-01T10:00:00+00:00",
-    )
-    current_branch = _git(repo_root, "branch", "--show-current")
-    main_tip = _commit_file(
-        repo_root,
-        "src/app.py",
-        "print('main')\n",
-        message="main change",
-        timestamp="2024-01-02T10:00:00+00:00",
-    )
-    _git(repo_root, "checkout", "-b", "feature", base)
-    feature_tip = _commit_file(
-        repo_root,
-        "src/app.py",
-        "print('feature')\n",
-        message="feature change",
-        timestamp="2024-01-03T10:00:00+00:00",
-    )
-    _git(repo_root, "checkout", current_branch)
-    return repo_root, main_tip, feature_tip
-
-
-def _history_paths(
-    project_config: ProjectConfig, workspace_id: str
-) -> tuple[Path, Path]:
-    history_root = (
-        project_config.workspace.output_root
-        / "workspaces"
-        / workspace_id
-        / "shared"
-        / "history"
-    )
-    return history_root / "checkpoint_plan.json", history_root / "intervals.jsonl"
-
-
-def _write_project_config(path: Path, output_root: Path) -> None:
-    path.write_text(
-        "\n".join(
-            [
-                "project_name: Example",
-                "workspace:",
-                f"  output_root: {output_root.as_posix()}",
-                "sources:",
-                "  roots:",
-                "    - .",
-                "tools:",
-                "  sdd:",
-                "    template: unused-template.yaml",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
+from tests.history_docs_helpers import create_forked_repo as _create_forked_repo
+from tests.history_docs_helpers import create_linear_repo as _create_linear_repo
+from tests.history_docs_helpers import history_paths as _history_paths
+from tests.history_docs_helpers import write_project_config as _write_project_config
 
 
 def test_git_history_helpers_resolve_metadata_and_interval_order(
@@ -206,6 +65,7 @@ def test_build_history_docs_checkpoint_initial_run_writes_manifests(
 ) -> None:
     repo_root, commits = _create_linear_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     result = build_history_docs_checkpoint(
         project_config=sample_project_config,
@@ -213,7 +73,8 @@ def test_build_history_docs_checkpoint_initial_run_writes_manifests(
         checkpoint_commit=commits[1],
     )
     checkpoint_plan_path, intervals_path = _history_paths(
-        sample_project_config, repo_root.name
+        sample_project_config.workspace.output_root,
+        repo_root.name,
     )
     plan = load_checkpoint_plan(checkpoint_plan_path)
     intervals = load_intervals(intervals_path)
@@ -243,6 +104,7 @@ def test_build_history_docs_checkpoint_uses_latest_ancestor_from_artifacts(
 ) -> None:
     repo_root, commits = _create_linear_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     build_history_docs_checkpoint(
         project_config=sample_project_config,
@@ -261,7 +123,8 @@ def test_build_history_docs_checkpoint_uses_latest_ancestor_from_artifacts(
     )
 
     checkpoint_plan_path, intervals_path = _history_paths(
-        sample_project_config, repo_root.name
+        sample_project_config.workspace.output_root,
+        repo_root.name,
     )
     plan = load_checkpoint_plan(checkpoint_plan_path)
     intervals = load_intervals(intervals_path)
@@ -281,6 +144,7 @@ def test_build_history_docs_checkpoint_explicit_previous_override_wins(
 ) -> None:
     repo_root, commits = _create_linear_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     build_history_docs_checkpoint(
         project_config=sample_project_config,
@@ -299,7 +163,10 @@ def test_build_history_docs_checkpoint_explicit_previous_override_wins(
         previous_checkpoint_commit=commits[0],
     )
 
-    _, intervals_path = _history_paths(sample_project_config, repo_root.name)
+    _, intervals_path = _history_paths(
+        sample_project_config.workspace.output_root,
+        repo_root.name,
+    )
     intervals = load_intervals(intervals_path)
 
     assert result.previous_checkpoint_commit == commits[0]
@@ -318,6 +185,7 @@ def test_build_history_docs_checkpoint_rejects_equal_previous(
 ) -> None:
     repo_root, commits = _create_linear_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     with pytest.raises(GitError, match="strict ancestor"):
         build_history_docs_checkpoint(
@@ -334,6 +202,7 @@ def test_build_history_docs_checkpoint_rejects_non_ancestor_previous(
 ) -> None:
     repo_root, main_tip, feature_tip = _create_forked_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     with pytest.raises(GitError, match="is not an ancestor"):
         build_history_docs_checkpoint(
@@ -350,6 +219,7 @@ def test_build_history_docs_checkpoint_rerun_is_idempotent(
 ) -> None:
     repo_root, commits = _create_linear_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     build_history_docs_checkpoint(
         project_config=sample_project_config,
@@ -357,7 +227,8 @@ def test_build_history_docs_checkpoint_rerun_is_idempotent(
         checkpoint_commit=commits[1],
     )
     checkpoint_plan_path, intervals_path = _history_paths(
-        sample_project_config, repo_root.name
+        sample_project_config.workspace.output_root,
+        repo_root.name,
     )
     first_plan = checkpoint_plan_path.read_text(encoding="utf-8")
     first_intervals = intervals_path.read_text(encoding="utf-8")
@@ -378,6 +249,7 @@ def test_build_history_docs_checkpoint_workspace_override_changes_artifact_locat
 ) -> None:
     repo_root, commits = _create_linear_repo(tmp_path)
     sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
 
     result = build_history_docs_checkpoint(
         project_config=sample_project_config,

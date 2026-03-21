@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- The planned history-walk documentation tool now has a dedicated design spec in `docs/HISTORY_DOCS.md` plus scaffolded package namespaces under `tools/history_docs/` and `prompts/history_docs/`, but no executable workflow yet.
+- `engllm history-docs build` now supports H1-H2: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, and checkpoint structural analysis with subsystem/build-source artifacts.
 
 ## 2) Guiding Principles / Scope
 
@@ -344,17 +344,23 @@ its own internal phases.
 `Dependencies:` History Phase 1.
 `Completion Criteria:` Snapshot analysis can emit structural inventories, subsystem candidates, and build/dependency source detection for a checkpoint commit.
 
-- [ ] **H2-01**  
+- [x] **H2-01**  
   `Outcome:` Materialize or inspect checkpoint snapshots without disturbing the user’s working tree.  
-  `Definition of Done:` Snapshot analysis can run against checkpoint-resolved repo state safely and deterministically.
+  `Definition of Done:` Snapshot analysis can run against checkpoint-resolved repo state safely and deterministically.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h2.py -k "uses_commit_state or cli_build_prints_h2_artifact_paths"`  
+  `Result:` pass
 
-- [ ] **H2-02**  
+- [x] **H2-02**  
   `Outcome:` Reuse or adapt existing scanner infrastructure for checkpoint-specific structural analysis.  
-  `Definition of Done:` Snapshot structural models include files, symbols, module candidates, and subsystem signals.
+  `Definition of Done:` Snapshot structural models include files, symbols, module candidates, and subsystem signals.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h2.py -k "uses_commit_state or skips_missing_roots"`  
+  `Result:` pass
 
-- [ ] **H2-03**  
+- [x] **H2-03**  
   `Outcome:` Detect build/package infrastructure and dependency sources at the checkpoint.  
-  `Definition of Done:` Snapshot artifacts record dependency-manifest sources such as `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, or similar files when present.
+  `Definition of Done:` Snapshot artifacts record dependency-manifest sources such as `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, or similar files when present.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h2.py -k "limits_manifest_scope or rejects_source_roots_outside_repo"`  
+  `Result:` pass
 
 ### History Phase 3 — Interval Delta Analysis
 
@@ -513,9 +519,10 @@ its own internal phases.
 - Commit-aware Q&A tests that assert grounded citations and conservative TBD behavior.
 - History-docs phases should add deterministic tests for checkpoint selection, interval metadata, checkpoint-model persistence, and present-state rendering quality.
 - Quality gates required on every phase PR:
-  - `ruff check src tests`
-  - `mypy src`
-  - `pytest -q`
+  - `.venv/bin/python -m black --check src tests`
+  - `.venv/bin/ruff check src tests`
+  - `.venv/bin/mypy src`
+  - `.venv/bin/pytest -q`
   - coverage must remain `>= 90%`
 
 ## 6) Nice-To-Have / Later (Non-Blocking)

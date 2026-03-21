@@ -111,7 +111,7 @@ def _add_repo_migrate_index_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_history_docs_build_args(parser: argparse.ArgumentParser) -> None:
-    """Add CLI arguments for H1 history-docs builds."""
+    """Add CLI arguments for history-docs checkpoint builds."""
 
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--repo-root", type=Path, default=Path("."))
@@ -386,6 +386,7 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         checkpoint_commit=args.checkpoint_commit,
         previous_checkpoint_commit=args.previous_checkpoint_commit,
         workspace_id=args.workspace_id,
+        progress_callback=_progress,
     )
     print(
         f"Built history checkpoint {result.checkpoint_id} "
@@ -394,6 +395,10 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
     )
     print(f"Checkpoint plan: {result.checkpoint_plan_path}")
     print(f"Intervals: {result.intervals_path}")
+    if result.snapshot_manifest_path is not None:
+        print(f"Snapshot manifest: {result.snapshot_manifest_path}")
+    if result.snapshot_structural_model_path is not None:
+        print(f"Snapshot structural model: {result.snapshot_structural_model_path}")
     return 0
 
 

@@ -178,12 +178,17 @@ def analyze_source_file(
     )
 
 
-def scan_repository(
-    project_config: ProjectConfig,
-    csc: CSCDescriptor,
+def scan_paths(
+    *,
+    roots: Iterable[Path],
+    include: list[str],
+    exclude: list[str],
     repo_root: Path,
+    max_files: int,
+    chunk_lines: int,
+    include_code_chunks: bool = True,
 ) -> ScanResult:
-    """Run deterministic repository scanning and summary extraction."""
+    """Run deterministic repository scanning over explicit roots."""
 
     files: list[Path] = []
     code_summaries: list[CodeUnitSummary] = []
@@ -191,10 +196,14 @@ def scan_repository(
     code_chunks: list[KnowledgeChunk] = []
     dependency_values: set[str] = set()
 
-    for record in scan_repository_stream(
-        project_config=project_config,
-        csc=csc,
+    for record in scan_paths_stream(
+        roots=roots,
+        include=include,
+        exclude=exclude,
         repo_root=repo_root,
+        max_files=max_files,
+        chunk_lines=chunk_lines,
+        include_code_chunks=include_code_chunks,
     ):
         files.append(record.path)
         code_summaries.append(record.code_summary)
@@ -211,23 +220,27 @@ def scan_repository(
     )
 
 
-def scan_repository_stream(
-    project_config: ProjectConfig,
-    csc: CSCDescriptor,
+def scan_paths_stream(
+    *,
+    roots: Iterable[Path],
+    include: list[str],
+    exclude: list[str],
     repo_root: Path,
+    max_files: int,
+    chunk_lines: int,
+    include_code_chunks: bool = True,
 ) -> Iterable[ScanRecord]:
-    """Yield per-file scan records for bounded-memory workflows."""
+    """Yield per-file scan records over explicit source roots."""
 
-    roots = csc.source_roots or project_config.sources.roots
     files = discover_source_files(
         roots=roots,
-        include=project_config.sources.include,
-        exclude=project_config.sources.exclude,
+        include=include,
+        exclude=exclude,
         repo_root=repo_root,
     )
 
-    if len(files) > project_config.generation.max_files:
-        files = files[: project_config.generation.max_files]
+    if len(files) > max_files:
+        files = files[:max_files]
 
     for path in files:
         try:
@@ -236,12 +249,16 @@ def scan_repository_stream(
             continue
 
         symbol_count = len(symbols)
-        chunks = build_code_chunks(
-            [path],
-            repo_root=repo_root,
-            chunk_lines=project_config.generation.code_chunk_lines,
-            language_by_path={path: summary.language},
-            symbol_count_by_path={path: symbol_count},
+        chunks = (
+            build_code_chunks(
+                [path],
+                repo_root=repo_root,
+                chunk_lines=chunk_lines,
+                language_by_path={path: summary.language},
+                symbol_count_by_path={path: symbol_count},
+            )
+            if include_code_chunks
+            else []
         )
         yield ScanRecord(
             path=_to_repo_relative(path, repo_root),
@@ -249,3 +266,39 @@ def scan_repository_stream(
             symbol_summaries=symbols,
             code_chunks=chunks,
         )
+
+
+def scan_repository(
+    project_config: ProjectConfig,
+    csc: CSCDescriptor,
+    repo_root: Path,
+) -> ScanResult:
+    """Run deterministic repository scanning and summary extraction."""
+
+    roots = csc.source_roots or project_config.sources.roots
+    return scan_paths(
+        roots=roots,
+        include=project_config.sources.include,
+        exclude=project_config.sources.exclude,
+        repo_root=repo_root,
+        max_files=project_config.generation.max_files,
+        chunk_lines=project_config.generation.code_chunk_lines,
+    )
+
+
+def scan_repository_stream(
+    project_config: ProjectConfig,
+    csc: CSCDescriptor,
+    repo_root: Path,
+) -> Iterable[ScanRecord]:
+    """Yield per-file scan records for bounded-memory workflows."""
+
+    roots = csc.source_roots or project_config.sources.roots
+    yield from scan_paths_stream(
+        roots=roots,
+        include=project_config.sources.include,
+        exclude=project_config.sources.exclude,
+        repo_root=repo_root,
+        max_files=project_config.generation.max_files,
+        chunk_lines=project_config.generation.code_chunk_lines,
+    )

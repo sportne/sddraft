@@ -13,15 +13,17 @@ Development rules are defined in `AGENTS.md`.
 
 EngLLM is a multi-tool repository analysis toolkit.
 
-Today it ships three tool namespaces:
+Today it ships four tool namespaces:
 
 1. `engllm sdd ...` for SDD generation and update proposals
 2. `engllm ask answer ...` / `engllm ask interactive` for grounded repository Q&A
 3. `engllm repo ...` for shared repository utilities such as diff inspection
+4. `engllm history-docs build` for checkpoint selection, history traversal, and
+   snapshot structural analysis
 
-The next planned tool namespace is `engllm history-docs ...`, which will build
-standalone checkpoint documentation snapshots from repository history. The
-design for that tool lives in `docs/HISTORY_DOCS.md`.
+The next major expansion for `engllm history-docs ...` is full checkpoint
+documentation rendering over those historical snapshots. The design for that
+tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
 
@@ -406,11 +408,11 @@ Future extension seams:
 
 ---
 
-## 3.12 Planned History-Walk Documentation Tool
+## 3.12 History-Walk Documentation Tool
 
-The planned history-walk documentation tool extends EngLLM beyond current-state
+The history-walk documentation tool extends EngLLM beyond current-state
 documentation and Q&A by generating complete documentation snapshots for
-historical checkpoints such as calendar quarters.
+historical checkpoints.
 
 The tool should separate:
 
@@ -419,14 +421,16 @@ The tool should separate:
 
 Expected reusable shared capabilities include:
 
-* checkpoint selection
+* explicit checkpoint selection
 * git history traversal
-* snapshot materialization
+* temporary checkpoint snapshot export
+* checkpoint snapshot structural analysis
 * interval diff analysis
 * checkpoint metadata and interval manifests
 
 Expected tool-specific capabilities include:
 
+* checkpoint structural models
 * checkpoint documentation models
 * section-inference logic
 * algorithm capsule handling
@@ -434,6 +438,16 @@ Expected tool-specific capabilities include:
 
 The detailed phased plan, artifact vocabulary, section-inclusion rules, and
 first implementation slice for this tool are defined in `docs/HISTORY_DOCS.md`.
+
+Current implemented slice:
+
+* manual-first `engllm history-docs build`
+* shared `checkpoint_plan.json` and `intervals.jsonl`
+* temporary snapshot export via `git archive`
+* manifest search limited to analyzed source roots plus their ancestor chain to
+  repo root
+* tool-scoped `snapshot_structural_model.json`
+* quarterly auto-selection still deferred
 
 ---
 

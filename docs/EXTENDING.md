@@ -99,7 +99,7 @@ Current tool namespaces:
 - `src/engllm/tools/sdd/`
 - `src/engllm/tools/ask/`
 - `src/engllm/tools/repo/`
-- `src/engllm/tools/history_docs/` scaffold only, not implemented yet
+- `src/engllm/tools/history_docs/`
 
 If you add a future tool, keep its workflow, tool-specific models, and renderers
 inside `src/engllm/tools/<tool_name>/`, then register it through the CLI/tooling
@@ -220,9 +220,10 @@ Primary docs:
 Primary validation:
 
 - `rg` verification commands recorded in `TASKS.md`
-- `ruff check src tests`
-- `mypy src`
-- `pytest -q`
+- `.venv/bin/python -m black --check src tests`
+- `.venv/bin/ruff check src tests`
+- `.venv/bin/mypy src`
+- `.venv/bin/pytest -q`
 
 ### Phase 8 — Intensive Ask Mode
 
@@ -268,25 +269,35 @@ Primary design docs:
 - `TASKS.md`
 - `ARCHITECTURE.md`
 
-Primary code areas for H1:
+Primary code areas for H1-H2:
 
 - `src/engllm/core/repo/history.py`
+- `src/engllm/core/repo/scanner.py`
 - `src/engllm/core/analysis/history.py`
 - `src/engllm/tools/history_docs/build.py`
+- `src/engllm/tools/history_docs/models.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1:
+Primary tests for H1-H2:
 
 - `tests/test_history_docs_h1.py`
+- `tests/test_history_docs_h2.py`
+- `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
 
-Current H1 behavior:
+Current H1-H2 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
 - optional `--previous-checkpoint-commit`
 - previous checkpoint defaults to the latest prior ancestor checkpoint already
   recorded in shared history artifacts for the workspace
+- temporary checkpoint snapshot export via `git archive`
+- structural scanning runs against the exported snapshot, not the live working
+  tree
+- missing historical source roots are recorded and skipped
+- manifest search scope is limited to analyzed source roots plus their ancestor
+  chain back to repo root
 - quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes
