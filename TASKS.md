@@ -308,28 +308,34 @@ its own internal phases.
 
 - [x] **H0-04**  
   `Outcome:` Define a narrow first implementation slice instead of attempting the full tool at once.  
-  `Definition of Done:` The design doc and task board both identify quarterly checkpoints + minimal checkpoint docs as the first slice.  
-  `Verification Command(s):` `rg -n "First Implementation Slice|quarterly checkpoint" docs/HISTORY_DOCS.md TASKS.md`  
+  `Definition of Done:` The design doc and task board both identify explicit target-commit traversal + shared history manifests as the first slice.  
+  `Verification Command(s):` `rg -n "First-slice scope|explicit target-commit|shared history artifacts" docs/HISTORY_DOCS.md TASKS.md`  
   `Result:` pass
 
 ### History Phase 1 — Checkpoint Selection And Git History Traversal
 
-`Objective:` Select deterministic checkpoints and map commits into checkpoint windows.
+`Objective:` Resolve one explicit checkpoint commit at a time and map commits into deterministic checkpoint windows.
 `Why:` Everything else depends on stable checkpoint identity and interval boundaries.
 `Dependencies:` History Phase 0.
-`Completion Criteria:` The tool can enumerate checkpoints, resolve checkpoint commits, and emit interval metadata without mutating the working tree.
+`Completion Criteria:` The tool can resolve target commits, derive prior boundaries, and emit canonical history manifests without mutating the working tree.
 
-- [ ] **H1-01**  
-  `Outcome:` Define checkpoint cadence and identity rules, starting with quarterly checkpoints.  
-  `Definition of Done:` Checkpoint IDs, timestamps, and commit-resolution rules are deterministic and documented.
+- [x] **H1-01**  
+  `Outcome:` Define explicit checkpoint identity and prior-boundary rules for manual-first history traversal.  
+  `Definition of Done:` Checkpoint IDs, timestamps, explicit previous overrides, and artifact-derived ancestor lookup rules are deterministic and documented.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h1.py -k "checkpoint_id_for or uses_latest_ancestor or explicit_previous_override"`  
+  `Result:` pass
 
-- [ ] **H1-02**  
-  `Outcome:` Implement git history traversal for checkpoint and interval enumeration.  
-  `Definition of Done:` The tool can produce an ordered checkpoint plan plus commit windows between checkpoints.
+- [x] **H1-02**  
+  `Outcome:` Implement read-only git history traversal for target commits and interval enumeration.  
+  `Definition of Done:` `engllm history-docs build` resolves target commits, validates prior boundaries, and produces ordered commit windows without checking out historical trees.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h1.py -k "git_history_helpers or rejects_equal_previous or rejects_non_ancestor_previous or cli_build"`  
+  `Result:` pass
 
-- [ ] **H1-03**  
+- [x] **H1-03**  
   `Outcome:` Persist checkpoint and interval manifests under shared history artifacts.  
-  `Definition of Done:` `shared/history/checkpoint_plan.json` and interval metadata artifacts are written and test-covered.
+  `Definition of Done:` `shared/history/checkpoint_plan.json` and `shared/history/intervals.jsonl` are canonically rewritten, upsert safely on rerun, and are test-covered.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h1.py -k "initial_run_writes_manifests or rerun_is_idempotent or workspace_override_changes_artifact_location"`  
+  `Result:` pass
 
 ### History Phase 2 — Checkpoint Snapshot Analysis
 

@@ -268,16 +268,26 @@ Primary design docs:
 - `TASKS.md`
 - `ARCHITECTURE.md`
 
-Primary existing scaffold:
+Primary code areas for H1:
 
-- `src/engllm/tools/history_docs/`
-- `src/engllm/prompts/history_docs/`
+- `src/engllm/core/repo/history.py`
+- `src/engllm/core/analysis/history.py`
+- `src/engllm/tools/history_docs/build.py`
+- `src/engllm/cli/main.py`
 
-Primary planned code areas for the first implementation slice:
+Primary tests for H1:
 
-- `src/engllm/core/analysis/` for checkpoint selection and history traversal helpers
-- `src/engllm/tools/history_docs/` for orchestration and rendering
-- future `tests/test_history_*.py` modules for deterministic checkpoint, interval, and rendering behavior
+- `tests/test_history_docs_h1.py`
+- `tests/test_imports.py`
+
+Current H1 behavior:
+
+- single-checkpoint, manual-first `engllm history-docs build`
+- explicit `--checkpoint-commit`
+- optional `--previous-checkpoint-commit`
+- previous checkpoint defaults to the latest prior ancestor checkpoint already
+  recorded in shared history artifacts for the workspace
+- quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes
 

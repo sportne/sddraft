@@ -18,6 +18,7 @@ from engllm.llm.factory import create_llm_client
 from engllm.tools.ask.ask import answer_question
 from engllm.tools.ask.models import AskMode, QueryRequest
 from engllm.tools.ask.render import render_query_answer_text
+from engllm.tools.history_docs.build import build_history_docs_checkpoint
 from engllm.tools.repo.inspect_diff import inspect_diff
 from engllm.tools.sdd.generate import generate_sdd
 from engllm.tools.sdd.models import ProjectConfig
@@ -107,6 +108,16 @@ def _add_repo_migrate_index_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--shard-size", type=int, default=1000)
     parser.add_argument("--write-batch-size", type=int, default=200)
     parser.add_argument("--max-in-memory-records", type=int, default=2000)
+
+
+def _add_history_docs_build_args(parser: argparse.ArgumentParser) -> None:
+    """Add CLI arguments for H1 history-docs builds."""
+
+    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument("--repo-root", type=Path, default=Path("."))
+    parser.add_argument("--checkpoint-commit", required=True)
+    parser.add_argument("--previous-checkpoint-commit")
+    parser.add_argument("--workspace-id")
 
 
 def _run_sdd_validate_config(args: argparse.Namespace) -> int:
@@ -367,6 +378,25 @@ def _run_repo_migrate_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_history_docs_build(args: argparse.Namespace) -> int:
+    project = load_project_config(args.config)
+    result = build_history_docs_checkpoint(
+        project_config=project,
+        repo_root=args.repo_root.resolve(),
+        checkpoint_commit=args.checkpoint_commit,
+        previous_checkpoint_commit=args.previous_checkpoint_commit,
+        workspace_id=args.workspace_id,
+    )
+    print(
+        f"Built history checkpoint {result.checkpoint_id} "
+        f"(target: {result.target_commit}, previous: {result.previous_checkpoint_commit or 'initial'}, "
+        f"commits: {result.commit_count})"
+    )
+    print(f"Checkpoint plan: {result.checkpoint_plan_path}")
+    print(f"Intervals: {result.intervals_path}")
+    return 0
+
+
 def _sdd_tool_spec() -> ToolSpec:
     return ToolSpec(
         name="sdd",
@@ -436,8 +466,28 @@ def _repo_tool_spec() -> ToolSpec:
     )
 
 
+def _history_docs_tool_spec() -> ToolSpec:
+    return ToolSpec(
+        name="history-docs",
+        help="Git-history-based checkpoint documentation tooling.",
+        commands=(
+            ToolCommand(
+                name="build",
+                help="Build one history checkpoint plan entry and interval manifest.",
+                add_arguments=_add_history_docs_build_args,
+                run=_run_history_docs_build,
+            ),
+        ),
+    )
+
+
 def _tool_specs() -> tuple[ToolSpec, ...]:
-    return (_sdd_tool_spec(), _ask_tool_spec(), _repo_tool_spec())
+    return (
+        _sdd_tool_spec(),
+        _ask_tool_spec(),
+        _repo_tool_spec(),
+        _history_docs_tool_spec(),
+    )
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

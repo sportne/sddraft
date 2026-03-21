@@ -4,8 +4,8 @@ This document defines the design direction for the planned history-walk
 project-documentation tool in EngLLM.
 
 The goal of the tool is to generate **holistic documentation snapshots** for a
-repository at historical checkpoints, such as every three months. Each snapshot
-should describe the project **as it existed at that point in time**.
+repository at historical checkpoints. Each snapshot should describe the project
+**as it existed at that point in time**.
 
 The tool uses deltas internally, but its rendered output must not read like
 release notes or a changelog.
@@ -53,7 +53,9 @@ Planned future CLI surface:
 
 - `engllm history-docs build`
 
-That command is not implemented yet in this planning pass.
+H1 now implements that command as a single-checkpoint, read-only history
+traversal entrypoint. Snapshot analysis, rendering, and LLM-backed phases are
+still future work.
 
 ## Terminology
 
@@ -232,6 +234,11 @@ These are reusable by future tools such as release or evolution tooling.
 - `artifacts/workspaces/<workspace_id>/shared/history/intervals.jsonl`
 - `artifacts/workspaces/<workspace_id>/shared/history/checkpoints/<checkpoint_id>/snapshot_manifest.json`
 
+H1 currently implements the first two shared artifacts only:
+
+- `checkpoint_plan.json` as the authoritative checkpoint registry
+- `intervals.jsonl` as the canonical ordered commit windows per checkpoint
+
 ### Tool-specific history-docs artifacts
 
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/manifest.json`
@@ -305,17 +312,12 @@ useful subset rather than attempting the full system.
 
 ### First-slice scope
 
-- quarterly checkpoint selection
+- explicit target-commit selection via `engllm history-docs build`
+- artifact-derived previous-checkpoint lookup, with optional explicit override
 - deterministic checkpoint/interval manifest generation
-- one repo snapshot analysis pass per checkpoint using existing EngLLM scanner infrastructure where practical
-- interval diff analysis using existing git/diff helpers where practical
-- a minimal checkpoint documentation model
-- rendering of a narrow but useful section set:
-  - Introduction
-  - Architectural Overview
-  - Subsystems and Modules
-  - Dependencies
-  - Build and Development Infrastructure
+- read-only git history traversal with no checkout or worktree mutation
+- shared history artifacts only; no snapshot analysis, structured checkpoint
+  model, rendering, or LLM calls yet
 
 ### First-slice rationale
 
@@ -343,16 +345,19 @@ Expected outputs:
 
 Goal:
 
-- support checkpoint selection over git history
-- map commits into checkpoint windows
-- establish deterministic checkpoint identifiers
+- support explicit target-checkpoint selection over git history
+- map commits into checkpoint windows using the latest prior ancestor checkpoint
+  by default
+- establish deterministic checkpoint identifiers and shared manifests
 
 Expected capabilities:
 
-- time-based checkpoints such as every 3 months
+- explicit `--checkpoint-commit` selection
+- optional `--previous-checkpoint-commit` override
+- artifact-derived previous-checkpoint lookup
 - initial checkpoint handling
 - interval metadata between checkpoints
-- commit resolution for each checkpoint
+- commit resolution for each checkpoint without checking out historical trees
 
 Expected outputs:
 
@@ -544,5 +549,5 @@ The design should leave room for:
 
 This document is the planning baseline for the history-walk documentation tool.
 The next implementation step should be the narrow first slice described above,
-starting with checkpoint selection, interval metadata, and a minimal checkpoint
-model rather than a full history-docs engine.
+starting with explicit checkpoint selection and interval metadata rather than a
+full history-docs engine.
