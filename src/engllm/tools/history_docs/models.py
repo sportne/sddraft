@@ -43,10 +43,17 @@ class HistorySnapshotStructuralModel(DomainModel):
     build_sources: list[HistoryBuildSource] = Field(default_factory=list)
 
 
-HistoryDeltaEvidenceKind = Literal[
-    "commit", "file", "symbol", "subsystem", "build_source"
-]
+HistoryEvidenceKind = Literal["commit", "file", "symbol", "subsystem", "build_source"]
+HistoryDeltaEvidenceKind = HistoryEvidenceKind
 HistoryDeltaStatus = Literal["introduced", "modified", "retired", "observed"]
+HistoryConceptLifecycleStatus = Literal["active", "retired"]
+HistoryConceptChangeStatus = Literal[
+    "introduced",
+    "modified",
+    "unchanged",
+    "retired",
+    "observed",
+]
 HistoryCommitSignalKind = Literal[
     "architectural",
     "interface",
@@ -64,14 +71,24 @@ HistoryAlgorithmSignalKind = Literal[
 HistoryInterfaceScopeKind = Literal["symbol", "file"]
 HistoryDependencyKind = Literal["build_source", "code_import_signal"]
 HistoryAlgorithmScopeKind = Literal["file", "subsystem"]
+HistorySectionId = Literal[
+    "introduction",
+    "architectural_overview",
+    "subsystems_modules",
+    "dependencies",
+    "build_development_infrastructure",
+]
 
 
-class HistoryDeltaEvidenceLink(DomainModel):
-    """Traceable evidence pointer for interval-delta artifacts."""
+class HistoryEvidenceLink(DomainModel):
+    """Traceable evidence pointer for history-docs artifacts."""
 
-    kind: HistoryDeltaEvidenceKind
+    kind: HistoryEvidenceKind
     reference: str
     detail: str | None = None
+
+
+HistoryDeltaEvidenceLink = HistoryEvidenceLink
 
 
 class HistoryCommitDelta(DomainModel):
@@ -85,7 +102,7 @@ class HistoryCommitDelta(DomainModel):
     changed_symbol_names: list[str] = Field(default_factory=list)
     affected_subsystem_ids: list[str] = Field(default_factory=list)
     touched_build_sources: list[Path] = Field(default_factory=list)
-    evidence_links: list[HistoryDeltaEvidenceLink] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
 class HistorySubsystemChangeCandidate(DomainModel):
@@ -98,7 +115,7 @@ class HistorySubsystemChangeCandidate(DomainModel):
     commit_ids: list[str] = Field(default_factory=list)
     file_paths: list[Path] = Field(default_factory=list)
     changed_symbol_names: list[str] = Field(default_factory=list)
-    evidence_links: list[HistoryDeltaEvidenceLink] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
 class HistoryInterfaceChangeCandidate(DomainModel):
@@ -112,7 +129,7 @@ class HistoryInterfaceChangeCandidate(DomainModel):
     qualified_name: str | None = None
     commit_ids: list[str] = Field(default_factory=list)
     signature_changes: list[str] = Field(default_factory=list)
-    evidence_links: list[HistoryDeltaEvidenceLink] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
 class HistoryDependencyChangeCandidate(DomainModel):
@@ -128,7 +145,7 @@ class HistoryDependencyChangeCandidate(DomainModel):
     commit_ids: list[str] = Field(default_factory=list)
     file_paths: list[Path] = Field(default_factory=list)
     dependency_change_lines: list[str] = Field(default_factory=list)
-    evidence_links: list[HistoryDeltaEvidenceLink] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
 class HistoryAlgorithmCandidate(DomainModel):
@@ -142,7 +159,7 @@ class HistoryAlgorithmCandidate(DomainModel):
     changed_symbol_names: list[str] = Field(default_factory=list)
     variant_names: list[str] = Field(default_factory=list)
     signal_kinds: list[HistoryAlgorithmSignalKind] = Field(default_factory=list)
-    evidence_links: list[HistoryDeltaEvidenceLink] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
 
 class HistoryIntervalDeltaModel(DomainModel):
@@ -165,6 +182,80 @@ class HistoryIntervalDeltaModel(DomainModel):
     algorithm_candidates: list[HistoryAlgorithmCandidate] = Field(default_factory=list)
 
 
+class HistorySubsystemConcept(DomainModel):
+    """Checkpoint-scoped subsystem concept."""
+
+    concept_id: str
+    lifecycle_status: HistoryConceptLifecycleStatus
+    change_status: HistoryConceptChangeStatus
+    first_seen_checkpoint: str
+    last_updated_checkpoint: str
+    source_root: Path
+    group_path: Path
+    module_ids: list[str] = Field(default_factory=list)
+    file_count: int
+    symbol_count: int
+    language_counts: dict[str, int] = Field(default_factory=dict)
+    representative_files: list[Path] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryModuleConcept(DomainModel):
+    """Checkpoint-scoped module concept."""
+
+    concept_id: str
+    lifecycle_status: HistoryConceptLifecycleStatus
+    change_status: HistoryConceptChangeStatus
+    first_seen_checkpoint: str
+    last_updated_checkpoint: str
+    path: Path
+    subsystem_id: str | None = None
+    language: str
+    functions: list[str] = Field(default_factory=list)
+    classes: list[str] = Field(default_factory=list)
+    imports: list[str] = Field(default_factory=list)
+    docstrings: list[str] = Field(default_factory=list)
+    symbol_names: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDependencyConcept(DomainModel):
+    """Checkpoint-scoped dependency-source concept."""
+
+    concept_id: str
+    lifecycle_status: HistoryConceptLifecycleStatus
+    change_status: HistoryConceptChangeStatus
+    first_seen_checkpoint: str
+    last_updated_checkpoint: str
+    path: Path
+    ecosystem: str
+    category: str
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySectionState(DomainModel):
+    """Deterministic section stub for one checkpoint."""
+
+    section_id: HistorySectionId
+    title: str
+    concept_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryCheckpointModel(DomainModel):
+    """Structured documentation-state model for one checkpoint."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    previous_checkpoint_model_available: bool = False
+    subsystems: list[HistorySubsystemConcept] = Field(default_factory=list)
+    modules: list[HistoryModuleConcept] = Field(default_factory=list)
+    dependencies: list[HistoryDependencyConcept] = Field(default_factory=list)
+    sections: list[HistorySectionState] = Field(default_factory=list)
+
+
 class HistoryBuildResult(DomainModel):
     """Result for one history-docs build run."""
 
@@ -179,6 +270,7 @@ class HistoryBuildResult(DomainModel):
     snapshot_manifest_path: Path | None = None
     snapshot_structural_model_path: Path | None = None
     interval_delta_model_path: Path | None = None
+    checkpoint_model_path: Path | None = None
     file_count: int = 0
     symbol_count: int = 0
     subsystem_count: int = 0
@@ -187,17 +279,31 @@ class HistoryBuildResult(DomainModel):
     interface_change_count: int = 0
     dependency_change_count: int = 0
     algorithm_candidate_count: int = 0
+    subsystem_concept_count: int = 0
+    module_concept_count: int = 0
+    dependency_concept_count: int = 0
+    retired_concept_count: int = 0
 
 
 __all__ = [
     "HistoryAlgorithmCandidate",
     "HistoryBuildResult",
     "HistoryCommitDelta",
+    "HistoryCheckpointModel",
+    "HistoryConceptChangeStatus",
+    "HistoryConceptLifecycleStatus",
+    "HistoryDependencyConcept",
+    "HistoryEvidenceKind",
+    "HistoryEvidenceLink",
     "HistoryDeltaEvidenceLink",
     "HistoryDependencyChangeCandidate",
     "HistoryInterfaceChangeCandidate",
     "HistoryIntervalDeltaModel",
+    "HistoryModuleConcept",
+    "HistorySectionId",
+    "HistorySectionState",
     "HistorySnapshotStructuralModel",
+    "HistorySubsystemConcept",
     "HistorySubsystemChangeCandidate",
     "HistorySubsystemCandidate",
 ]

@@ -59,7 +59,7 @@ LLM-backed phases are still future work.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 3:
+The current implementation covers History Phases 1 through 4:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -75,6 +75,10 @@ The current implementation covers History Phases 1 through 3:
   - first-parent commit diff semantics
   - diff-only fallback when the previous snapshot artifact is unavailable
   - structured subsystem, interface, dependency, and algorithm candidate signals
+- tool-scoped `checkpoint_model.json` artifacts with:
+  - active and retired subsystem/module/dependency-source concepts
+  - deterministic core section stubs
+  - previous-model fallback when the prior checkpoint model artifact is missing
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 
@@ -288,6 +292,12 @@ Current H3 behavior adds one tool-scoped interval artifact:
   derived from interval commits, first-parent diffs, current snapshot evidence,
   and previous-snapshot comparison when available
 
+Current H4 behavior adds one tool-scoped checkpoint-state artifact:
+
+- `checkpoint_model.json` as the deterministic present-state model for one
+  checkpoint, including active and retired concepts plus fixed core section
+  records
+
 ## Major Internal Models
 
 These models are planned conceptual anchors for implementation. They do not all
@@ -486,6 +496,16 @@ Expected outputs:
 
 - checkpoint documentation model
 - evidence links between concepts and source evidence
+
+Current implementation status:
+
+- implemented in `engllm history-docs build`
+- persists `checkpoint_model.json` after H3
+- models subsystems, modules, dependency-source concepts, sections, and
+  evidence links
+- carries retired concepts forward for lineage while keeping section records
+  active-only
+- keeps standalone interface and algorithm concepts deferred
 
 ### Phase 5 — Section Inference And Inclusion Rules
 

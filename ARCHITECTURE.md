@@ -19,11 +19,12 @@ Today it ships four tool namespaces:
 2. `engllm ask answer ...` / `engllm ask interactive` for grounded repository Q&A
 3. `engllm repo ...` for shared repository utilities such as diff inspection
 4. `engllm history-docs build` for checkpoint selection, history traversal,
-   snapshot structural analysis, and interval delta analysis
+   snapshot structural analysis, interval delta analysis, and checkpoint-state
+   modeling
 
-The next major expansion for `engllm history-docs ...` is full checkpoint
-documentation rendering over those historical snapshots. The design for that
-tool lives in `docs/HISTORY_DOCS.md`.
+The next major expansion for `engllm history-docs ...` is section planning,
+algorithm capsules, and full checkpoint documentation rendering over those
+historical snapshots. The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
 
@@ -449,9 +450,11 @@ Current implemented slice:
   repo root
 * tool-scoped `snapshot_structural_model.json`
 * tool-scoped `interval_delta_model.json`
+* tool-scoped `checkpoint_model.json`
 * first-parent diff semantics for merge commits
 * diff-only fallback with `observed` statuses when the previous snapshot
   artifact is unavailable
+* active and retired checkpoint concepts with active-only core section stubs
 * quarterly auto-selection still deferred
 
 ---

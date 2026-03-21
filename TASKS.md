@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H3: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, and tool-scoped interval-delta analysis with subsystem/interface/dependency/algorithm candidates.
+- `engllm history-docs build` now supports H1-H4: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, and checkpoint-state models with active/retired subsystem/module/dependency concepts plus core section stubs.
 
 ## 2) Guiding Principles / Scope
 
@@ -394,17 +394,23 @@ its own internal phases.
 `Dependencies:` History Phases 2-3.
 `Completion Criteria:` A checkpoint model can merge prior checkpoint state, current snapshot evidence, and interval delta evidence deterministically.
 
-- [ ] **H4-01**  
+- [x] **H4-01**  
   `Outcome:` Define the first concrete checkpoint documentation models.  
-  `Definition of Done:` Initial models exist for checkpoints, subsystems/modules, dependencies, sections, and evidence links.
+  `Definition of Done:` Initial models exist for checkpoints, subsystems/modules, dependencies, sections, and evidence links.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h4.py -k "initial_run_writes_h4_checkpoint_model or prints_h4_checkpoint_model_path"`  
+  `Result:` pass
 
-- [ ] **H4-02**  
+- [x] **H4-02**  
   `Outcome:` Implement deterministic merge/update rules for checkpoint concepts.  
-  `Definition of Done:` Stable concepts persist, changed concepts revise cleanly, and stale concepts retire conservatively.
+  `Definition of Done:` Stable concepts persist, changed concepts revise cleanly, and stale concepts retire conservatively.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h4.py -k "merges_previous_model_and_tracks_changes or uses_previous_model_fallback_when_missing or retains_retired_concepts"`  
+  `Result:` pass
 
-- [ ] **H4-03**  
+- [x] **H4-03**  
   `Outcome:` Persist versioned checkpoint models and evidence links per checkpoint.  
-  `Definition of Done:` Tool artifacts include inspectable checkpoint model JSON for every built checkpoint.
+  `Definition of Done:` Tool artifacts include inspectable checkpoint model JSON for every built checkpoint.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h4.py tests/test_imports.py`  
+  `Result:` pass
 
 ### History Phase 5 — Section Inference And Inclusion Rules
 

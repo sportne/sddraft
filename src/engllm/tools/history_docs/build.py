@@ -40,12 +40,18 @@ from engllm.core.repo.scanner import scan_paths
 from engllm.core.workspaces import build_workspace_context, tool_artifact_root
 from engllm.domain.errors import AnalysisError, GitError, RepositoryError
 from engllm.domain.models import ProjectConfig
+from engllm.tools.history_docs.checkpoint_model import (
+    build_checkpoint_model,
+    checkpoint_model_path,
+    load_checkpoint_model,
+)
 from engllm.tools.history_docs.delta import (
     build_interval_delta_model,
     interval_delta_model_path,
 )
 from engllm.tools.history_docs.models import (
     HistoryBuildResult,
+    HistoryCheckpointModel,
     HistorySnapshotStructuralModel,
 )
 from engllm.tools.history_docs.structure import (
@@ -259,6 +265,13 @@ def _load_snapshot_structural_model(
     return HistorySnapshotStructuralModel.model_validate_json(
         path.read_text(encoding="utf-8")
     )
+
+
+def _load_previous_checkpoint_model(
+    tool_root: Path,
+    checkpoint_id: str,
+) -> HistoryCheckpointModel | None:
+    return load_checkpoint_model(checkpoint_model_path(tool_root, checkpoint_id))
 
 
 def build_history_docs_checkpoint(
@@ -478,6 +491,8 @@ def build_history_docs_checkpoint(
     write_json_model(snapshot_structural_model_path, structural_model)
 
     previous_snapshot = None
+    previous_checkpoint_model = None
+    previous_checkpoint = None
     if resolved_previous is not None:
         previous_checkpoint = next(
             (
@@ -493,6 +508,10 @@ def build_history_docs_checkpoint(
                     history_tool_root,
                     previous_checkpoint.checkpoint_id,
                 )
+            )
+            previous_checkpoint_model = _load_previous_checkpoint_model(
+                history_tool_root,
+                previous_checkpoint.checkpoint_id,
             )
 
     _progress(
@@ -511,6 +530,37 @@ def build_history_docs_checkpoint(
     interval_delta_path = interval_delta_model_path(history_tool_root, checkpoint_id)
     write_json_model(interval_delta_path, interval_delta_model)
 
+    _progress(
+        progress_callback,
+        "history-docs: building checkpoint documentation model",
+    )
+    checkpoint_model = build_checkpoint_model(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        current_snapshot=structural_model,
+        current_delta=interval_delta_model,
+        previous_model=previous_checkpoint_model,
+    )
+    checkpoint_model_artifact_path = checkpoint_model_path(
+        history_tool_root, checkpoint_id
+    )
+    write_json_model(checkpoint_model_artifact_path, checkpoint_model)
+    retired_concept_count = (
+        sum(
+            concept.lifecycle_status == "retired"
+            for concept in checkpoint_model.subsystems
+        )
+        + sum(
+            concept.lifecycle_status == "retired"
+            for concept in checkpoint_model.modules
+        )
+        + sum(
+            concept.lifecycle_status == "retired"
+            for concept in checkpoint_model.dependencies
+        )
+    )
+
     return HistoryBuildResult(
         workspace_id=resolved_workspace_id,
         checkpoint_id=checkpoint_id,
@@ -523,6 +573,7 @@ def build_history_docs_checkpoint(
         snapshot_manifest_path=snapshot_manifest_path,
         snapshot_structural_model_path=snapshot_structural_model_path,
         interval_delta_model_path=interval_delta_path,
+        checkpoint_model_path=checkpoint_model_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -531,4 +582,8 @@ def build_history_docs_checkpoint(
         interface_change_count=len(interval_delta_model.interface_changes),
         dependency_change_count=len(interval_delta_model.dependency_changes),
         algorithm_candidate_count=len(interval_delta_model.algorithm_candidates),
+        subsystem_concept_count=len(checkpoint_model.subsystems),
+        module_concept_count=len(checkpoint_model.modules),
+        dependency_concept_count=len(checkpoint_model.dependencies),
+        retired_concept_count=retired_concept_count,
     )

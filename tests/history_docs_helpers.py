@@ -234,6 +234,25 @@ def interval_delta_model_path(
     )
 
 
+def checkpoint_model_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H4 checkpoint model path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "checkpoint_model.json"
+    )
+
+
 def write_project_config(
     path: Path,
     output_root: Path,

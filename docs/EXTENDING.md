@@ -279,16 +279,17 @@ Primary code areas for H1-H2:
 - `src/engllm/tools/history_docs/models.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1-H3:
+Primary tests for H1-H4:
 
 - `tests/test_history_docs_h1.py`
 - `tests/test_history_docs_h2.py`
 - `tests/test_history_docs_h3.py`
+- `tests/test_history_docs_h4.py`
 - `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
 - `tests/test_diff_and_impact.py`
 
-Current H1-H3 behavior:
+Current H1-H4 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
@@ -307,6 +308,10 @@ Current H1-H3 behavior:
   `tools/history_docs/checkpoints/<checkpoint_id>/interval_delta_model.json`
 - missing previous snapshot artifacts trigger diff-only fallback with
   conservative `observed` statuses instead of failure
+- checkpoint-state artifacts are written to
+  `tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model.json`
+- checkpoint models keep both active and retired concepts while section records
+  reference active concepts only
 - quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes
