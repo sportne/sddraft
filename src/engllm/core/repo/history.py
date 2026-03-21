@@ -198,6 +198,35 @@ def export_commit_snapshot(
     return destination_root
 
 
+def read_file_at_commit(
+    repo_root: Path,
+    rev: str,
+    file_path: Path,
+) -> str:
+    """Return the UTF-8 text of one tracked file as it existed at a commit."""
+
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{rev}:{file_path.as_posix()}"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+        )
+    except FileNotFoundError as exc:  # pragma: no cover - environment issue
+        raise GitError("git executable not found") from exc
+    except subprocess.CalledProcessError as exc:
+        raw_message = exc.stderr or exc.stdout
+        message = (
+            raw_message.decode("utf-8", errors="replace").strip()
+            if raw_message is not None
+            else str(exc).strip()
+        )
+        raise GitError(
+            f"git show failed for {file_path.as_posix()} at {rev}: {message}"
+        ) from exc
+    return result.stdout.decode("utf-8")
+
+
 def describe_commit_diff(repo_root: Path, rev: str) -> GitCommitDiffSpec:
     """Describe the deterministic diff basis for one commit."""
 

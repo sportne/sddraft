@@ -75,6 +75,23 @@ HistoryAlgorithmCapsuleStatus = Literal["introduced", "modified", "observed"]
 HistoryAlgorithmSharedAbstractionKind = Literal["function", "class", "symbol"]
 HistoryAlgorithmDataStructureKind = Literal["class", "symbol"]
 HistoryAlgorithmAssumptionSourceKind = Literal["docstring", "signature_change"]
+HistoryDependencyRole = Literal[
+    "runtime",
+    "development",
+    "test",
+    "build",
+    "plugin",
+    "toolchain",
+    "optional",
+    "peer",
+    "unknown",
+]
+HistoryDependencySectionTarget = Literal[
+    "dependencies",
+    "build_development_infrastructure",
+]
+HistoryDependencySourceKind = Literal["primary", "lockfile", "metadata"]
+HistoryDependencySummaryStatus = Literal["documented", "tbd", "llm_failed"]
 HistorySectionId = Literal[
     "introduction",
     "architectural_overview",
@@ -350,7 +367,71 @@ class HistoryDependencyConcept(DomainModel):
     ecosystem: str
     category: str
     related_subsystem_ids: list[str] = Field(default_factory=list)
+    documented_dependency_ids: list[str] = Field(default_factory=list)
+    documented_dependency_count: int = 0
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDependencyDeclaration(DomainModel):
+    """One parsed direct dependency declaration from a manifest-like source."""
+
+    source_path: Path
+    source_kind: HistoryDependencySourceKind
+    raw_name: str
+    normalized_name: str
+    role: HistoryDependencyRole
+    version_spec: str | None = None
+    group_name: str | None = None
+    declaration_text: str | None = None
+
+
+class HistoryDependencyWarning(DomainModel):
+    """Non-fatal parse or summary warning for one checkpoint dependency run."""
+
+    source_path: Path
+    code: str
+    message: str
+
+
+class HistoryDependencySummary(DomainModel):
+    """Structured LLM response for one dependency summary."""
+
+    general_description: str
+    project_usage_description: str
+    uncertainty: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+
+
+class HistoryDependencyEntry(DomainModel):
+    """Aggregated direct dependency entry for one checkpoint."""
+
+    dependency_id: str
+    display_name: str
+    normalized_name: str
+    ecosystem: str
+    declarations: list[HistoryDependencyDeclaration] = Field(default_factory=list)
+    source_manifest_paths: list[Path] = Field(default_factory=list)
+    source_dependency_concept_ids: list[str] = Field(default_factory=list)
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    scope_roles: list[HistoryDependencyRole] = Field(default_factory=list)
+    section_target: HistoryDependencySectionTarget
+    usage_signals: list[str] = Field(default_factory=list)
+    general_description: str = "TBD"
+    project_usage_description: str = "TBD"
+    uncertainty: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    summary_status: HistoryDependencySummaryStatus = "tbd"
+
+
+class HistoryDependencyInventory(DomainModel):
+    """Tool-scoped dependency documentation artifact for one checkpoint."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    entries: list[HistoryDependencyEntry] = Field(default_factory=list)
+    warnings: list[HistoryDependencyWarning] = Field(default_factory=list)
 
 
 class HistorySectionState(DomainModel):
@@ -420,6 +501,7 @@ class HistoryBuildResult(DomainModel):
     checkpoint_model_path: Path | None = None
     section_outline_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
+    dependencies_artifact_path: Path | None = None
     file_count: int = 0
     symbol_count: int = 0
     subsystem_count: int = 0
@@ -435,6 +517,9 @@ class HistoryBuildResult(DomainModel):
     included_section_count: int = 0
     omitted_section_count: int = 0
     algorithm_capsule_count: int = 0
+    documented_dependency_count: int = 0
+    dependency_warning_count: int = 0
+    dependency_summary_failure_count: int = 0
 
 
 __all__ = [
@@ -452,7 +537,16 @@ __all__ = [
     "HistoryCheckpointModel",
     "HistoryConceptChangeStatus",
     "HistoryConceptLifecycleStatus",
+    "HistoryDependencyDeclaration",
+    "HistoryDependencyEntry",
     "HistoryDependencyConcept",
+    "HistoryDependencyInventory",
+    "HistoryDependencyRole",
+    "HistoryDependencySectionTarget",
+    "HistoryDependencySourceKind",
+    "HistoryDependencySummary",
+    "HistoryDependencySummaryStatus",
+    "HistoryDependencyWarning",
     "HistoryEvidenceKind",
     "HistoryEvidenceLink",
     "HistoryDeltaEvidenceLink",

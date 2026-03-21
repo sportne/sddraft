@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H6: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, and deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections.
+- `engllm history-docs build` now supports H1-H7: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, and LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links.
 
 ## 2) Guiding Principles / Scope
 
@@ -464,22 +464,28 @@ its own internal phases.
 
 ### History Phase 7 — Dependency Documentation Pipeline
 
-`Objective:` Document important direct dependencies for each checkpoint.
+`Objective:` Document direct dependencies for each checkpoint.
 `Why:` Dependency infrastructure is a meaningful part of project understanding and should evolve with checkpoints.
 `Dependencies:` History Phases 2, 4, and 5.
 `Completion Criteria:` Dependencies are extracted from build/package infrastructure and rendered using the required two-short-paragraph format.
 
-- [ ] **H7-01**  
+- [x] **H7-01**  
   `Outcome:` Parse and normalize direct dependencies from build/package files.  
-  `Definition of Done:` The tool can emit a dependency inventory per checkpoint from project manifests and lockfiles where appropriate.
+  `Definition of Done:` The tool can emit a dependency inventory per checkpoint from project manifests and lockfiles where appropriate.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h7.py -k "representative_manifest_fixtures or aggregates_lockfile_with_primary"`  
+  `Result:` pass
 
-- [ ] **H7-02**  
-  `Outcome:` Classify important dependencies for documentation inclusion.  
-  `Definition of Done:` Weak or incidental dependencies can be omitted when they would only create noise.
+- [x] **H7-02**  
+  `Outcome:` Classify parsed direct dependencies into dependency vs build/development infrastructure roles for later rendering.  
+  `Definition of Done:` All parsed direct dependencies are retained, with deterministic section-target metadata instead of ad hoc omission.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h7.py -k "import_usage_linking_is_limited_to_supported_ecosystems or dynamic_and_metadata_warnings"`  
+  `Result:` pass
 
-- [ ] **H7-03**  
+- [x] **H7-03**  
   `Outcome:` Generate concise general-purpose and project-specific dependency summaries.  
-  `Definition of Done:` Each documented dependency renders as two short paragraphs, not a file-usage audit.
+  `Definition of Done:` Each documented dependency renders as two short paragraphs, not a file-usage audit.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h7.py tests/test_imports.py`  
+  `Result:` pass
 
 ### History Phase 8 — Rendering Engine
 

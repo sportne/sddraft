@@ -12,6 +12,7 @@ from .history import (
     get_commit_metadata,
     is_strict_ancestor,
     iter_interval_commits,
+    read_file_at_commit,
     resolve_commit,
 )
 from .language_analyzers import (
@@ -31,6 +32,7 @@ __all__ = [
     "parse_diff",
     "describe_commit_diff",
     "export_commit_snapshot",
+    "read_file_at_commit",
     "resolve_commit",
     "get_commit_metadata",
     "is_strict_ancestor",

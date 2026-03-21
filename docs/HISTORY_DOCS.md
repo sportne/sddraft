@@ -59,7 +59,7 @@ LLM-backed phases are still future work.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 6:
+The current implementation covers History Phases 1 through 7:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -87,6 +87,12 @@ The current implementation covers History Phases 1 through 6:
   - `index.json` plus one JSON file per capsule
   - deterministic capsule linking back into checkpoint concepts and sections
   - an evidence-gated `algorithms_core_logic` section in the final section plan
+- tool-scoped `dependencies.json` artifacts with:
+  - parsed and normalized direct dependency inventories aggregated by
+    ecosystem plus dependency name
+  - conservative warnings for unsupported or ambiguous manifest syntax
+  - LLM-assisted two-paragraph dependency summaries
+  - links back into checkpoint dependency-source concepts
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 
@@ -306,6 +312,12 @@ Current H4 behavior adds one tool-scoped checkpoint-state artifact:
 - `checkpoint_model.json` as the deterministic present-state model for one
   checkpoint, including active and retired concepts plus fixed core section
   records
+
+Current H7 behavior adds one tool-scoped dependency artifact:
+
+- `dependencies.json` as the canonical direct-dependency inventory for one
+  checkpoint, including aggregated declarations, section-target metadata,
+  summary text, and non-fatal warnings
 
 ## Major Internal Models
 

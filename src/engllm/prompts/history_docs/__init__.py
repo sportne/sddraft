@@ -1,3 +1,5 @@
-"""History-walk documentation prompt scaffold."""
+"""History-docs prompt builders."""
 
-__all__: list[str] = []
+from engllm.prompts.history_docs.builders import build_dependency_summary_prompt
+
+__all__ = ["build_dependency_summary_prompt"]

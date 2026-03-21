@@ -292,6 +292,25 @@ def algorithm_capsule_index_path(
     )
 
 
+def dependencies_artifact_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H7 dependency inventory path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "dependencies.json"
+    )
+
+
 def write_project_config(
     path: Path,
     output_root: Path,

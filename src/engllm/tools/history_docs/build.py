@@ -34,12 +34,14 @@ from engllm.core.repo.history import (
     get_commit_metadata,
     is_strict_ancestor,
     iter_interval_commits,
+    read_file_at_commit,
     resolve_commit,
 )
 from engllm.core.repo.scanner import scan_paths
 from engllm.core.workspaces import build_workspace_context, tool_artifact_root
 from engllm.domain.errors import AnalysisError, GitError, RepositoryError
 from engllm.domain.models import ProjectConfig
+from engllm.llm.factory import create_llm_client
 from engllm.tools.history_docs.algorithm_capsules import (
     algorithm_capsule_index_path,
     build_algorithm_capsules,
@@ -55,9 +57,15 @@ from engllm.tools.history_docs.delta import (
     build_interval_delta_model,
     interval_delta_model_path,
 )
+from engllm.tools.history_docs.dependencies import (
+    build_dependency_inventory,
+    dependency_inventory_path,
+    link_dependency_inventory_to_checkpoint_model,
+)
 from engllm.tools.history_docs.models import (
     HistoryBuildResult,
     HistoryCheckpointModel,
+    HistoryDependencyInventory,
     HistorySectionOutline,
     HistorySnapshotStructuralModel,
 )
@@ -292,6 +300,14 @@ def _count_section_status(
     return sum(section.status == status for section in section_outline.sections)
 
 
+def _count_dependency_summary_failures(
+    dependency_inventory: HistoryDependencyInventory,
+) -> int:
+    return sum(
+        entry.summary_status == "llm_failed" for entry in dependency_inventory.entries
+    )
+
+
 def build_history_docs_checkpoint(
     *,
     project_config: ProjectConfig,
@@ -301,7 +317,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> HistoryBuildResult:
-    """Persist checkpoint manifests plus H2-H6 history-docs artifacts."""
+    """Persist checkpoint manifests plus H2-H7 history-docs artifacts."""
 
     resolved_repo_root = repo_root.resolve()
     target_metadata = get_commit_metadata(resolved_repo_root, checkpoint_commit)
@@ -606,8 +622,34 @@ def build_history_docs_checkpoint(
     ):
         write_json_model(checkpoint_root / index_entry.artifact_path, capsule)
     write_json_model(algorithm_capsule_index_artifact_path, algorithm_capsule_index)
-    write_json_model(checkpoint_model_artifact_path, checkpoint_model)
     write_json_model(section_outline_artifact_path, section_outline)
+
+    _progress(
+        progress_callback,
+        "history-docs: documenting direct dependencies",
+    )
+    llm_client = create_llm_client(project_config.llm)
+    dependency_inventory = build_dependency_inventory(
+        repo_root=resolved_repo_root,
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        checkpoint_model=checkpoint_model,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+        read_file_at_commit=read_file_at_commit,
+    )
+    checkpoint_model = link_dependency_inventory_to_checkpoint_model(
+        checkpoint_model,
+        dependency_inventory,
+    )
+    dependencies_artifact_path = dependency_inventory_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    write_json_model(dependencies_artifact_path, dependency_inventory)
+    write_json_model(checkpoint_model_artifact_path, checkpoint_model)
 
     retired_concept_count = (
         sum(
@@ -639,6 +681,7 @@ def build_history_docs_checkpoint(
         checkpoint_model_path=checkpoint_model_artifact_path,
         section_outline_path=section_outline_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
+        dependencies_artifact_path=dependencies_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -654,4 +697,9 @@ def build_history_docs_checkpoint(
         included_section_count=_count_section_status(section_outline, "included"),
         omitted_section_count=_count_section_status(section_outline, "omitted"),
         algorithm_capsule_count=len(algorithm_capsules),
+        documented_dependency_count=len(dependency_inventory.entries),
+        dependency_warning_count=len(dependency_inventory.warnings),
+        dependency_summary_failure_count=_count_dependency_summary_failures(
+            dependency_inventory
+        ),
     )

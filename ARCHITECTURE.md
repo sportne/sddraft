@@ -22,8 +22,9 @@ Today it ships four tool namespaces:
    snapshot structural analysis, interval delta analysis, and checkpoint-state
    modeling
 
-The next major expansion for `engllm history-docs ...` is dependency
-documentation and full checkpoint rendering over those historical snapshots.
+`engllm history-docs build` now also emits checkpoint-scoped dependency
+documentation artifacts, and the next major expansion is full checkpoint
+rendering over those historical snapshots.
 The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.

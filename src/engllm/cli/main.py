@@ -407,6 +407,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Section outline: {result.section_outline_path}")
     if result.algorithm_capsule_index_path is not None:
         print(f"Algorithm capsules: {result.algorithm_capsule_index_path}")
+    if result.dependencies_artifact_path is not None:
+        print(f"Dependencies: {result.dependencies_artifact_path}")
     return 0
 
 
