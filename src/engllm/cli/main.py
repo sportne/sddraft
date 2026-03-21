@@ -409,6 +409,10 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Algorithm capsules: {result.algorithm_capsule_index_path}")
     if result.dependencies_artifact_path is not None:
         print(f"Dependencies: {result.dependencies_artifact_path}")
+    if result.checkpoint_markdown_path is not None:
+        print(f"Checkpoint markdown: {result.checkpoint_markdown_path}")
+    if result.render_manifest_path is not None:
+        print(f"Render manifest: {result.render_manifest_path}")
     return 0
 
 

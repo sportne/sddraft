@@ -279,7 +279,7 @@ Primary code areas for H1-H2:
 - `src/engllm/tools/history_docs/models.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1-H7:
+Primary tests for H1-H8:
 
 - `tests/test_history_docs_h1.py`
 - `tests/test_history_docs_h2.py`
@@ -288,11 +288,12 @@ Primary tests for H1-H7:
 - `tests/test_history_docs_h5.py`
 - `tests/test_history_docs_h6.py`
 - `tests/test_history_docs_h7.py`
+- `tests/test_history_docs_h8.py`
 - `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
 - `tests/test_diff_and_impact.py`
 
-Current H1-H7 behavior:
+Current H1-H8 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
@@ -330,6 +331,11 @@ Current H1-H7 behavior:
 - H7 uses the project-configured LLM provider to generate the required
   two-paragraph dependency summaries
 - H7 links documented dependency ids back into checkpoint dependency concepts
+- H8 writes `tools/history_docs/checkpoints/<checkpoint_id>/checkpoint.md`
+- H8 writes `tools/history_docs/checkpoints/<checkpoint_id>/render_manifest.json`
+- H8 renders deterministically from the checkpoint model, scored section
+  outline, algorithm capsules, and dependency inventory
+- H8 keeps omitted optional sections out of the final Markdown
 - quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes

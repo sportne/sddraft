@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H7: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, and LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links.
+- `engllm history-docs build` now supports H1-H8: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, and deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output.
 
 ## 2) Guiding Principles / Scope
 
@@ -494,17 +494,23 @@ its own internal phases.
 `Dependencies:` History Phases 4-7.
 `Completion Criteria:` Each checkpoint can render to a complete present-state Markdown document plus structured debug outputs.
 
-- [ ] **H8-01**  
+- [x] **H8-01**  
   `Outcome:` Implement checkpoint document rendering from section plans and checkpoint models.  
-  `Definition of Done:` Rendered docs follow present-state, design-document style without release-note framing.
+  `Definition of Done:` Rendered docs follow present-state, design-document style without release-note framing.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h8.py tests/test_imports.py`  
+  `Result:` pass
 
-- [ ] **H8-02**  
+- [x] **H8-02**  
   `Outcome:` Support stable core sections plus evidence-driven optional sections.  
-  `Definition of Done:` Omitted sections stay omitted instead of turning into boilerplate.
+  `Definition of Done:` Omitted sections stay omitted instead of turning into boilerplate.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h8.py -k "filters_to_included_sections or writes_markdown"`  
+  `Result:` pass
 
-- [ ] **H8-03**  
+- [x] **H8-03**  
   `Outcome:` Emit structured debug artifacts alongside Markdown renders.  
-  `Definition of Done:` Render inputs and outputs remain inspectable for later agent work.
+  `Definition of Done:` Render inputs and outputs remain inspectable for later agent work.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h8.py -k "render_manifest or cli_build_prints_h8"`  
+  `Result:` pass
 
 ### History Phase 9 — Validation And Quality Evaluation
 

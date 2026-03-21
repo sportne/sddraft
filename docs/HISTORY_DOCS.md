@@ -291,6 +291,7 @@ H1 and H2 currently implement these shared artifacts:
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/dependencies.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/*.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint.md`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/render_manifest.json`
 
 The exact file names can evolve, but the split between shared history traversal
 artifacts and tool-specific rendered/model artifacts should remain.
@@ -318,6 +319,14 @@ Current H7 behavior adds one tool-scoped dependency artifact:
 - `dependencies.json` as the canonical direct-dependency inventory for one
   checkpoint, including aggregated declarations, section-target metadata,
   summary text, and non-fatal warnings
+
+Current H8 behavior adds final render outputs:
+
+- `checkpoint.md` as the deterministic present-state checkpoint document built
+  from `checkpoint_model.json`, `section_outline.json`, H6 capsules, and H7
+  dependency summaries
+- `render_manifest.json` as the structured trace of rendered sections, source
+  artifact usage, and subsection counts
 
 ## Major Internal Models
 
@@ -534,6 +543,11 @@ Current implementation status:
 - persists `algorithm_capsules/index.json` plus one per-capsule JSON artifact
 - links capsule ids into checkpoint concepts, section stubs, and the scored
   `algorithms_core_logic` / strategy-variant section plans
+- persists deterministic `checkpoint.md` render output after H7
+- persists `render_manifest.json` with section-level trace/debug metadata
+- renders only `included` sections from the scored outline, in outline order
+- carries dependency prose through from `dependencies.json` without new LLM
+  calls during rendering
 - keeps standalone interface concepts deferred
 
 ### Phase 5 — Section Inference And Inclusion Rules
@@ -610,6 +624,17 @@ Expected outputs:
 
 - final checkpoint documentation files
 - optional JSON render/debug artifacts
+
+Current implementation status:
+
+- implemented in `engllm history-docs build`
+- renders `checkpoint.md` deterministically with no additional provider calls
+- uses `section_outline.json` as the source of truth for final section
+  inclusion and ordering
+- keeps omitted optional sections out of the final Markdown instead of filling
+  them with boilerplate
+- writes `render_manifest.json` as the structured render trace for later agent
+  inspection
 
 ### Phase 9 — Validation And Quality Evaluation
 

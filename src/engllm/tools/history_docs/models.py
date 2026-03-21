@@ -484,6 +484,30 @@ class HistorySectionOutline(DomainModel):
     sections: list[HistorySectionPlan] = Field(default_factory=list)
 
 
+class HistoryRenderedSection(DomainModel):
+    """Rendered section trace record for one checkpoint markdown artifact."""
+
+    section_id: HistorySectionPlanId
+    title: str
+    order: int
+    kind: HistorySectionKind
+    concept_ids: list[str] = Field(default_factory=list)
+    algorithm_capsule_ids: list[str] = Field(default_factory=list)
+    dependency_ids: list[str] = Field(default_factory=list)
+    source_artifact_paths: list[Path] = Field(default_factory=list)
+    subheading_count: int = 0
+
+
+class HistoryRenderManifest(DomainModel):
+    """Structured debug manifest for one rendered checkpoint markdown file."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    markdown_path: Path
+    sections: list[HistoryRenderedSection] = Field(default_factory=list)
+
+
 class HistoryBuildResult(DomainModel):
     """Result for one history-docs build run."""
 
@@ -502,6 +526,8 @@ class HistoryBuildResult(DomainModel):
     section_outline_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
     dependencies_artifact_path: Path | None = None
+    checkpoint_markdown_path: Path | None = None
+    render_manifest_path: Path | None = None
     file_count: int = 0
     symbol_count: int = 0
     subsystem_count: int = 0
@@ -520,6 +546,7 @@ class HistoryBuildResult(DomainModel):
     documented_dependency_count: int = 0
     dependency_warning_count: int = 0
     dependency_summary_failure_count: int = 0
+    rendered_section_count: int = 0
 
 
 __all__ = [
@@ -554,6 +581,8 @@ __all__ = [
     "HistoryInterfaceChangeCandidate",
     "HistoryIntervalDeltaModel",
     "HistoryModuleConcept",
+    "HistoryRenderManifest",
+    "HistoryRenderedSection",
     "HistorySectionDepth",
     "HistorySectionId",
     "HistorySectionKind",

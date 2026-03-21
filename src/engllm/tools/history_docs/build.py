@@ -69,6 +69,12 @@ from engllm.tools.history_docs.models import (
     HistorySectionOutline,
     HistorySnapshotStructuralModel,
 )
+from engllm.tools.history_docs.render import (
+    checkpoint_markdown_path,
+    render_checkpoint_markdown,
+    render_manifest_path,
+    write_checkpoint_markdown,
+)
 from engllm.tools.history_docs.section_outline import (
     build_section_outline,
     section_outline_path,
@@ -317,7 +323,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> HistoryBuildResult:
-    """Persist checkpoint manifests plus H2-H7 history-docs artifacts."""
+    """Persist checkpoint manifests plus H2-H8 history-docs artifacts."""
 
     resolved_repo_root = repo_root.resolve()
     target_metadata = get_commit_metadata(resolved_repo_root, checkpoint_commit)
@@ -651,6 +657,32 @@ def build_history_docs_checkpoint(
     write_json_model(dependencies_artifact_path, dependency_inventory)
     write_json_model(checkpoint_model_artifact_path, checkpoint_model)
 
+    _progress(
+        progress_callback,
+        "history-docs: rendering checkpoint markdown",
+    )
+    checkpoint_markdown_artifact_path = checkpoint_markdown_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    render_manifest_artifact_path = render_manifest_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    checkpoint_markdown, render_manifest = render_checkpoint_markdown(
+        workspace_id=resolved_workspace_id,
+        checkpoint_model=checkpoint_model,
+        section_outline=section_outline,
+        dependency_inventory=dependency_inventory,
+        capsule_index=algorithm_capsule_index,
+        capsules=algorithm_capsules,
+    )
+    write_checkpoint_markdown(
+        checkpoint_markdown_artifact_path,
+        checkpoint_markdown,
+    )
+    write_json_model(render_manifest_artifact_path, render_manifest)
+
     retired_concept_count = (
         sum(
             concept.lifecycle_status == "retired"
@@ -682,6 +714,8 @@ def build_history_docs_checkpoint(
         section_outline_path=section_outline_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
         dependencies_artifact_path=dependencies_artifact_path,
+        checkpoint_markdown_path=checkpoint_markdown_artifact_path,
+        render_manifest_path=render_manifest_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -702,4 +736,5 @@ def build_history_docs_checkpoint(
         dependency_summary_failure_count=_count_dependency_summary_failures(
             dependency_inventory
         ),
+        rendered_section_count=len(render_manifest.sections),
     )

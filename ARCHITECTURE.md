@@ -454,6 +454,8 @@ Current implemented slice:
 * tool-scoped `checkpoint_model.json`
 * tool-scoped `section_outline.json`
 * tool-scoped `algorithm_capsules/index.json` plus one JSON file per capsule
+* tool-scoped `dependencies.json`
+* deterministic `checkpoint.md` output plus `render_manifest.json` debug trace
 * first-parent diff semantics for merge commits
 * diff-only fallback with `observed` statuses when the previous snapshot
   artifact is unavailable
@@ -463,6 +465,8 @@ Current implemented slice:
   metadata in `section_outline.json`
 * deterministic algorithm capsule linking into checkpoint concepts and the
   evidence-gated `algorithms_core_logic` / strategy-variant sections
+* deterministic final rendering driven by `section_outline.json` inclusion
+  order and existing structured artifacts only
 * quarterly auto-selection still deferred
 
 ---
