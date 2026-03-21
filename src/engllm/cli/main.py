@@ -399,6 +399,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Snapshot manifest: {result.snapshot_manifest_path}")
     if result.snapshot_structural_model_path is not None:
         print(f"Snapshot structural model: {result.snapshot_structural_model_path}")
+    if result.interval_delta_model_path is not None:
+        print(f"Interval delta model: {result.interval_delta_model_path}")
     return 0
 
 

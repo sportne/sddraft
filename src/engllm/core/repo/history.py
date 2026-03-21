@@ -5,9 +5,12 @@ from __future__ import annotations
 import subprocess
 import tarfile
 from pathlib import Path
+from typing import Literal
 
 from engllm.domain.errors import GitError
 from engllm.domain.models import DomainModel
+
+_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 class GitCommitSummary(DomainModel):
@@ -23,6 +26,15 @@ class GitCommitMetadata(GitCommitSummary):
     """Expanded metadata for a specific git commit."""
 
     tree_sha: str
+
+
+class GitCommitDiffSpec(DomainModel):
+    """Deterministic first-parent diff description for one commit."""
+
+    commit_sha: str
+    parent_commit: str | None = None
+    base_rev: str
+    diff_basis: Literal["root", "first_parent"]
 
 
 def _run_git(repo_root: Path, *args: str) -> str:
@@ -141,6 +153,10 @@ def export_commit_snapshot(
 ) -> Path:
     """Export one commit tree into a disposable snapshot directory."""
 
+    destination_root.mkdir(parents=True, exist_ok=True)
+    if not _run_git(repo_root, "ls-tree", "--name-only", target_commit):
+        return destination_root
+
     archive_path = destination_root.parent / "snapshot.tar"
     try:
         subprocess.run(
@@ -163,7 +179,9 @@ def export_commit_snapshot(
         message = (exc.stderr or exc.stdout or str(exc)).strip()
         raise GitError(f"git archive failed: {message}") from exc
 
-    destination_root.mkdir(parents=True, exist_ok=True)
+    if archive_path.stat().st_size == 0:
+        archive_path.unlink(missing_ok=True)
+        return destination_root
     try:
         with tarfile.open(archive_path, mode="r") as archive:
             try:
@@ -178,3 +196,26 @@ def export_commit_snapshot(
         archive_path.unlink(missing_ok=True)
 
     return destination_root
+
+
+def describe_commit_diff(repo_root: Path, rev: str) -> GitCommitDiffSpec:
+    """Describe the deterministic diff basis for one commit."""
+
+    commit_sha = resolve_commit(repo_root, rev)
+    payload = _run_git(repo_root, "rev-list", "--parents", "-n", "1", commit_sha)
+    fields = payload.split()
+    if not fields or fields[0] != commit_sha:
+        raise GitError(f"Unexpected parent payload for revision {rev!r}")
+    if len(fields) == 1:
+        return GitCommitDiffSpec(
+            commit_sha=commit_sha,
+            parent_commit=None,
+            base_rev=_EMPTY_TREE_SHA,
+            diff_basis="root",
+        )
+    return GitCommitDiffSpec(
+        commit_sha=commit_sha,
+        parent_commit=fields[1],
+        base_rev=fields[1],
+        diff_basis="first_parent",
+    )

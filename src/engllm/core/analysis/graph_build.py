@@ -46,6 +46,7 @@ from engllm.core.analysis.retrieval import (
 )
 from engllm.core.analysis.symbol_inventory import build_symbol_inventory
 from engllm.core.render.json_artifacts import write_json_model
+from engllm.core.repo.diff_parser import extract_changed_symbol_names
 from engllm.domain.models import (
     CodeUnitSummary,
     CommitImpact,
@@ -194,28 +195,6 @@ def _symbols_by_name(
             by_name[key], key=lambda item: (item.file_path.as_posix(), item.symbol_id)
         )
     return by_name
-
-
-def _extract_changed_symbol_names(changed_lines: list[str]) -> set[str]:
-    names: set[str] = set()
-    for line in changed_lines:
-        stripped = line.strip()
-        for pattern in (
-            r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)",
-            r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)",
-            r"\binterface\s+([A-Za-z_][A-Za-z0-9_]*)",
-            r"\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)",
-            r"\benum\s+([A-Za-z_][A-Za-z0-9_]*)",
-            r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)",
-            r"\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)",
-        ):
-            match = re.search(pattern, stripped)
-            if match:
-                names.add(match.group(1))
-        call_match = re.search(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", stripped)
-        if call_match:
-            names.add(call_match.group(1))
-    return names
 
 
 def _symbols_referenced_by_chunk(
@@ -1274,7 +1253,7 @@ def _build_commit_fragment(
                 target_id=commit_id,
             )
 
-        names = _extract_changed_symbol_names(changed_file.signature_changes)
+        names = extract_changed_symbol_names(changed_file.signature_changes)
         for symbol in prepared.symbols_by_file.get(changed_file.path, []):
             if symbol.name in names or (symbol.qualified_name or "") in names:
                 changed_symbol_ids.add(symbol.symbol_id)

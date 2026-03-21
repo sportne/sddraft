@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from engllm.core.analysis.commit_impact import build_commit_impact
-from engllm.core.repo.diff_parser import parse_diff
+from engllm.core.repo.diff_parser import extract_changed_symbol_names, parse_diff
 
 
 def test_parse_diff_and_build_impact() -> None:
@@ -100,3 +100,16 @@ index abc..def 100644
     assert go_summary.language == "go"
     assert go_summary.signature_changes
     assert go_summary.dependency_changes
+
+
+def test_extract_changed_symbol_names_is_shared_and_deterministic() -> None:
+    names = extract_changed_symbol_names(
+        [
+            "def run_plan(x, y):",
+            "class Planner:",
+            "interface Buildable {",
+            "strategy_factory(alpha)",
+        ]
+    )
+
+    assert names == {"run_plan", "Planner", "Buildable", "strategy_factory"}

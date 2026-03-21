@@ -39,7 +39,7 @@ def init_repo(tmp_path: Path) -> Path:
     """Create and initialize a temporary git repository."""
 
     repo_root = tmp_path / "repo"
-    repo_root.mkdir()
+    repo_root.mkdir(parents=True)
     git(repo_root, "init")
     return repo_root
 
@@ -127,6 +127,49 @@ def create_forked_repo(tmp_path: Path) -> tuple[Path, str, str]:
     return repo_root, main_tip, feature_tip
 
 
+def create_merge_repo(tmp_path: Path) -> tuple[Path, str]:
+    """Create a repo with one merge commit for first-parent diff tests."""
+
+    repo_root = init_repo(tmp_path)
+    base = commit_file(
+        repo_root,
+        "src/app.py",
+        "def base() -> int:\n    return 1\n",
+        message="base commit",
+        timestamp="2024-01-01T10:00:00+00:00",
+    )
+    current_branch = git(repo_root, "branch", "--show-current")
+    git(repo_root, "checkout", "-b", "feature", base)
+    commit_file(
+        repo_root,
+        "src/feature.py",
+        "def feature() -> int:\n    return 2\n",
+        message="feature change",
+        timestamp="2024-01-02T10:00:00+00:00",
+    )
+    git(repo_root, "checkout", current_branch)
+    commit_file(
+        repo_root,
+        "src/app.py",
+        "def base() -> int:\n    return 3\n",
+        message="main change",
+        timestamp="2024-01-03T10:00:00+00:00",
+    )
+    git(
+        repo_root,
+        "merge",
+        "--no-ff",
+        "feature",
+        "-m",
+        "merge feature",
+        env={
+            "GIT_AUTHOR_DATE": "2024-01-04T10:00:00+00:00",
+            "GIT_COMMITTER_DATE": "2024-01-04T10:00:00+00:00",
+        },
+    )
+    return repo_root, git(repo_root, "rev-parse", "HEAD")
+
+
 def history_paths(output_root: Path, workspace_id: str) -> tuple[Path, Path]:
     """Return shared H1 artifact paths for one workspace."""
 
@@ -169,6 +212,25 @@ def snapshot_structural_model_path(
         / "checkpoints"
         / checkpoint_id
         / "snapshot_structural_model.json"
+    )
+
+
+def interval_delta_model_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H3 interval-delta model path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "interval_delta_model.json"
     )
 
 

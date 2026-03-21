@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H2: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, and checkpoint structural analysis with subsystem/build-source artifacts.
+- `engllm history-docs build` now supports H1-H3: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, and tool-scoped interval-delta analysis with subsystem/interface/dependency/algorithm candidates.
 
 ## 2) Guiding Principles / Scope
 
@@ -366,20 +366,26 @@ its own internal phases.
 
 `Objective:` Analyze the commit window between checkpoints for design-meaningful changes.
 `Why:` Smaller change windows are the core mechanism for improving documentation quality over time.
-`Dependencies:` History Phase 1.
+`Dependencies:` History Phases 1-2.
 `Completion Criteria:` Interval analysis produces structured change candidates rather than only raw changed-file lists.
 
-- [ ] **H3-01**  
+- [x] **H3-01**  
   `Outcome:` Classify commits and diffs for architectural, interface, algorithmic, dependency, and infrastructure signals.  
-  `Definition of Done:` Interval analysis emits typed change records instead of prose-only summaries.
+  `Definition of Done:` Interval analysis emits typed change records instead of prose-only summaries.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h3.py -k "describe_commit_diff or initial_run_writes_h3_interval_delta_model"`  
+  `Result:` pass
 
-- [ ] **H3-02**  
+- [x] **H3-02**  
   `Outcome:` Detect candidate subsystem, interface, and dependency changes from interval evidence.  
-  `Definition of Done:` Interval artifacts include structured design-change candidates with evidence links.
+  `Definition of Done:` Interval artifacts include structured design-change candidates with evidence links.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h3.py -k "rich_interval_change_candidates or fallback_when_previous_snapshot_missing or retired_subsystems"`  
+  `Result:` pass
 
-- [ ] **H3-03**  
+- [x] **H3-03**  
   `Outcome:` Add algorithm-emergence and strategy-variant signals without overclaiming.  
-  `Definition of Done:` The tool surfaces candidate algorithm/variant evidence conservatively for later capsule generation.
+  `Definition of Done:` The tool surfaces candidate algorithm/variant evidence conservatively for later capsule generation.  
+  `Verification Command(s):` `.venv/bin/pytest -q --no-cov tests/test_history_docs_h3.py -k "rich_interval_change_candidates" tests/test_diff_and_impact.py -k "extract_changed_symbol_names"`  
+  `Result:` pass
 
 ### History Phase 4 — Structured Documentation Model
 
@@ -520,6 +526,7 @@ its own internal phases.
 - History-docs phases should add deterministic tests for checkpoint selection, interval metadata, checkpoint-model persistence, and present-state rendering quality.
 - Quality gates required on every phase PR:
   - `.venv/bin/python -m black --check src tests`
+  - `.venv/bin/python -m isort --check-only src tests`
   - `.venv/bin/ruff check src tests`
   - `.venv/bin/mypy src`
   - `.venv/bin/pytest -q`

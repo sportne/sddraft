@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -28,6 +29,50 @@ def get_git_diff(commit_range: str, repo_root: Path) -> str:
             f"Failed to run git diff for '{commit_range}': {stderr}"
         ) from exc
     return proc.stdout
+
+
+def get_git_diff_between(base_rev: str, target_rev: str, repo_root: Path) -> str:
+    """Return unified git diff text between two revisions."""
+
+    command = ["git", "diff", "--unified=0", base_rev, target_rev]
+    try:
+        proc = subprocess.run(
+            command,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.strip() or "unknown git error"
+        raise GitError(
+            f"Failed to run git diff for '{base_rev}..{target_rev}': {stderr}"
+        ) from exc
+    return proc.stdout
+
+
+def extract_changed_symbol_names(changed_lines: list[str]) -> set[str]:
+    """Extract likely changed symbol names from signature-like diff lines."""
+
+    names: set[str] = set()
+    for line in changed_lines:
+        stripped = line.strip()
+        for pattern in (
+            r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)",
+            r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)",
+            r"\binterface\s+([A-Za-z_][A-Za-z0-9_]*)",
+            r"\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)",
+            r"\benum\s+([A-Za-z_][A-Za-z0-9_]*)",
+            r"\bfn\s+([A-Za-z_][A-Za-z0-9_]*)",
+            r"\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)",
+        ):
+            match = re.search(pattern, stripped)
+            if match:
+                names.add(match.group(1))
+        call_match = re.search(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", stripped)
+        if call_match:
+            names.add(call_match.group(1))
+    return names
 
 
 def _finalize_file_summary(

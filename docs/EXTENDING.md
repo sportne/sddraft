@@ -221,6 +221,7 @@ Primary validation:
 
 - `rg` verification commands recorded in `TASKS.md`
 - `.venv/bin/python -m black --check src tests`
+- `.venv/bin/python -m isort --check-only src tests`
 - `.venv/bin/ruff check src tests`
 - `.venv/bin/mypy src`
 - `.venv/bin/pytest -q`
@@ -278,14 +279,16 @@ Primary code areas for H1-H2:
 - `src/engllm/tools/history_docs/models.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1-H2:
+Primary tests for H1-H3:
 
 - `tests/test_history_docs_h1.py`
 - `tests/test_history_docs_h2.py`
+- `tests/test_history_docs_h3.py`
 - `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
+- `tests/test_diff_and_impact.py`
 
-Current H1-H2 behavior:
+Current H1-H3 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
@@ -298,6 +301,12 @@ Current H1-H2 behavior:
 - missing historical source roots are recorded and skipped
 - manifest search scope is limited to analyzed source roots plus their ancestor
   chain back to repo root
+- interval deltas are derived from first-parent commit diffs plus snapshot
+  comparison
+- interval artifacts are written to
+  `tools/history_docs/checkpoints/<checkpoint_id>/interval_delta_model.json`
+- missing previous snapshot artifacts trigger diff-only fallback with
+  conservative `observed` statuses instead of failure
 - quarterly checkpoint auto-selection is deferred to a later phase
 
 ## Future Tool Notes

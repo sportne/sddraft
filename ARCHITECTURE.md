@@ -18,8 +18,8 @@ Today it ships four tool namespaces:
 1. `engllm sdd ...` for SDD generation and update proposals
 2. `engllm ask answer ...` / `engllm ask interactive` for grounded repository Q&A
 3. `engllm repo ...` for shared repository utilities such as diff inspection
-4. `engllm history-docs build` for checkpoint selection, history traversal, and
-   snapshot structural analysis
+4. `engllm history-docs build` for checkpoint selection, history traversal,
+   snapshot structural analysis, and interval delta analysis
 
 The next major expansion for `engllm history-docs ...` is full checkpoint
 documentation rendering over those historical snapshots. The design for that
@@ -211,10 +211,11 @@ index migration.
 Tool orchestrators compose shared `core/` services but should keep heavy logic
 in reusable deterministic modules.
 
-### Planned `tools/history_docs/`
+### `tools/history_docs/`
 
-The history-walk documentation tool is scaffolded but not implemented yet. It
-will combine:
+The history-walk documentation tool now implements the first three phases of its
+pipeline and will continue expanding toward full checkpoint documentation. It
+combines or will combine:
 
 * checkpoint selection and history traversal
 * checkpoint snapshot analysis
@@ -447,6 +448,10 @@ Current implemented slice:
 * manifest search limited to analyzed source roots plus their ancestor chain to
   repo root
 * tool-scoped `snapshot_structural_model.json`
+* tool-scoped `interval_delta_model.json`
+* first-parent diff semantics for merge commits
+* diff-only fallback with `observed` statuses when the previous snapshot
+  artifact is unavailable
 * quarterly auto-selection still deferred
 
 ---

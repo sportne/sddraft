@@ -24,6 +24,8 @@ MODULES = (
     "engllm.tools.ask.ask",
     "engllm.tools.history_docs",
     "engllm.tools.history_docs.build",
+    "engllm.tools.history_docs.delta",
+    "engllm.tools.history_docs.structure",
     "engllm.core.hierarchy_docs",
     "engllm.tools.sdd.markdown",
     "engllm.core.render.hierarchy",

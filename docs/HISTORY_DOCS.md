@@ -59,7 +59,7 @@ LLM-backed phases are still future work.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 and 2:
+The current implementation covers History Phases 1 through 3:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -71,6 +71,10 @@ The current implementation covers History Phases 1 and 2:
   working tree
 - tool-scoped snapshot structural models with files, code summaries, symbol
   summaries, subsystem candidates, and build-source metadata
+- tool-scoped `interval_delta_model.json` artifacts with:
+  - first-parent commit diff semantics
+  - diff-only fallback when the previous snapshot artifact is unavailable
+  - structured subsystem, interface, dependency, and algorithm candidate signals
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 
@@ -278,6 +282,12 @@ Current H2 behavior intentionally keeps snapshot export temporary:
 - the exported tree is deleted after structural analysis completes
 - only inspectable manifests and structured models are persisted
 
+Current H3 behavior adds one tool-scoped interval artifact:
+
+- `interval_delta_model.json` as the deterministic checkpoint-window delta model
+  derived from interval commits, first-parent diffs, current snapshot evidence,
+  and previous-snapshot comparison when available
+
 ## Major Internal Models
 
 These models are planned conceptual anchors for implementation. They do not all
@@ -449,6 +459,15 @@ Expected outputs:
 - design-change candidates
 - algorithm candidate detections
 
+Current implementation status:
+
+- implemented in `engllm history-docs build`
+- uses first-parent diff semantics for merge commits and empty-tree diff basis
+  for root commits
+- compares against the previous checkpoint snapshot when available
+- falls back to diff-only aggregation with `observed` status when the previous
+  snapshot artifact is missing
+
 ### Phase 4 — Structured Documentation Model
 
 Goal:
@@ -562,6 +581,14 @@ Expected outputs:
 - deterministic tests
 - validation reports
 - quality gates for the tool
+
+Expected quality gates:
+
+- `.venv/bin/python -m black --check src tests`
+- `.venv/bin/python -m isort --check-only src tests`
+- `.venv/bin/ruff check src tests`
+- `.venv/bin/mypy src`
+- `.venv/bin/pytest -q`
 
 ### Phase 10 — Future Extensions
 

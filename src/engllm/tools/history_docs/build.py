@@ -1,9 +1,9 @@
-"""History-docs workflow: checkpoint manifests plus snapshot structural analysis."""
+"""History-docs workflow: checkpoint manifests, snapshot analysis, and deltas."""
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from collections.abc import Callable, Mapping
+from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
@@ -40,10 +40,17 @@ from engllm.core.repo.scanner import scan_paths
 from engllm.core.workspaces import build_workspace_context, tool_artifact_root
 from engllm.domain.errors import AnalysisError, GitError, RepositoryError
 from engllm.domain.models import ProjectConfig
+from engllm.tools.history_docs.delta import (
+    build_interval_delta_model,
+    interval_delta_model_path,
+)
 from engllm.tools.history_docs.models import (
     HistoryBuildResult,
     HistorySnapshotStructuralModel,
-    HistorySubsystemCandidate,
+)
+from engllm.tools.history_docs.structure import (
+    build_subsystem_candidates,
+    normalize_relative_path,
 )
 
 ProgressCallback = Callable[[str], None]
@@ -99,10 +106,6 @@ def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
         progress_callback(message)
 
 
-def _normalize_relative_path(path: Path) -> Path:
-    return Path(".") if path in {Path(""), Path(".")} else path
-
-
 def _resolve_workspace_id(repo_root: Path, workspace_id: str | None) -> str:
     return workspace_id or repo_root.resolve().name
 
@@ -153,7 +156,7 @@ def _resolve_source_root_mappings(
             else (repo_root / configured_root)
         ).resolve()
         try:
-            repo_relative_root = _normalize_relative_path(
+            repo_relative_root = normalize_relative_path(
                 resolved_root.relative_to(repo_root.resolve())
             )
         except ValueError as exc:
@@ -189,13 +192,13 @@ def _resolve_source_root_mappings(
 def _manifest_search_directories(analyzed_roots: list[Path]) -> list[Path]:
     directories: set[Path] = set()
     for root in analyzed_roots:
-        cursor = _normalize_relative_path(root)
+        cursor = normalize_relative_path(root)
         while True:
             directories.add(cursor)
             if cursor == Path("."):
                 break
             parent = cursor.parent if cursor.parent != Path("") else Path(".")
-            cursor = _normalize_relative_path(parent)
+            cursor = normalize_relative_path(parent)
     return sorted(directories, key=lambda item: item.as_posix())
 
 
@@ -244,84 +247,18 @@ def _discover_build_sources(
     ]
 
 
-def _owning_source_root(file_path: Path, analyzed_roots: list[Path]) -> Path:
-    ordered_roots = sorted(
-        analyzed_roots,
-        key=lambda item: (-len(item.parts), item.as_posix()),
-    )
-    for root in ordered_roots:
-        if root == Path("."):
-            return root
-        try:
-            file_path.relative_to(root)
-            return root
-        except ValueError:
-            continue
-    return Path(".")
-
-
-def _build_subsystem_candidates(
-    *,
-    files: list[Path],
-    symbol_counts_by_path: Mapping[Path, int],
-    language_by_path: Mapping[Path, str],
-    analyzed_roots: list[Path],
-) -> list[HistorySubsystemCandidate]:
-    grouped_files: dict[tuple[Path, Path], list[Path]] = defaultdict(list)
-    for file_path in sorted(files, key=lambda item: item.as_posix()):
-        source_root = _owning_source_root(file_path, analyzed_roots)
-        relative_under_root = (
-            file_path
-            if source_root == Path(".")
-            else file_path.relative_to(source_root)
-        )
-        if len(relative_under_root.parts) <= 1:
-            group_path = source_root
-        else:
-            first_segment = Path(relative_under_root.parts[0])
-            group_path = (
-                first_segment
-                if source_root == Path(".")
-                else source_root / first_segment
-            )
-        grouped_files[(source_root, group_path)].append(file_path)
-
-    candidates: list[HistorySubsystemCandidate] = []
-    for (source_root, group_path), grouped in sorted(
-        grouped_files.items(),
-        key=lambda item: (item[0][0].as_posix(), item[0][1].as_posix()),
-    ):
-        language_counts: Counter[str] = Counter()
-        symbol_count = 0
-        for file_path in grouped:
-            language_counts[language_by_path[file_path]] += 1
-            symbol_count += symbol_counts_by_path.get(file_path, 0)
-        if group_path == source_root:
-            group_relative = Path(".")
-        elif source_root == Path("."):
-            group_relative = group_path
-        else:
-            group_relative = group_path.relative_to(source_root)
-        candidates.append(
-            HistorySubsystemCandidate(
-                candidate_id=(
-                    f"subsystem::{source_root.as_posix()}::{group_relative.as_posix()}"
-                ),
-                source_root=source_root,
-                group_path=group_path,
-                file_count=len(grouped),
-                symbol_count=symbol_count,
-                language_counts={
-                    key: language_counts[key] for key in sorted(language_counts)
-                },
-                representative_files=grouped[:_MAX_REPRESENTATIVE_FILES],
-            )
-        )
-    return candidates
-
-
 def _snapshot_structural_model_path(tool_root: Path, checkpoint_id: str) -> Path:
     return tool_root / "checkpoints" / checkpoint_id / "snapshot_structural_model.json"
+
+
+def _load_snapshot_structural_model(
+    path: Path,
+) -> HistorySnapshotStructuralModel | None:
+    if not path.exists():
+        return None
+    return HistorySnapshotStructuralModel.model_validate_json(
+        path.read_text(encoding="utf-8")
+    )
 
 
 def build_history_docs_checkpoint(
@@ -333,7 +270,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> HistoryBuildResult:
-    """Persist checkpoint manifests plus H2 snapshot structural analysis."""
+    """Persist checkpoint manifests plus H2 snapshot structural analysis and H3 deltas."""
 
     resolved_repo_root = repo_root.resolve()
     target_metadata = get_commit_metadata(resolved_repo_root, checkpoint_commit)
@@ -498,7 +435,7 @@ def build_history_docs_checkpoint(
         language_by_path = {
             summary.path: summary.language for summary in scan_result.code_summaries
         }
-        subsystem_candidates = _build_subsystem_candidates(
+        subsystem_candidates = build_subsystem_candidates(
             files=scan_result.files,
             symbol_counts_by_path=symbol_counts_by_path,
             language_by_path=language_by_path,
@@ -540,6 +477,40 @@ def build_history_docs_checkpoint(
     save_snapshot_manifest(snapshot_manifest, snapshot_manifest_path)
     write_json_model(snapshot_structural_model_path, structural_model)
 
+    previous_snapshot = None
+    if resolved_previous is not None:
+        previous_checkpoint = next(
+            (
+                item
+                for item in normalized_plan.checkpoints
+                if item.target_commit == resolved_previous
+            ),
+            None,
+        )
+        if previous_checkpoint is not None:
+            previous_snapshot = _load_snapshot_structural_model(
+                _snapshot_structural_model_path(
+                    history_tool_root,
+                    previous_checkpoint.checkpoint_id,
+                )
+            )
+
+    _progress(
+        progress_callback,
+        "history-docs: analyzing interval deltas",
+    )
+    interval_delta_model = build_interval_delta_model(
+        repo_root=resolved_repo_root,
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        interval_commits=interval.commits,
+        current_snapshot=structural_model,
+        previous_snapshot=previous_snapshot,
+    )
+    interval_delta_path = interval_delta_model_path(history_tool_root, checkpoint_id)
+    write_json_model(interval_delta_path, interval_delta_model)
+
     return HistoryBuildResult(
         workspace_id=resolved_workspace_id,
         checkpoint_id=checkpoint_id,
@@ -551,8 +522,13 @@ def build_history_docs_checkpoint(
         intervals_path=intervals_path,
         snapshot_manifest_path=snapshot_manifest_path,
         snapshot_structural_model_path=snapshot_structural_model_path,
+        interval_delta_model_path=interval_delta_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
         build_source_count=len(build_sources),
+        subsystem_change_count=len(interval_delta_model.subsystem_changes),
+        interface_change_count=len(interval_delta_model.interface_changes),
+        dependency_change_count=len(interval_delta_model.dependency_changes),
+        algorithm_candidate_count=len(interval_delta_model.algorithm_candidates),
     )
