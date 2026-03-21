@@ -22,6 +22,7 @@
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
 - `engllm history-docs build` now supports H1-H9: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output, and build-integrated `validation_report.json` quality checks that fail only on hard structural/evidence violations.
+- H10 is now implemented as an internal benchmark/evaluation harness that leaves `engllm history-docs build` unchanged while adding reusable benchmark case manifests, structured LLM-judged `quality_report.json` artifacts, deterministic `comparison_report.json` outputs, and suite-level `suite_manifest.json` aggregation under benchmark workspaces.
 
 ## 2) Guiding Principles / Scope
 
@@ -544,17 +545,23 @@ its own internal phases.
 `Dependencies:` History Phases 1-9.
 `Completion Criteria:` There is a repeatable way to compare current heuristic outputs against LLM-enhanced outputs on representative checkpoints.
 
-- [ ] **H10-01**  
+- [x] **H10-01**  
   `Outcome:` Define a benchmark checkpoint set covering small, medium, algorithm-heavy, dependency-heavy, and architecture-heavy histories.  
-  `Definition of Done:` History-docs has a reusable benchmark corpus and fixture selection guidance for quality comparisons.
+  `Definition of Done:` History-docs has a reusable benchmark corpus and fixture selection guidance for quality comparisons.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h10.py -k "cover_required_focus_tags"`  
+  `Result:` pass
 
-- [ ] **H10-02**  
+- [x] **H10-02**  
   `Outcome:` Add a structured quality rubric for checkpoint docs.  
-  `Definition of Done:` The rubric scores coverage, coherence, specificity, algorithm understanding, dependency understanding, rationale capture, and present-state tone.
+  `Definition of Done:` The rubric scores coverage, coherence, specificity, algorithm understanding, dependency understanding, rationale capture, and present-state tone.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h10.py -k "quality_judge_prompt or stable_tie_breaks"`  
+  `Result:` pass
 
-- [ ] **H10-03**  
+- [x] **H10-03**  
   `Outcome:` Add a comparison harness for baseline-vs-LLM history-docs artifacts.  
-  `Definition of Done:` Future LLM phases can be evaluated checkpoint-by-checkpoint instead of judged informally.
+  `Definition of Done:` Future LLM phases can be evaluated checkpoint-by-checkpoint instead of judged informally.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h10.py tests/test_imports.py`  
+  `Result:` pass
 
 ### History Phase 11 — LLM-Assisted Checkpoint And Structure Understanding
 

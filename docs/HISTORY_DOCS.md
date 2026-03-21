@@ -52,14 +52,14 @@ Planned future CLI surface:
 
 - `engllm history-docs build`
 
-H1 now implements that command as a single-checkpoint, read-only history
-traversal entrypoint, and H2 extends it with temporary checkpoint snapshot
-export plus structural analysis. Rendering, interval-delta reasoning, and
-LLM-backed phases are still future work.
+History Phases 1 through 9 now implement that command end to end, from
+single-checkpoint traversal through final rendered checkpoint Markdown and
+build-integrated validation. H10 adds an internal benchmark and evaluation
+harness around those rendered artifacts while keeping the public CLI unchanged.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 9:
+The current implementation covers History Phases 1 through 10:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -100,6 +100,15 @@ The current implementation covers History Phases 1 through 9:
     written
   - soft style/quality warnings for `TBD` dependency summaries, thin algorithm
     capsules, and release-note phrasing
+- internal H10 benchmark/evaluation artifacts with:
+  - reusable benchmark case manifests covering small, medium,
+    algorithm-heavy, dependency-heavy, and architecture-heavy histories
+  - LLM-judged `quality_report.json` artifacts per benchmarked variant
+  - deterministic `comparison_report.json` artifacts that compare variants from
+    structured rubric outputs without another model call
+  - top-level benchmark `suite_manifest.json` artifacts that aggregate
+    per-case results and coverage tags while leaving `engllm history-docs build`
+    unchanged
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 

@@ -7,7 +7,7 @@ from typing import Literal
 
 from engllm.domain.models import DomainModel
 
-WorkspaceKind = Literal["csc", "repo", "change", "review", "release"]
+WorkspaceKind = Literal["csc", "repo", "change", "review", "release", "benchmark"]
 
 
 class WorkspaceContext(DomainModel):

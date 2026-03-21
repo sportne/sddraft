@@ -5,13 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from engllm.core.analysis.history import HistoryBuildSource, HistoryCommitSummary
 from engllm.domain.models import (
     CodeUnitSummary,
     CommitImpact,
     DomainModel,
+    ProjectConfig,
     SymbolSummary,
 )
 
@@ -151,6 +152,30 @@ HistoryValidationCheckId = Literal[
     "dependency_summary_tbd",
     "algorithm_capsule_thin",
 ]
+HistoryDocsBenchmarkFocusTag = Literal[
+    "small",
+    "medium",
+    "algorithm-heavy",
+    "dependency-heavy",
+    "architecture-heavy",
+]
+HistoryDocsBenchmarkExpectationKind = Literal[
+    "section_presence",
+    "algorithm_signal",
+    "dependency_understanding",
+    "architectural_distinction",
+    "present_state_tone",
+]
+HistoryDocsRubricDimension = Literal[
+    "coverage",
+    "coherence",
+    "specificity",
+    "algorithm_understanding",
+    "dependency_understanding",
+    "rationale_capture",
+    "present_state_tone",
+]
+HistoryDocsQualityEvaluationStatus = Literal["scored", "llm_failed"]
 
 
 class HistoryEvidenceLink(DomainModel):
@@ -549,6 +574,157 @@ class HistoryValidationReport(DomainModel):
     findings: list[HistoryValidationFinding] = Field(default_factory=list)
 
 
+def _validate_rubric_scores(
+    scores: list[HistoryDocsRubricScore],
+) -> list[HistoryDocsRubricScore]:
+    expected_dimensions = {
+        "coverage",
+        "coherence",
+        "specificity",
+        "algorithm_understanding",
+        "dependency_understanding",
+        "rationale_capture",
+        "present_state_tone",
+    }
+    dimensions = {score.dimension for score in scores}
+    if dimensions != expected_dimensions:
+        raise ValueError("rubric_scores must contain exactly the H10 rubric dimensions")
+    if len(scores) != len(expected_dimensions):
+        raise ValueError("rubric_scores must contain exactly one score per dimension")
+    return scores
+
+
+class HistoryDocsBenchmarkExpectation(DomainModel):
+    """Inspectable expected property for one benchmark case."""
+
+    expectation_id: str
+    kind: HistoryDocsBenchmarkExpectationKind
+    description: str
+    required_section_ids: list[HistorySectionPlanId] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+
+
+class HistoryDocsBenchmarkCase(DomainModel):
+    """Resolved benchmark case manifest for one history-docs evaluation case."""
+
+    case_id: str
+    title: str
+    description: str
+    focus_tags: list[HistoryDocsBenchmarkFocusTag] = Field(default_factory=list)
+    builder_name: str
+    project_config: ProjectConfig
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    expectations: list[HistoryDocsBenchmarkExpectation] = Field(default_factory=list)
+
+
+class HistoryDocsRubricScore(DomainModel):
+    """One rubric-dimension score assigned by the H10 evaluator."""
+
+    dimension: HistoryDocsRubricDimension
+    score: int = Field(ge=0, le=5)
+    rationale: str
+    matched_expectation_ids: list[str] = Field(default_factory=list)
+    cited_section_ids: list[HistorySectionPlanId] = Field(default_factory=list)
+
+
+class HistoryDocsQualityJudgment(DomainModel):
+    """Structured LLM-as-judge response for one rendered checkpoint document."""
+
+    rubric_scores: list[HistoryDocsRubricScore] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    unsupported_claim_risks: list[str] = Field(default_factory=list)
+    tbd_overuse: bool = False
+    evaluator_notes: list[str] = Field(default_factory=list)
+    uncertainty: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_rubric_scores(self) -> HistoryDocsQualityJudgment:
+        """Require exactly the H10 rubric dimension set."""
+
+        self.rubric_scores = _validate_rubric_scores(self.rubric_scores)
+        return self
+
+
+class HistoryDocsQualityReport(DomainModel):
+    """Persisted quality report for one benchmarked rendered checkpoint."""
+
+    case_id: str
+    variant_id: str
+    checkpoint_id: str
+    evaluation_status: HistoryDocsQualityEvaluationStatus
+    rubric_scores: list[HistoryDocsRubricScore] = Field(default_factory=list)
+    overall_score: float = 0.0
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    unsupported_claim_risks: list[str] = Field(default_factory=list)
+    tbd_overuse: bool = False
+    evaluator_notes: list[str] = Field(default_factory=list)
+    uncertainty: list[str] = Field(default_factory=list)
+    failure_note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_rubric_scores(self) -> HistoryDocsQualityReport:
+        """Require exactly the H10 rubric dimension set."""
+
+        self.rubric_scores = _validate_rubric_scores(self.rubric_scores)
+        return self
+
+
+class HistoryDocsRubricDelta(DomainModel):
+    """Deterministic delta for one rubric dimension between two variants."""
+
+    dimension: HistoryDocsRubricDimension
+    baseline_score: int
+    candidate_score: int
+    delta: int
+
+
+class HistoryDocsVariantComparison(DomainModel):
+    """Deterministic comparison between a baseline and candidate variant."""
+
+    case_id: str
+    baseline_variant_id: str
+    candidate_variant_id: str
+    per_dimension_deltas: list[HistoryDocsRubricDelta] = Field(default_factory=list)
+    overall_delta: float = 0.0
+    preferred_variant_id: str
+    comparison_notes: list[str] = Field(default_factory=list)
+    baseline_failed: bool = False
+    candidate_failed: bool = False
+
+
+class HistoryDocsBenchmarkCaseComparisonReport(DomainModel):
+    """Per-case comparison artifact for one benchmark suite run."""
+
+    case_id: str
+    baseline_variant_id: str
+    quality_report_paths: dict[str, Path] = Field(default_factory=dict)
+    comparisons: list[HistoryDocsVariantComparison] = Field(default_factory=list)
+
+
+class HistoryDocsBenchmarkCaseReportRef(DomainModel):
+    """Suite-level reference to one benchmark case artifact set."""
+
+    case_id: str
+    case_manifest_path: Path
+    comparison_report_path: Path
+    quality_report_paths: dict[str, Path] = Field(default_factory=dict)
+
+
+class HistoryDocsBenchmarkSuiteReport(DomainModel):
+    """Top-level suite report for one history-docs benchmark run."""
+
+    suite_id: str
+    case_ids: list[str] = Field(default_factory=list)
+    variant_ids: list[str] = Field(default_factory=list)
+    case_reports: list[HistoryDocsBenchmarkCaseReportRef] = Field(default_factory=list)
+    average_score_by_variant: dict[str, float] = Field(default_factory=dict)
+    failed_evaluation_count: int = 0
+    coverage_tags: list[HistoryDocsBenchmarkFocusTag] = Field(default_factory=list)
+
+
 class HistoryBuildResult(DomainModel):
     """Result for one history-docs build run."""
 
@@ -608,6 +784,19 @@ __all__ = [
     "HistoryCheckpointModel",
     "HistoryConceptChangeStatus",
     "HistoryConceptLifecycleStatus",
+    "HistoryDocsBenchmarkCase",
+    "HistoryDocsBenchmarkCaseComparisonReport",
+    "HistoryDocsBenchmarkCaseReportRef",
+    "HistoryDocsBenchmarkExpectation",
+    "HistoryDocsBenchmarkFocusTag",
+    "HistoryDocsBenchmarkSuiteReport",
+    "HistoryDocsQualityEvaluationStatus",
+    "HistoryDocsQualityJudgment",
+    "HistoryDocsQualityReport",
+    "HistoryDocsRubricDelta",
+    "HistoryDocsRubricDimension",
+    "HistoryDocsRubricScore",
+    "HistoryDocsVariantComparison",
     "HistoryDependencyDeclaration",
     "HistoryDependencyEntry",
     "HistoryDependencyConcept",

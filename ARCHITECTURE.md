@@ -23,8 +23,10 @@ Today it ships four tool namespaces:
    modeling
 
 `engllm history-docs build` now also emits checkpoint-scoped dependency
-documentation artifacts, and the next major expansion is full checkpoint
-rendering over those historical snapshots.
+documentation artifacts, final checkpoint Markdown, and build-integrated
+validation over those historical snapshots. An internal H10 benchmark harness
+now evaluates those rendered outputs with structured LLM judging while keeping
+the public CLI unchanged.
 The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
@@ -215,15 +217,16 @@ in reusable deterministic modules.
 
 ### `tools/history_docs/`
 
-The history-walk documentation tool now implements the first three phases of its
-pipeline and will continue expanding toward full checkpoint documentation. It
-combines or will combine:
+The history-walk documentation tool now implements H1-H10 of its current
+roadmap. It combines:
 
 * checkpoint selection and history traversal
 * checkpoint snapshot analysis
 * interval delta analysis
 * structured checkpoint documentation models
 * final holistic rendering for each checkpoint
+* build-integrated rendered-artifact validation
+* an internal benchmark/evaluation harness for comparing future variants
 
 Its key architectural rule is that deltas are used to improve generation
 internally, while rendered checkpoint docs remain standalone present-state

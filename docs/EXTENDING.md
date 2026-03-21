@@ -270,16 +270,19 @@ Primary design docs:
 - `TASKS.md`
 - `ARCHITECTURE.md`
 
-Primary code areas for H1-H2:
+Primary code areas for H1-H10:
 
 - `src/engllm/core/repo/history.py`
 - `src/engllm/core/repo/scanner.py`
 - `src/engllm/core/analysis/history.py`
 - `src/engllm/tools/history_docs/build.py`
+- `src/engllm/tools/history_docs/benchmark.py`
 - `src/engllm/tools/history_docs/models.py`
+- `src/engllm/prompts/history_docs/builders.py`
+- `src/engllm/prompts/history_docs/templates.py`
 - `src/engllm/cli/main.py`
 
-Primary tests for H1-H9:
+Primary tests for H1-H10:
 
 - `tests/test_history_docs_h1.py`
 - `tests/test_history_docs_h2.py`
@@ -290,11 +293,12 @@ Primary tests for H1-H9:
 - `tests/test_history_docs_h7.py`
 - `tests/test_history_docs_h8.py`
 - `tests/test_history_docs_h9.py`
+- `tests/test_history_docs_h10.py`
 - `tests/history_docs_helpers.py`
 - `tests/test_imports.py`
 - `tests/test_diff_and_impact.py`
 
-Current H1-H9 behavior:
+Current H1-H10 behavior:
 
 - single-checkpoint, manual-first `engllm history-docs build`
 - explicit `--checkpoint-commit`
@@ -338,6 +342,13 @@ Current H1-H9 behavior:
   outline, algorithm capsules, and dependency inventory
 - H8 keeps omitted optional sections out of the final Markdown
 - H9 writes `tools/history_docs/checkpoints/<checkpoint_id>/validation_report.json`
+- H10 adds an internal benchmark/evaluation harness under
+  `tools/history_docs/benchmarks/<suite_id>/`
+- H10 keeps `engllm history-docs build` unchanged and evaluates its rendered
+  outputs after the fact
+- H10 uses structured LLM judging for per-variant `quality_report.json`
+  artifacts, then compares variants deterministically through
+  `comparison_report.json` and `suite_manifest.json`
 - H9 validates final rendered artifacts rather than live repo state
 - H9 fails the build only on hard validation errors and preserves the report on
   failure

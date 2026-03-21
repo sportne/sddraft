@@ -24,6 +24,7 @@ MODULES = (
     "engllm.tools.sdd.generate",
     "engllm.tools.ask.ask",
     "engllm.tools.history_docs",
+    "engllm.tools.history_docs.benchmark",
     "engllm.tools.history_docs.build",
     "engllm.tools.history_docs.algorithm_capsules",
     "engllm.tools.history_docs.checkpoint_model",

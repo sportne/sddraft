@@ -368,6 +368,90 @@ def validation_report_path(
     )
 
 
+def benchmark_suite_manifest_path(output_root: Path, suite_id: str) -> Path:
+    """Return the H10 suite manifest path for one benchmark run."""
+
+    workspace_id = f"history-docs-benchmark-{suite_id}"
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "benchmarks"
+        / suite_id
+        / "suite_manifest.json"
+    )
+
+
+def benchmark_case_manifest_path(
+    output_root: Path,
+    suite_id: str,
+    case_id: str,
+) -> Path:
+    """Return the H10 case manifest path for one benchmark case."""
+
+    workspace_id = f"history-docs-benchmark-{suite_id}"
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "benchmarks"
+        / suite_id
+        / "cases"
+        / case_id
+        / "case_manifest.json"
+    )
+
+
+def benchmark_quality_report_path(
+    output_root: Path,
+    suite_id: str,
+    case_id: str,
+    variant_id: str,
+) -> Path:
+    """Return the H10 quality report path for one case variant."""
+
+    workspace_id = f"history-docs-benchmark-{suite_id}"
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "benchmarks"
+        / suite_id
+        / "cases"
+        / case_id
+        / variant_id
+        / "quality_report.json"
+    )
+
+
+def benchmark_comparison_report_path(
+    output_root: Path,
+    suite_id: str,
+    case_id: str,
+) -> Path:
+    """Return the H10 per-case comparison report path."""
+
+    workspace_id = f"history-docs-benchmark-{suite_id}"
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "benchmarks"
+        / suite_id
+        / "cases"
+        / case_id
+        / "comparison_report.json"
+    )
+
+
 def write_project_config(
     path: Path,
     output_root: Path,
