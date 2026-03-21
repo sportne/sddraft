@@ -78,6 +78,40 @@ HistorySectionId = Literal[
     "dependencies",
     "build_development_infrastructure",
 ]
+HistorySectionPlanId = Literal[
+    "introduction",
+    "architectural_overview",
+    "subsystems_modules",
+    "dependencies",
+    "build_development_infrastructure",
+    "strategy_variants_design_alternatives",
+    "data_state_management",
+    "error_handling_robustness",
+    "performance_considerations",
+    "security_considerations",
+    "design_notes_rationale",
+    "limitations_constraints",
+]
+HistorySectionKind = Literal["core", "optional"]
+HistorySectionPlanStatus = Literal["included", "omitted"]
+HistorySectionDepth = Literal["brief", "standard", "deep"]
+HistorySectionSignalKind = Literal[
+    "active_subsystems",
+    "active_modules",
+    "active_dependencies",
+    "architectural_change",
+    "interface_change",
+    "dependency_change",
+    "infrastructure_change",
+    "algorithm_candidate",
+    "variant_family",
+    "data_state_tokens",
+    "robustness_tokens",
+    "performance_tokens",
+    "security_tokens",
+    "rationale_change",
+    "limitations_tokens",
+]
 
 
 class HistoryEvidenceLink(DomainModel):
@@ -256,6 +290,31 @@ class HistoryCheckpointModel(DomainModel):
     sections: list[HistorySectionState] = Field(default_factory=list)
 
 
+class HistorySectionPlan(DomainModel):
+    """Scored section plan entry for one checkpoint."""
+
+    section_id: HistorySectionPlanId
+    title: str
+    kind: HistorySectionKind
+    status: HistorySectionPlanStatus
+    confidence_score: int
+    evidence_score: int
+    depth: HistorySectionDepth | None = None
+    concept_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+    trigger_signals: list[HistorySectionSignalKind] = Field(default_factory=list)
+    omission_reason: str | None = None
+
+
+class HistorySectionOutline(DomainModel):
+    """Scored section outline for one checkpoint."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    sections: list[HistorySectionPlan] = Field(default_factory=list)
+
+
 class HistoryBuildResult(DomainModel):
     """Result for one history-docs build run."""
 
@@ -271,6 +330,7 @@ class HistoryBuildResult(DomainModel):
     snapshot_structural_model_path: Path | None = None
     interval_delta_model_path: Path | None = None
     checkpoint_model_path: Path | None = None
+    section_outline_path: Path | None = None
     file_count: int = 0
     symbol_count: int = 0
     subsystem_count: int = 0
@@ -283,6 +343,8 @@ class HistoryBuildResult(DomainModel):
     module_concept_count: int = 0
     dependency_concept_count: int = 0
     retired_concept_count: int = 0
+    included_section_count: int = 0
+    omitted_section_count: int = 0
 
 
 __all__ = [
@@ -300,7 +362,14 @@ __all__ = [
     "HistoryInterfaceChangeCandidate",
     "HistoryIntervalDeltaModel",
     "HistoryModuleConcept",
+    "HistorySectionDepth",
     "HistorySectionId",
+    "HistorySectionKind",
+    "HistorySectionOutline",
+    "HistorySectionPlan",
+    "HistorySectionPlanId",
+    "HistorySectionPlanStatus",
+    "HistorySectionSignalKind",
     "HistorySectionState",
     "HistorySnapshotStructuralModel",
     "HistorySubsystemConcept",

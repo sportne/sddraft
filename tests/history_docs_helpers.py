@@ -253,6 +253,25 @@ def checkpoint_model_path(
     )
 
 
+def section_outline_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H5 section outline path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "section_outline.json"
+    )
+
+
 def write_project_config(
     path: Path,
     output_root: Path,

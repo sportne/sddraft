@@ -52,7 +52,12 @@ from engllm.tools.history_docs.delta import (
 from engllm.tools.history_docs.models import (
     HistoryBuildResult,
     HistoryCheckpointModel,
+    HistorySectionOutline,
     HistorySnapshotStructuralModel,
+)
+from engllm.tools.history_docs.section_outline import (
+    build_section_outline,
+    section_outline_path,
 )
 from engllm.tools.history_docs.structure import (
     build_subsystem_candidates,
@@ -274,6 +279,13 @@ def _load_previous_checkpoint_model(
     return load_checkpoint_model(checkpoint_model_path(tool_root, checkpoint_id))
 
 
+def _count_section_status(
+    section_outline: HistorySectionOutline,
+    status: str,
+) -> int:
+    return sum(section.status == status for section in section_outline.sections)
+
+
 def build_history_docs_checkpoint(
     *,
     project_config: ProjectConfig,
@@ -283,7 +295,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> HistoryBuildResult:
-    """Persist checkpoint manifests plus H2 snapshot structural analysis and H3 deltas."""
+    """Persist checkpoint manifests plus H2-H5 history-docs artifacts."""
 
     resolved_repo_root = repo_root.resolve()
     target_metadata = get_commit_metadata(resolved_repo_root, checkpoint_commit)
@@ -561,6 +573,19 @@ def build_history_docs_checkpoint(
         )
     )
 
+    _progress(
+        progress_callback,
+        "history-docs: planning evidence-scored section outline",
+    )
+    section_outline = build_section_outline(
+        checkpoint_model=checkpoint_model,
+        interval_delta_model=interval_delta_model,
+    )
+    section_outline_artifact_path = section_outline_path(
+        history_tool_root, checkpoint_id
+    )
+    write_json_model(section_outline_artifact_path, section_outline)
+
     return HistoryBuildResult(
         workspace_id=resolved_workspace_id,
         checkpoint_id=checkpoint_id,
@@ -574,6 +599,7 @@ def build_history_docs_checkpoint(
         snapshot_structural_model_path=snapshot_structural_model_path,
         interval_delta_model_path=interval_delta_path,
         checkpoint_model_path=checkpoint_model_artifact_path,
+        section_outline_path=section_outline_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -586,4 +612,6 @@ def build_history_docs_checkpoint(
         module_concept_count=len(checkpoint_model.modules),
         dependency_concept_count=len(checkpoint_model.dependencies),
         retired_concept_count=retired_concept_count,
+        included_section_count=_count_section_status(section_outline, "included"),
+        omitted_section_count=_count_section_status(section_outline, "omitted"),
     )

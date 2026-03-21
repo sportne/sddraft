@@ -59,7 +59,7 @@ LLM-backed phases are still future work.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 4:
+The current implementation covers History Phases 1 through 5:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -79,6 +79,10 @@ The current implementation covers History Phases 1 through 4:
   - active and retired subsystem/module/dependency-source concepts
   - deterministic core section stubs
   - previous-model fallback when the prior checkpoint model artifact is missing
+- tool-scoped `section_outline.json` artifacts with:
+  - fixed-order core and optional section plans
+  - conservative evidence-scored inclusion decisions
+  - confidence and depth metadata for later rendering
 
 Quarterly checkpoint auto-selection is still deferred to a later phase.
 
@@ -505,6 +509,11 @@ Current implementation status:
   evidence links
 - carries retired concepts forward for lineage while keeping section records
   active-only
+- persists `section_outline.json` after H4
+- keeps H4 checkpoint-model sections as fixed core stubs while H5 owns the
+  scored section outline
+- scores optional sections conservatively from H3/H4 evidence plus token
+  heuristics
 - keeps standalone interface and algorithm concepts deferred
 
 ### Phase 5 — Section Inference And Inclusion Rules

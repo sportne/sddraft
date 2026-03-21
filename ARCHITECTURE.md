@@ -451,10 +451,14 @@ Current implemented slice:
 * tool-scoped `snapshot_structural_model.json`
 * tool-scoped `interval_delta_model.json`
 * tool-scoped `checkpoint_model.json`
+* tool-scoped `section_outline.json`
 * first-parent diff semantics for merge commits
 * diff-only fallback with `observed` statuses when the previous snapshot
   artifact is unavailable
-* active and retired checkpoint concepts with active-only core section stubs
+* active and retired checkpoint concepts with active-only core section stubs in
+  `checkpoint_model.json`
+* separate conservative section planning with scored inclusion and depth
+  metadata in `section_outline.json`
 * quarterly auto-selection still deferred
 
 ---

@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H4: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, and checkpoint-state models with active/retired subsystem/module/dependency concepts plus core section stubs.
+- `engllm history-docs build` now supports H1-H5: explicit checkpoint traversal, shared interval manifests, temporary snapshot export, checkpoint structural analysis, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, and separate evidence-scored `section_outline.json` planning artifacts.
 
 ## 2) Guiding Principles / Scope
 
@@ -419,17 +419,23 @@ its own internal phases.
 `Dependencies:` History Phase 4.
 `Completion Criteria:` Section plans are evidence-scored, confidence-weighted, and bounded in depth.
 
-- [ ] **H5-01**  
+- [x] **H5-01**  
   `Outcome:` Implement stable-core section planning for the first slice.  
   `Definition of Done:` The tool can always plan Introduction, Architectural Overview, Subsystems and Modules, Dependencies, and Build/Development Infrastructure.
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h5.py -k "fixed_order_and_depth_thresholds or writes_h5_section_outline_minimal_evidence"`  
+  `Result:` pass
 
-- [ ] **H5-02**  
+- [x] **H5-02**  
   `Outcome:` Add optional-section scoring with explicit thresholds.  
   `Definition of Done:` Optional sections appear only when evidence warrants them.
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h5.py -k "includes_strategy_variants_section or includes_security_section or includes_design_notes_rationale"`  
+  `Result:` pass
 
-- [ ] **H5-03**  
+- [x] **H5-03**  
   `Outcome:` Scale section depth using evidence strength instead of fixed prose quotas.  
   `Definition of Done:` Section plans include confidence and depth metadata for rendering.
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h5.py tests/test_imports.py`  
+  `Result:` pass
 
 ### History Phase 6 — Algorithm Knowledge Capsules
 

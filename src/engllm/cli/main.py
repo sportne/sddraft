@@ -403,6 +403,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Interval delta model: {result.interval_delta_model_path}")
     if result.checkpoint_model_path is not None:
         print(f"Checkpoint model: {result.checkpoint_model_path}")
+    if result.section_outline_path is not None:
+        print(f"Section outline: {result.section_outline_path}")
     return 0
 
 

@@ -26,6 +26,7 @@ MODULES = (
     "engllm.tools.history_docs.build",
     "engllm.tools.history_docs.checkpoint_model",
     "engllm.tools.history_docs.delta",
+    "engllm.tools.history_docs.section_outline",
     "engllm.tools.history_docs.structure",
     "engllm.core.hierarchy_docs",
     "engllm.tools.sdd.markdown",
