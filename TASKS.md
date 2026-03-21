@@ -537,20 +537,126 @@ its own internal phases.
   `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h9.py tests/test_history_docs_h8.py`  
   `Result:` pass
 
-### History Phase 10 — Future Extensions
+### History Phase 10 — Evaluation Harness For LLM-Enhanced History Docs
 
-`Objective:` Capture non-blocking future directions without mixing them into the first implementation arc.
-`Why:` The tool has a large extension surface, but the initial build should stay narrow and prove the architecture first.
+`Objective:` Create a quality benchmark and comparison harness before broadening LLM use.
+`Why:` Without a benchmark, the team will add LLMs everywhere without knowing which stages actually improve the final docs.
 `Dependencies:` History Phases 1-9.
-`Completion Criteria:` Future work remains documented and bounded instead of leaking into the first implementation slice.
+`Completion Criteria:` There is a repeatable way to compare current heuristic outputs against LLM-enhanced outputs on representative checkpoints.
 
 - [ ] **H10-01**  
+  `Outcome:` Define a benchmark checkpoint set covering small, medium, algorithm-heavy, dependency-heavy, and architecture-heavy histories.  
+  `Definition of Done:` History-docs has a reusable benchmark corpus and fixture selection guidance for quality comparisons.
+
+- [ ] **H10-02**  
+  `Outcome:` Add a structured quality rubric for checkpoint docs.  
+  `Definition of Done:` The rubric scores coverage, coherence, specificity, algorithm understanding, dependency understanding, rationale capture, and present-state tone.
+
+- [ ] **H10-03**  
+  `Outcome:` Add a comparison harness for baseline-vs-LLM history-docs artifacts.  
+  `Definition of Done:` Future LLM phases can be evaluated checkpoint-by-checkpoint instead of judged informally.
+
+### History Phase 11 — LLM-Assisted Checkpoint And Structure Understanding
+
+`Objective:` Use LLMs where the current structural interpretation is too brittle.
+`Why:` H2 currently groups subsystems mostly by path shape, which is often too shallow for real architecture.
+`Dependencies:` History Phase 10.
+`Completion Criteria:` The tool can produce richer subsystem/capability interpretations without losing inspectability.
+
+- [ ] **H11-01**  
+  `Outcome:` Add semantic checkpoint-planning support on top of H1 artifacts.  
+  `Definition of Done:` The tool can propose meaningful checkpoint candidates from commit windows, tags, and major structural changes rather than relying only on manually chosen commits.
+
+- [ ] **H11-02**  
+  `Outcome:` Add LLM-assisted subsystem and capability clustering from H2 structural artifacts.  
+  `Definition of Done:` The tool can emit a structured semantic subsystem map that improves over first-path-segment grouping.
+
+- [ ] **H11-03**  
+  `Outcome:` Add LLM-assisted system-context and interface candidate extraction from snapshot evidence.  
+  `Definition of Done:` The checkpoint model can later support missing core sections such as `System Context` and richer `Interfaces`.
+
+### History Phase 12 — LLM-Assisted Change Interpretation And Model Enrichment
+
+`Objective:` Use LLMs to interpret history, not just enumerate it.
+`Why:` H3-H5 currently identify change candidates and section plans with rigid heuristics that miss rationale and design meaning.
+`Dependencies:` History Phases 10-11.
+`Completion Criteria:` Interval analysis and section planning become evidence-grounded but semantically richer.
+
+- [ ] **H12-01**  
+  `Outcome:` Add LLM-assisted interval interpretation from H3 commit deltas, diffs, and snapshot comparisons.  
+  `Definition of Done:` The tool emits structured design-change insights, rationale clues, and significance judgments beyond current signal buckets.
+
+- [ ] **H12-02**  
+  `Outcome:` Add LLM-assisted checkpoint-model enrichment on top of H4.  
+  `Definition of Done:` The tool can introduce or refine concepts that are difficult to infer mechanically, while preserving evidence links and prior-model continuity.
+
+- [ ] **H12-03**  
+  `Outcome:` Replace or augment H5 token-threshold section planning with LLM section planning.  
+  `Definition of Done:` Section inclusion, omission, and depth are chosen from structured evidence packs rather than mostly from token matches and hard-coded scores.
+
+### History Phase 13 — LLM-Assisted Algorithm, Interface, And Dependency Understanding
+
+`Objective:` Deepen the sections where heuristic extraction is currently most limiting.
+`Why:` Algorithm understanding, interfaces, and dependency usage are exactly the fuzzy areas where LLM reasoning should help most.
+`Dependencies:` History Phases 10-12.
+`Completion Criteria:` The tool produces materially better structured knowledge for the hardest technical sections.
+
+- [ ] **H13-01**  
+  `Outcome:` Add LLM-assisted algorithm capsule enrichment on top of H6 candidates.  
+  `Definition of Done:` Capsules can capture algorithm purpose, phase flow, invariants, tradeoffs, and variant relationships in structured form.
+
+- [ ] **H13-02**  
+  `Outcome:` Add interface documentation artifacts and section support.  
+  `Definition of Done:` The tool can synthesize interface concepts, responsibilities, and cross-module contracts from code plus change evidence.
+
+- [ ] **H13-03**  
+  `Outcome:` Expand H7 from per-dependency blurbs to project-level dependency understanding.  
+  `Definition of Done:` The tool can explain dependency roles, dependency clusters, and project-specific usage patterns more holistically than one-entry-at-a-time summaries.
+
+### History Phase 14 — LLM-Assisted Drafting, Review, And Repair
+
+`Objective:` Use LLMs for the final narrative pass and for quality improvement loops.
+`Why:` H8-H9 currently produce structurally sound but often flat documentation.
+`Dependencies:` History Phases 10-13.
+`Completion Criteria:` The tool can draft higher-quality checkpoint docs and review/repair them before final output.
+
+- [ ] **H14-01**  
+  `Outcome:` Add section-scoped LLM drafting for the final checkpoint document.  
+  `Definition of Done:` `checkpoint.md` prose is generated from structured evidence packs and section plans rather than only fixed templates.
+
+- [ ] **H14-02**  
+  `Outcome:` Add LLM-assisted document review after rendering.  
+  `Definition of Done:` The tool emits a structured critique artifact covering coherence, omissions, unsupported claims, redundancy, and weak prose.
+
+- [ ] **H14-03**  
+  `Outcome:` Add targeted rewrite/repair loops driven by the review artifact.  
+  `Definition of Done:` The tool can revise only weak sections instead of regenerating the entire document blindly.
+
+### History Phase 15 — Future Extensions
+
+`Objective:` Capture non-blocking future directions without mixing them into the LLM-focused implementation arc.
+`Why:` The tool still has a large extension surface, but the roadmap should stay concrete and execution-oriented first.
+`Dependencies:` History Phases 1-14.
+`Completion Criteria:` Long-tail ideas remain documented and bounded instead of diluting the next implementation priorities.
+
+- [ ] **H15-01**  
   `Outcome:` Document optional evolution-report outputs separate from the main checkpoint docs.  
   `Definition of Done:` Future diff/timeline views are clearly separated from the core holistic-doc workflow.
 
-- [ ] **H10-02**  
-  `Outcome:` Document future directions for richer rationale extraction, diagrams, checkpoint browsing, and confidence visualization.  
-  `Definition of Done:` Extension ideas remain explicit but non-blocking.
+- [ ] **H15-02**  
+  `Outcome:` Document future directions for diagram generation, checkpoint browsing, checkpoint-to-checkpoint diff views, confidence visualization, and other non-blocking ideas.  
+  `Definition of Done:` Extension ideas remain explicit but do not crowd out the LLM-focused roadmap.
+
+### History-Docs LLM Expansion Defaults
+
+- Keep `engllm history-docs build` as the single public command.
+- Keep provider access behind `llm/base.py`; no direct provider calls from `tools/history_docs`.
+- Every new LLM stage should emit a tool-scoped structured JSON artifact before it influences later stages.
+- Deterministic repo/history artifacts from H1-H3 remain the grounding layer; LLMs interpret them rather than replace them.
+- `checkpoint_model.json`, `section_outline.json`, `algorithm_capsules/`, `dependencies.json`, `checkpoint.md`, and `validation_report.json` remain the core user-facing artifacts, though later phases may enrich them or add adjacent review/draft artifacts.
+- LLM stages should preserve evidence links and structured validation, even when their outputs are no longer expected to be deterministic.
+- Quality is the primary optimization target for these later phases; strict determinism is secondary to better documentation results.
+- The highest expected ROI is in H5-H9 first, with H2-H4 next; H1 should stay mostly deterministic aside from optional semantic checkpoint suggestion.
 
 ## 5) Testing And Validation Requirements (For All Phases)
 
@@ -560,6 +666,11 @@ its own internal phases.
 - Regression tests for fallback behavior when hierarchy/graph artifacts are missing or corrupt.
 - Commit-aware Q&A tests that assert grounded citations and conservative TBD behavior.
 - History-docs phases should add deterministic tests for checkpoint selection, interval metadata, checkpoint-model persistence, and present-state rendering quality.
+- Future history-docs LLM phases should add quality benchmark comparisons between current H1-H9 outputs and LLM-enhanced outputs.
+- Future history-docs LLM phases should add mock-provider coverage for every new structured generation stage.
+- Future history-docs LLM phases should add structured-validation fallback tests and evidence-link preservation tests for every LLM-assisted transformation.
+- Future history-docs LLM phases should add regression tests for unsupported-claim prevention and `TBD` handling when evidence is weak.
+- Future history-docs LLM phases should add end-to-end tests showing that LLM-assisted planning, drafting, and review improve checkpoint docs without breaking artifact inspectability.
 - Quality gates required on every phase PR:
   - `.venv/bin/python -m black --check src tests`
   - `.venv/bin/python -m isort --check-only src tests`
