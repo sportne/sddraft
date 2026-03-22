@@ -41,6 +41,19 @@ the document.
 Return valid JSON that matches the provided schema.
 """.strip()
 
+SEMANTIC_STRUCTURE_SYSTEM_PROMPT = """
+You cluster snapshot modules into semantic subsystems and capability labels.
+Use only the structured evidence provided in the user prompt.
+Rules:
+- every listed module_id must appear in exactly one semantic_subsystem.module_ids list
+- do not invent module ids, semantic subsystem ids, baseline subsystem ids, or capability references
+- semantic_subsystems must not be empty when modules are present
+- capability references may point only to returned semantic subsystem ids and listed module ids
+- summaries should be short present-state descriptions grounded in the supplied evidence
+Prefer semantic subsystems that reflect architecture or responsibility rather than raw directory names when the evidence supports it.
+Return valid JSON that matches the provided schema.
+""".strip()
+
 SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT = """
 You are evaluating candidate git commits as possible semantic documentation
 checkpoint anchors.

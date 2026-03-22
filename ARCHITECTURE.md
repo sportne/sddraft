@@ -23,10 +23,11 @@ Today it ships four tool namespaces:
    modeling
 
 `engllm history-docs build` now also emits advisory semantic checkpoint-planning
-artifacts, checkpoint-scoped dependency documentation artifacts, final
-checkpoint Markdown, and build-integrated validation over those historical
-snapshots. An internal H10 benchmark harness now evaluates those rendered
-outputs with structured LLM judging while keeping the public CLI unchanged.
+artifacts, checkpoint-scoped semantic subsystem/capability maps,
+checkpoint-scoped dependency documentation artifacts, final checkpoint
+Markdown, and build-integrated validation over those historical snapshots. An
+internal H10 benchmark harness now evaluates those rendered outputs with
+structured LLM judging while keeping the public CLI unchanged.
 The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
@@ -217,17 +218,19 @@ in reusable deterministic modules.
 
 ### `tools/history_docs/`
 
-The history-walk documentation tool now implements H1-H11-01 of its current
+The history-walk documentation tool now implements H1-H11-02 of its current
 roadmap. It combines:
 
 * checkpoint selection and history traversal
 * advisory semantic checkpoint planning
+* semantic subsystem and capability clustering
 * checkpoint snapshot analysis
 * interval delta analysis
 * structured checkpoint documentation models
 * final holistic rendering for each checkpoint
 * build-integrated rendered-artifact validation
-* an internal benchmark/evaluation harness for comparing future variants
+* an internal benchmark/evaluation harness for comparing future variants,
+  including semantic clustering against the path-based baseline
 
 Its key architectural rule is that deltas are used to improve generation
 internally, while rendered checkpoint docs remain standalone present-state
@@ -454,6 +457,7 @@ Current implemented slice:
 * manifest search limited to analyzed source roots plus their ancestor chain to
   repo root
 * tool-scoped `snapshot_structural_model.json`
+* tool-scoped `semantic_structure_map.json`
 * tool-scoped `interval_delta_model.json`
 * tool-scoped `checkpoint_model.json`
 * tool-scoped `section_outline.json`
@@ -466,6 +470,8 @@ Current implemented slice:
   artifact is unavailable
 * active and retired checkpoint concepts with active-only core section stubs in
   `checkpoint_model.json`
+* semantic display names, summaries, and capability labels that can be threaded
+  into subsystem concepts when the internal semantic grouping mode is enabled
 * separate conservative section planning with scored inclusion and depth
   metadata in `section_outline.json`
 * deterministic algorithm capsule linking into checkpoint concepts and the

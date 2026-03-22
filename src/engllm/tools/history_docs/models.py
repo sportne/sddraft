@@ -167,6 +167,7 @@ HistorySemanticCheckpointEvaluationStatus = Literal[
     "heuristic_only",
     "llm_failed",
 ]
+HistorySemanticStructureStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistoryDocsBenchmarkFocusTag = Literal[
     "small",
     "medium",
@@ -387,6 +388,10 @@ class HistorySubsystemConcept(DomainModel):
     symbol_count: int
     language_counts: dict[str, int] = Field(default_factory=dict)
     representative_files: list[Path] = Field(default_factory=list)
+    display_name: str | None = None
+    summary: str | None = None
+    capability_labels: list[str] = Field(default_factory=list)
+    baseline_subsystem_ids: list[str] = Field(default_factory=list)
     algorithm_capsule_ids: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
@@ -620,6 +625,90 @@ class HistorySemanticCheckpointPlan(DomainModel):
     candidates: list[HistorySemanticCheckpointCandidate] = Field(default_factory=list)
 
 
+class HistorySemanticSubsystemCluster(DomainModel):
+    """Semantic subsystem cluster emitted for one checkpoint snapshot."""
+
+    semantic_subsystem_id: str
+    title: str
+    summary: str
+    module_ids: list[str] = Field(default_factory=list)
+    baseline_subsystem_candidate_ids: list[str] = Field(default_factory=list)
+    capability_ids: list[str] = Field(default_factory=list)
+    representative_files: list[Path] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySemanticCapabilityCluster(DomainModel):
+    """Capability note attached to one or more modules or semantic subsystems."""
+
+    capability_id: str
+    title: str
+    summary: str
+    module_ids: list[str] = Field(default_factory=list)
+    semantic_subsystem_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySemanticStructureMap(DomainModel):
+    """Checkpoint-scoped semantic subsystem and capability map."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistorySemanticStructureStatus
+    semantic_subsystems: list[HistorySemanticSubsystemCluster] = Field(
+        default_factory=list
+    )
+    capabilities: list[HistorySemanticCapabilityCluster] = Field(default_factory=list)
+
+
+class HistorySemanticStructureJudgmentSubsystem(DomainModel):
+    """Structured LLM proposal for one semantic subsystem cluster."""
+
+    semantic_subsystem_id: str
+    title: str
+    summary: str
+    module_ids: list[str] = Field(default_factory=list)
+    capability_ids: list[str] = Field(default_factory=list)
+
+
+class HistorySemanticStructureJudgmentCapability(DomainModel):
+    """Structured LLM proposal for one capability cluster."""
+
+    capability_id: str
+    title: str
+    summary: str
+    module_ids: list[str] = Field(default_factory=list)
+    semantic_subsystem_ids: list[str] = Field(default_factory=list)
+
+
+class HistorySemanticStructureJudgment(DomainModel):
+    """Validated LLM subsystem/capability clustering response."""
+
+    semantic_subsystems: list[HistorySemanticStructureJudgmentSubsystem] = Field(
+        default_factory=list
+    )
+    capabilities: list[HistorySemanticStructureJudgmentCapability] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> HistorySemanticStructureJudgment:
+        """Reject duplicate semantic subsystem or capability identifiers."""
+
+        subsystem_ids = [
+            subsystem.semantic_subsystem_id for subsystem in self.semantic_subsystems
+        ]
+        capability_ids = [capability.capability_id for capability in self.capabilities]
+        if len(subsystem_ids) != len(set(subsystem_ids)):
+            raise ValueError(
+                "semantic_subsystems must not repeat semantic_subsystem_id values"
+            )
+        if len(capability_ids) != len(set(capability_ids)):
+            raise ValueError("capabilities must not repeat capability_id values")
+        return self
+
+
 class HistorySemanticCheckpointJudgment(DomainModel):
     """Structured planner judgment for one deterministic candidate commit."""
 
@@ -810,6 +899,7 @@ class HistoryBuildResult(DomainModel):
     checkpoint_plan_path: Path
     intervals_path: Path
     semantic_checkpoint_plan_path: Path | None = None
+    semantic_structure_map_path: Path | None = None
     snapshot_manifest_path: Path | None = None
     snapshot_structural_model_path: Path | None = None
     interval_delta_model_path: Path | None = None
@@ -827,6 +917,9 @@ class HistoryBuildResult(DomainModel):
     semantic_candidate_count: int = 0
     semantic_primary_candidate_count: int = 0
     semantic_planner_status: HistorySemanticCheckpointEvaluationStatus | None = None
+    semantic_subsystem_count: int = 0
+    semantic_capability_count: int = 0
+    semantic_structure_status: HistorySemanticStructureStatus | None = None
     subsystem_change_count: int = 0
     interface_change_count: int = 0
     dependency_change_count: int = 0
@@ -900,6 +993,13 @@ __all__ = [
     "HistorySemanticCheckpointPlan",
     "HistorySemanticCheckpointRecommendation",
     "HistorySemanticCheckpointSignalKind",
+    "HistorySemanticStructureJudgment",
+    "HistorySemanticStructureJudgmentCapability",
+    "HistorySemanticStructureJudgmentSubsystem",
+    "HistorySemanticStructureMap",
+    "HistorySemanticStructureStatus",
+    "HistorySemanticSubsystemCluster",
+    "HistorySemanticCapabilityCluster",
     "HistorySectionDepth",
     "HistorySectionId",
     "HistorySectionKind",

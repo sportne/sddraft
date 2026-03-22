@@ -46,6 +46,7 @@ from engllm.domain.errors import (
     ValidationError,
 )
 from engllm.domain.models import ProjectConfig
+from engllm.llm.base import LLMClient
 from engllm.llm.factory import create_llm_client
 from engllm.tools.history_docs.algorithm_capsules import (
     algorithm_capsule_index_path,
@@ -87,6 +88,12 @@ from engllm.tools.history_docs.section_outline import (
 from engllm.tools.history_docs.semantic_planner import (
     build_semantic_checkpoint_plan,
     semantic_checkpoint_plan_path,
+)
+from engllm.tools.history_docs.semantic_structure import (
+    build_semantic_structure_map,
+    build_subsystem_grouping_view,
+    load_semantic_structure_map,
+    semantic_structure_map_path,
 )
 from engllm.tools.history_docs.structure import (
     build_subsystem_candidates,
@@ -335,6 +342,8 @@ def build_history_docs_checkpoint(
     previous_checkpoint_commit: str | None = None,
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
+    subsystem_grouping_mode: Literal["path", "semantic"] = "path",
+    llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
 
@@ -444,7 +453,7 @@ def build_history_docs_checkpoint(
     save_checkpoint_plan(normalized_plan, checkpoint_plan_path)
     save_intervals(ordered_intervals, intervals_path)
 
-    llm_client = create_llm_client(project_config.llm)
+    llm_client = llm_client_override or create_llm_client(project_config.llm)
 
     _progress(
         progress_callback,
@@ -566,9 +575,29 @@ def build_history_docs_checkpoint(
     save_snapshot_manifest(snapshot_manifest, snapshot_manifest_path)
     write_json_model(snapshot_structural_model_path, structural_model)
 
+    _progress(
+        progress_callback,
+        "history-docs: building semantic subsystem and capability map",
+    )
+    semantic_structure_map = build_semantic_structure_map(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        snapshot=structural_model,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    semantic_structure_artifact_path = semantic_structure_map_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    write_json_model(semantic_structure_artifact_path, semantic_structure_map)
+
     previous_snapshot = None
     previous_checkpoint_model = None
     previous_checkpoint = None
+    previous_semantic_structure_map = None
     if resolved_previous is not None:
         previous_checkpoint = next(
             (
@@ -589,6 +618,27 @@ def build_history_docs_checkpoint(
                 history_tool_root,
                 previous_checkpoint.checkpoint_id,
             )
+            previous_semantic_structure_map = load_semantic_structure_map(
+                semantic_structure_map_path(
+                    history_tool_root,
+                    previous_checkpoint.checkpoint_id,
+                )
+            )
+
+    current_grouping = build_subsystem_grouping_view(
+        snapshot=structural_model,
+        mode=subsystem_grouping_mode,
+        semantic_map=semantic_structure_map,
+    )
+    previous_grouping = (
+        None
+        if previous_snapshot is None
+        else build_subsystem_grouping_view(
+            snapshot=previous_snapshot,
+            mode=subsystem_grouping_mode,
+            semantic_map=previous_semantic_structure_map,
+        )
+    )
 
     _progress(
         progress_callback,
@@ -602,6 +652,8 @@ def build_history_docs_checkpoint(
         interval_commits=interval.commits,
         current_snapshot=structural_model,
         previous_snapshot=previous_snapshot,
+        current_grouping=current_grouping,
+        previous_grouping=previous_grouping,
     )
     interval_delta_path = interval_delta_model_path(history_tool_root, checkpoint_id)
     write_json_model(interval_delta_path, interval_delta_model)
@@ -617,6 +669,7 @@ def build_history_docs_checkpoint(
         current_snapshot=structural_model,
         current_delta=interval_delta_model,
         previous_model=previous_checkpoint_model,
+        current_grouping=current_grouping,
     )
     checkpoint_model_artifact_path = checkpoint_model_path(
         history_tool_root, checkpoint_id
@@ -768,6 +821,7 @@ def build_history_docs_checkpoint(
         checkpoint_plan_path=checkpoint_plan_path,
         intervals_path=intervals_path,
         semantic_checkpoint_plan_path=semantic_plan_artifact_path,
+        semantic_structure_map_path=semantic_structure_artifact_path,
         snapshot_manifest_path=snapshot_manifest_path,
         snapshot_structural_model_path=snapshot_structural_model_path,
         interval_delta_model_path=interval_delta_path,
@@ -788,6 +842,9 @@ def build_history_docs_checkpoint(
             for candidate in semantic_plan.candidates
         ),
         semantic_planner_status=semantic_plan.evaluation_status,
+        semantic_subsystem_count=len(semantic_structure_map.semantic_subsystems),
+        semantic_capability_count=len(semantic_structure_map.capabilities),
+        semantic_structure_status=semantic_structure_map.evaluation_status,
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
         interface_change_count=len(interval_delta_model.interface_changes),
         dependency_change_count=len(interval_delta_model.dependency_changes),

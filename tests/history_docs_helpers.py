@@ -253,6 +253,25 @@ def semantic_checkpoint_plan_path(
     )
 
 
+def semantic_structure_map_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H11 semantic structure artifact path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "semantic_structure_map.json"
+    )
+
+
 def checkpoint_model_path(
     output_root: Path,
     workspace_id: str,

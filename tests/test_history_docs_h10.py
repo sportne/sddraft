@@ -25,6 +25,7 @@ from engllm.tools.history_docs.models import (
     HistoryDocsRubricScore,
     HistoryRenderedSection,
     HistoryRenderManifest,
+    HistorySubsystemConcept,
     HistoryValidationReport,
 )
 from tests.history_docs_helpers import (
@@ -168,7 +169,25 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
     checkpoint_model = HistoryCheckpointModel(
         checkpoint_id="2024-01-01-abc1234",
         target_commit="a" * 40,
-        subsystems=[],
+        subsystems=[
+            HistorySubsystemConcept(
+                concept_id="semantic-subsystem::api",
+                lifecycle_status="active",
+                change_status="observed",
+                first_seen_checkpoint="2024-01-01-abc1234",
+                last_updated_checkpoint="2024-01-01-abc1234",
+                source_root=Path("src"),
+                group_path=Path("src/app"),
+                module_ids=["module::src/app/api/router.py"],
+                file_count=1,
+                symbol_count=2,
+                language_counts={"python": 1},
+                representative_files=[Path("src/app/api/router.py")],
+                display_name="API Layer",
+                capability_labels=["Request Handling"],
+                baseline_subsystem_ids=["subsystem::src::app"],
+            )
+        ],
         modules=[],
         dependencies=[],
         sections=[],
@@ -205,6 +224,9 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
     assert "exp-1" in user_prompt
     assert "Current design summary." in user_prompt
     assert "Introduction" in user_prompt
+    assert "Structure Summary" in user_prompt
+    assert "API Layer" in user_prompt
+    assert "Request Handling" in user_prompt
 
 
 def test_compare_history_docs_quality_reports_uses_stable_tie_breaks() -> None:

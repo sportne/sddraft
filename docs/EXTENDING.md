@@ -272,19 +272,25 @@ Primary tests:
 - `tests/test_history_docs_h10.py`
 - `tests/test_imports.py`
 
-### Phase 11 — Semantic Checkpoint Planning
+### Phase 11 — Semantic Checkpoint Planning And Structure Clustering
 
 Primary code areas:
 
 - `src/engllm/tools/history_docs/semantic_planner.py`
+- `src/engllm/tools/history_docs/semantic_structure.py`
 - `src/engllm/core/repo/history.py`
 - `src/engllm/prompts/history_docs/builders.py`
 - `src/engllm/prompts/history_docs/templates.py`
 - `src/engllm/tools/history_docs/build.py`
+- `src/engllm/tools/history_docs/checkpoint_model.py`
+- `src/engllm/tools/history_docs/render.py`
+- `src/engllm/tools/history_docs/benchmark.py`
 
 Primary tests:
 
 - `tests/test_history_docs_h11.py`
+- `tests/test_history_docs_h11_02.py`
+- `tests/test_history_docs_h10.py`
 - `tests/test_imports.py`
 - `tests/test_layer_boundaries.py`
 - `tests/test_workflow_generate_and_ask.py`
@@ -298,7 +304,7 @@ Primary design docs:
 - `TASKS.md`
 - `ARCHITECTURE.md`
 
-Primary code areas for H1-H10:
+Primary code areas for H1-H11-02:
 
 - `src/engllm/core/repo/history.py`
 - `src/engllm/core/repo/scanner.py`
@@ -339,6 +345,9 @@ Current H1-H10 behavior:
 - missing historical source roots are recorded and skipped
 - manifest search scope is limited to analyzed source roots plus their ancestor
   chain back to repo root
+- H11-02 writes `tools/history_docs/checkpoints/<checkpoint_id>/semantic_structure_map.json`
+- H11-02 keeps path-based grouping as the public-build baseline while enabling
+  an internal semantic grouping mode for H3-H9 benchmark variants
 - interval deltas are derived from first-parent commit diffs plus snapshot
   comparison
 - interval artifacts are written to
@@ -377,6 +386,8 @@ Current H1-H10 behavior:
 - H10 uses structured LLM judging for per-variant `quality_report.json`
   artifacts, then compares variants deterministically through
   `comparison_report.json` and `suite_manifest.json`
+- H11-02 adds a semantic-clustering benchmark variant so H10 can compare
+  path-based grouping against semantic subsystem/capability clustering
 - H9 validates final rendered artifacts rather than live repo state
 - H9 fails the build only on hard validation errors and preserves the report on
   failure

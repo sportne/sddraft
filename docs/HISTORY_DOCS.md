@@ -52,15 +52,16 @@ Planned future CLI surface:
 
 - `engllm history-docs build`
 
-History Phases 1 through 11-01 now implement that command end to end, from
-single-checkpoint traversal through semantic checkpoint advisories, final
-rendered checkpoint Markdown, and build-integrated validation. H10 adds an
-internal benchmark and evaluation harness around those rendered artifacts while
-keeping the public CLI unchanged.
+History Phases 1 through 11-02 now implement that command end to end, from
+single-checkpoint traversal through semantic checkpoint advisories,
+checkpoint-scoped semantic subsystem/capability maps, final rendered checkpoint
+Markdown, and build-integrated validation. H10 adds an internal benchmark and
+evaluation harness around those rendered artifacts while keeping the public CLI
+unchanged.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 11-01:
+The current implementation covers History Phases 1 through 11-02:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -78,12 +79,21 @@ The current implementation covers History Phases 1 through 11-01:
   working tree
 - tool-scoped snapshot structural models with files, code summaries, symbol
   summaries, subsystem candidates, and build-source metadata
+- checkpoint-scoped `semantic_structure_map.json` artifacts with:
+  - one structured LLM clustering pass over compact H2 subsystem/module evidence
+  - exclusive semantic subsystem partitions over active modules
+  - non-exclusive capability labels attached to modules and semantic subsystems
+  - heuristic path-based fallback when clustering fails or validates poorly
+  - normal builds keeping path grouping authoritative while the semantic map is
+    emitted in shadow mode
 - tool-scoped `interval_delta_model.json` artifacts with:
   - first-parent commit diff semantics
   - diff-only fallback when the previous snapshot artifact is unavailable
   - structured subsystem, interface, dependency, and algorithm candidate signals
 - tool-scoped `checkpoint_model.json` artifacts with:
   - active and retired subsystem/module/dependency-source concepts
+  - optional semantic display names, summaries, capability labels, and baseline
+    subsystem references on subsystem concepts
   - deterministic core section stubs
   - previous-model fallback when the prior checkpoint model artifact is missing
 - tool-scoped `section_outline.json` artifacts with:
@@ -119,7 +129,9 @@ The current implementation covers History Phases 1 through 11-01:
 
 Quarterly checkpoint auto-selection is still deferred. H11-01 keeps the
 explicit target commit authoritative and uses the semantic checkpoint plan as
-an advisory artifact only.
+an advisory artifact only. H11-02 similarly keeps semantic subsystem/capability
+clustering advisory in normal builds while enabling H10 to compare a semantic
+grouping variant against the path-based baseline.
 
 ## Terminology
 

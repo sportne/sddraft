@@ -347,8 +347,8 @@ def _prepare_medium_mixed_case(
             HistoryDocsBenchmarkExpectation(
                 expectation_id="medium-architecture",
                 kind="architectural_distinction",
-                description="The document should distinguish backend and web responsibilities rather than flattening them into one undifferentiated blob.",
-                keywords=["core", "web", "support"],
+                description="The document should distinguish backend, web, and support responsibilities with meaningful subsystem naming rather than flattening them into one undifferentiated blob.",
+                keywords=["core", "web", "support", "backend", "ui", "cache"],
             ),
         ],
     )
@@ -521,8 +521,15 @@ def _prepare_architecture_heavy_case(
             HistoryDocsBenchmarkExpectation(
                 expectation_id="architecture-distinction",
                 kind="architectural_distinction",
-                description="The document should distinguish API, engine, and storage roles instead of merging them into generic modules.",
-                keywords=["api", "engine", "storage"],
+                description="The document should distinguish API, engine, and storage roles with clear subsystem or capability framing instead of merging them into generic modules.",
+                keywords=[
+                    "api",
+                    "engine",
+                    "storage",
+                    "router",
+                    "planner",
+                    "repository",
+                ],
             ),
         ],
     )
@@ -590,6 +597,39 @@ def baseline_history_docs_benchmark_variant() -> HistoryDocsBenchmarkVariant:
         )
 
     return HistoryDocsBenchmarkVariant(variant_id="baseline", runner=_run)
+
+
+def semantic_history_docs_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H11 semantic-clustering benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(variant_id="semantic-clustering", runner=_run)
 
 
 def _empty_rubric_scores() -> list[HistoryDocsRubricScore]:
@@ -914,5 +954,6 @@ __all__ = [
     "compare_history_docs_quality_reports",
     "evaluate_history_docs_quality",
     "run_history_docs_benchmark_suite",
+    "semantic_history_docs_benchmark_variant",
     "validate_benchmark_focus_coverage",
 ]

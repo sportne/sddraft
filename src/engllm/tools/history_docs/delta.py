@@ -33,10 +33,7 @@ from engllm.tools.history_docs.models import (
     HistorySubsystemCandidate,
     HistorySubsystemChangeCandidate,
 )
-from engllm.tools.history_docs.structure import (
-    subsystem_candidate_id_for_file,
-    subsystem_is_root_scope,
-)
+from engllm.tools.history_docs.semantic_structure import HistorySubsystemGroupingView
 
 _VARIANT_TOKENS = ("strategy", "variant", "policy", "mode", "backend", "adapter")
 _EvidenceLinkTuple = tuple[HistoryDeltaEvidenceKind, str, str | None]
@@ -165,12 +162,12 @@ def _resolve_symbol(
 
 
 def _index_subsystems(
-    snapshot: HistorySnapshotStructuralModel | None,
+    grouping: HistorySubsystemGroupingView | None,
 ) -> dict[str, HistorySubsystemCandidate]:
-    if snapshot is None:
+    if grouping is None:
         return {}
     return {
-        candidate.candidate_id: candidate for candidate in snapshot.subsystem_candidates
+        candidate.candidate_id: candidate for candidate in grouping.subsystem_candidates
     }
 
 
@@ -194,32 +191,13 @@ def _symbol_counts(snapshot: HistorySnapshotStructuralModel | None) -> Counter[P
     return Counter(symbol.source_path for symbol in snapshot.symbol_summaries)
 
 
-def _path_is_within_roots(path: Path, roots: list[Path]) -> bool:
-    for root in roots:
-        if root == Path("."):
-            return True
-        try:
-            path.relative_to(root)
-            return True
-        except ValueError:
-            continue
-    return False
-
-
 def _resolve_subsystem_id(
-    snapshot: HistorySnapshotStructuralModel | None,
-    indexed: dict[str, HistorySubsystemCandidate],
+    grouping: HistorySubsystemGroupingView | None,
     file_path: Path,
 ) -> str | None:
-    if snapshot is None or not snapshot.analyzed_source_roots:
+    if grouping is None:
         return None
-    if not _path_is_within_roots(file_path, snapshot.analyzed_source_roots):
-        return None
-    candidate_id = subsystem_candidate_id_for_file(
-        file_path=file_path,
-        analyzed_roots=snapshot.analyzed_source_roots,
-    )
-    return candidate_id if candidate_id in indexed else None
+    return grouping.module_subsystem_ids.get(file_path)
 
 
 def _primary_subsystem_id(
@@ -535,12 +513,14 @@ def build_interval_delta_model(
     interval_commits: list[HistoryCommitSummary],
     current_snapshot: HistorySnapshotStructuralModel,
     previous_snapshot: HistorySnapshotStructuralModel | None,
+    current_grouping: HistorySubsystemGroupingView | None = None,
+    previous_grouping: HistorySubsystemGroupingView | None = None,
 ) -> HistoryIntervalDeltaModel:
     """Build a tool-scoped interval-delta model for one checkpoint."""
 
     previous_snapshot_available = previous_snapshot is not None
-    current_subsystems = _index_subsystems(current_snapshot)
-    previous_subsystems = _index_subsystems(previous_snapshot)
+    current_subsystems = _index_subsystems(current_grouping)
+    previous_subsystems = _index_subsystems(previous_grouping)
     current_build_sources = _index_build_sources(current_snapshot)
     previous_build_sources = _index_build_sources(previous_snapshot)
     current_symbols = _index_symbols(current_snapshot)
@@ -598,13 +578,11 @@ def build_interval_delta_model(
                 )
 
             current_subsystem_id = _resolve_subsystem_id(
-                current_snapshot,
-                current_subsystems,
+                current_grouping,
                 file_path,
             )
             previous_subsystem_id = _resolve_subsystem_id(
-                previous_snapshot,
-                previous_subsystems,
+                previous_grouping,
                 file_path,
             )
             if current_subsystem_id is not None:
@@ -717,11 +695,13 @@ def build_interval_delta_model(
         if (
             affected_subsystem_ids
             and any(
-                subsystem_is_root_scope(candidate_id)
+                current_grouping is not None
+                and candidate_id in current_grouping.root_scope_subsystem_ids
                 for candidate_id in affected_subsystem_ids
             )
             and any(
-                not subsystem_is_root_scope(candidate_id)
+                current_grouping is None
+                or candidate_id not in current_grouping.root_scope_subsystem_ids
                 for candidate_id in affected_subsystem_ids
             )
         ):

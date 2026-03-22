@@ -32,6 +32,7 @@ MODULES = (
     "engllm.tools.history_docs.delta",
     "engllm.tools.history_docs.render",
     "engllm.tools.history_docs.semantic_planner",
+    "engllm.tools.history_docs.semantic_structure",
     "engllm.tools.history_docs.section_outline",
     "engllm.tools.history_docs.structure",
     "engllm.tools.history_docs.validation",

@@ -18,7 +18,7 @@ from engllm.tools.history_docs.models import (
     HistorySnapshotStructuralModel,
     HistorySubsystemConcept,
 )
-from engllm.tools.history_docs.structure import subsystem_candidate_id_for_file
+from engllm.tools.history_docs.semantic_structure import HistorySubsystemGroupingView
 
 _SECTION_TITLES: dict[HistorySectionId, str] = {
     "introduction": "Introduction",
@@ -108,18 +108,12 @@ def _index_symbols(snapshot: HistorySnapshotStructuralModel) -> dict[Path, list[
 
 
 def _module_subsystem_id(
-    snapshot: HistorySnapshotStructuralModel, path: Path
+    grouping: HistorySubsystemGroupingView | None,
+    path: Path,
 ) -> str | None:
-    if not snapshot.analyzed_source_roots:
+    if grouping is None:
         return None
-    candidate_id = subsystem_candidate_id_for_file(
-        file_path=path,
-        analyzed_roots=snapshot.analyzed_source_roots,
-    )
-    subsystem_ids = {
-        candidate.candidate_id for candidate in snapshot.subsystem_candidates
-    }
-    return candidate_id if candidate_id in subsystem_ids else None
+    return grouping.module_subsystem_ids.get(path)
 
 
 def _module_change_status(
@@ -184,6 +178,7 @@ def build_checkpoint_model(
     current_snapshot: HistorySnapshotStructuralModel,
     current_delta: HistoryIntervalDeltaModel,
     previous_model: HistoryCheckpointModel | None,
+    current_grouping: HistorySubsystemGroupingView | None = None,
 ) -> HistoryCheckpointModel:
     """Build the H4 checkpoint model for one checkpoint."""
 
@@ -272,7 +267,7 @@ def build_checkpoint_model(
             module_imports = current_summary.imports
             module_docstrings = current_summary.docstrings
         subsystem_id = (
-            _module_subsystem_id(current_snapshot, path)
+            _module_subsystem_id(current_grouping, path)
             if current_exists
             else previous_module.subsystem_id if previous_module is not None else None
         )
@@ -317,10 +312,17 @@ def build_checkpoint_model(
             current_module_ids_by_subsystem[subsystem_id].append(module_id)
 
     subsystem_concepts: list[HistorySubsystemConcept] = []
-    current_subsystems = {
-        candidate.candidate_id: candidate
-        for candidate in current_snapshot.subsystem_candidates
-    }
+    current_subsystems = (
+        {
+            candidate.candidate_id: candidate
+            for candidate in current_grouping.subsystem_candidates
+        }
+        if current_grouping is not None
+        else {
+            candidate.candidate_id: candidate
+            for candidate in current_snapshot.subsystem_candidates
+        }
+    )
     all_subsystem_ids = sorted(
         {*current_subsystems.keys(), *previous_subsystems.keys()}
     )
@@ -359,6 +361,10 @@ def build_checkpoint_model(
             subsystem_symbol_count = previous_subsystem.symbol_count
             subsystem_language_counts = previous_subsystem.language_counts
             subsystem_representative_files = previous_subsystem.representative_files
+            subsystem_display_name = previous_subsystem.display_name
+            subsystem_summary = previous_subsystem.summary
+            subsystem_capability_labels = previous_subsystem.capability_labels
+            subsystem_baseline_subsystem_ids = previous_subsystem.baseline_subsystem_ids
             subsystem_snapshot_evidence: list[HistoryEvidenceLink] = []
         else:
             subsystem_source_root = current_candidate.source_root
@@ -370,6 +376,29 @@ def build_checkpoint_model(
             subsystem_symbol_count = current_candidate.symbol_count
             subsystem_language_counts = current_candidate.language_counts
             subsystem_representative_files = current_candidate.representative_files
+            subsystem_display_name = (
+                None
+                if current_grouping is None
+                else current_grouping.display_names.get(subsystem_id)
+            )
+            subsystem_summary = (
+                None
+                if current_grouping is None
+                else current_grouping.summaries.get(subsystem_id)
+            )
+            subsystem_capability_labels = (
+                []
+                if current_grouping is None
+                else current_grouping.capability_labels.get(subsystem_id, [])
+            )
+            subsystem_baseline_subsystem_ids = (
+                [subsystem_id]
+                if current_grouping is None
+                else current_grouping.baseline_subsystem_ids.get(
+                    subsystem_id,
+                    [subsystem_id],
+                )
+            )
             subsystem_snapshot_evidence = _subsystem_snapshot_evidence(
                 HistorySubsystemConcept(
                     concept_id=subsystem_id,
@@ -384,6 +413,10 @@ def build_checkpoint_model(
                     symbol_count=current_candidate.symbol_count,
                     language_counts=current_candidate.language_counts,
                     representative_files=current_candidate.representative_files,
+                    display_name=subsystem_display_name,
+                    summary=subsystem_summary,
+                    capability_labels=subsystem_capability_labels,
+                    baseline_subsystem_ids=subsystem_baseline_subsystem_ids,
                 )
             )
         subsystem_concepts.append(
@@ -412,6 +445,10 @@ def build_checkpoint_model(
                 symbol_count=subsystem_symbol_count,
                 language_counts=subsystem_language_counts,
                 representative_files=subsystem_representative_files,
+                display_name=subsystem_display_name,
+                summary=subsystem_summary,
+                capability_labels=subsystem_capability_labels,
+                baseline_subsystem_ids=subsystem_baseline_subsystem_ids,
                 evidence_links=_dedupe_evidence(
                     subsystem_snapshot_evidence,
                     (

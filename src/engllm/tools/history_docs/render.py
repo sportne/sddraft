@@ -213,6 +213,15 @@ def _active_dependencies(
 
 
 def _subsystem_label(subsystem: HistorySubsystemConcept) -> str:
+    if subsystem.display_name:
+        return subsystem.display_name
+    group_path = subsystem.group_path.as_posix()
+    if group_path == ".":
+        return subsystem.source_root.as_posix()
+    return group_path
+
+
+def _subsystem_scope_label(subsystem: HistorySubsystemConcept) -> str:
     group_path = subsystem.group_path.as_posix()
     if group_path == ".":
         return subsystem.source_root.as_posix()
@@ -336,9 +345,16 @@ def _render_architectural_overview(
     )
     bullets = [
         (
-            f"`{_subsystem_label(subsystem)}` from `{subsystem.source_root.as_posix()}`: "
+            f"`{_subsystem_label(subsystem)}` covering `{_subsystem_scope_label(subsystem)}`: "
             f"{subsystem.file_count} files, {subsystem.symbol_count} symbols, representative files "
-            f"{', '.join(f'`{path.as_posix()}`' for path in subsystem.representative_files) or 'none'}."
+            f"{', '.join(f'`{path.as_posix()}`' for path in subsystem.representative_files) or 'none'}"
+            + (f"; summary: {subsystem.summary}" if subsystem.summary else "")
+            + (
+                f"; capability labels: {', '.join(f'`{label}`' for label in subsystem.capability_labels)}"
+                if subsystem.capability_labels
+                else ""
+            )
+            + "."
         )
         for subsystem in active_subsystems
     ]
@@ -359,20 +375,29 @@ def _render_subsystems_modules(
     lines: list[str] = []
     subheading_count = 0
     for subsystem in active_subsystems:
-        lines.append(f"### {_section_title(_subsystem_label(subsystem))}")
+        lines.append(f"### {_subsystem_label(subsystem)}")
         lines.append("")
         subheading_count += 1
         languages = ", ".join(
             f"{language} ({count})"
             for language, count in sorted(subsystem.language_counts.items())
         )
-        _paragraph(
-            lines,
-            (
-                f"This subsystem groups files under `{_subsystem_label(subsystem)}` and currently spans "
+        summary_text = (
+            subsystem.summary
+            if subsystem.summary
+            else (
+                f"This subsystem groups files under `{_subsystem_scope_label(subsystem)}` and currently spans "
                 f"{subsystem.file_count} files, {subsystem.symbol_count} symbols, and languages {languages or 'unknown'}."
-            ),
+            )
         )
+        _paragraph(lines, summary_text)
+        if subsystem.capability_labels:
+            _paragraph(
+                lines,
+                "Capability labels: "
+                + ", ".join(f"`{label}`" for label in subsystem.capability_labels)
+                + ".",
+            )
         module_bullets = [
             _summary_line_for_module(module)
             for module in modules_by_subsystem.get(subsystem.concept_id, [])
