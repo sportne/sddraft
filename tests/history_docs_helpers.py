@@ -272,6 +272,25 @@ def semantic_structure_map_path(
     )
 
 
+def semantic_context_map_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H11-03 semantic context artifact path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "semantic_context_map.json"
+    )
+
+
 def checkpoint_model_path(
     output_root: Path,
     workspace_id: str,
@@ -365,6 +384,21 @@ def checkpoint_markdown_path(
         / "checkpoints"
         / checkpoint_id
         / "checkpoint.md"
+    )
+
+
+def promotion_gate_report_path(output_root: Path, suite_id: str) -> Path:
+    """Return the internal real-benchmark promotion-gate report path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / f"history-docs-benchmark-{suite_id}"
+        / "tools"
+        / "history_docs"
+        / "benchmarks"
+        / suite_id
+        / "promotion_gate_report.json"
     )
 
 

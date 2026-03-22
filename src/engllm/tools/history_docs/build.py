@@ -85,6 +85,11 @@ from engllm.tools.history_docs.section_outline import (
     build_section_outline,
     section_outline_path,
 )
+from engllm.tools.history_docs.semantic_context import (
+    augment_section_outline_with_semantic_context,
+    build_semantic_context_map,
+    semantic_context_map_path,
+)
 from engllm.tools.history_docs.semantic_planner import (
     build_semantic_checkpoint_plan,
     semantic_checkpoint_plan_path,
@@ -343,6 +348,7 @@ def build_history_docs_checkpoint(
     workspace_id: str | None = None,
     progress_callback: ProgressCallback | None = None,
     subsystem_grouping_mode: Literal["path", "semantic"] = "path",
+    experimental_section_mode: Literal["default", "semantic_context"] = "default",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -594,6 +600,27 @@ def build_history_docs_checkpoint(
     )
     write_json_model(semantic_structure_artifact_path, semantic_structure_map)
 
+    _progress(
+        progress_callback,
+        "history-docs: building semantic context and interface map",
+    )
+    semantic_context_map = build_semantic_context_map(
+        workspace_id=resolved_workspace_id,
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        snapshot=structural_model,
+        semantic_map=semantic_structure_map,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    semantic_context_artifact_path = semantic_context_map_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    write_json_model(semantic_context_artifact_path, semantic_context_map)
+
     previous_snapshot = None
     previous_checkpoint_model = None
     previous_checkpoint = None
@@ -708,6 +735,12 @@ def build_history_docs_checkpoint(
         interval_delta_model,
         algorithm_capsules,
     )
+    if experimental_section_mode == "semantic_context":
+        section_outline = augment_section_outline_with_semantic_context(
+            checkpoint_model=checkpoint_model,
+            section_outline=section_outline,
+            semantic_context_map=semantic_context_map,
+        )
 
     checkpoint_root = history_tool_root / "checkpoints" / checkpoint_id
     for index_entry, capsule in zip(
@@ -764,6 +797,11 @@ def build_history_docs_checkpoint(
         dependency_inventory=dependency_inventory,
         capsule_index=algorithm_capsule_index,
         capsules=algorithm_capsules,
+        semantic_context_map=(
+            semantic_context_map
+            if experimental_section_mode == "semantic_context"
+            else None
+        ),
     )
     write_checkpoint_markdown(
         checkpoint_markdown_artifact_path,
@@ -822,6 +860,7 @@ def build_history_docs_checkpoint(
         intervals_path=intervals_path,
         semantic_checkpoint_plan_path=semantic_plan_artifact_path,
         semantic_structure_map_path=semantic_structure_artifact_path,
+        semantic_context_map_path=semantic_context_artifact_path,
         snapshot_manifest_path=snapshot_manifest_path,
         snapshot_structural_model_path=snapshot_structural_model_path,
         interval_delta_model_path=interval_delta_path,
@@ -845,6 +884,9 @@ def build_history_docs_checkpoint(
         semantic_subsystem_count=len(semantic_structure_map.semantic_subsystems),
         semantic_capability_count=len(semantic_structure_map.capabilities),
         semantic_structure_status=semantic_structure_map.evaluation_status,
+        semantic_context_status=semantic_context_map.evaluation_status,
+        context_node_count=len(semantic_context_map.context_nodes),
+        interface_candidate_count=len(semantic_context_map.interfaces),
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
         interface_change_count=len(interval_delta_model.interface_changes),
         dependency_change_count=len(interval_delta_model.dependency_changes),

@@ -19,6 +19,7 @@ from engllm.tools.history_docs.models import (
     HistorySectionOutline,
     HistorySectionPlan,
     HistorySectionPlanId,
+    HistorySemanticContextMap,
     HistorySubsystemConcept,
 )
 
@@ -269,10 +270,13 @@ def _artifact_paths_for_section(
     dependency_ids: list[str],
     algorithm_capsule_ids: list[str],
     capsule_index: HistoryAlgorithmCapsuleIndex,
+    uses_semantic_context: bool = False,
 ) -> list[Path]:
     paths = [Path("checkpoint_model.json"), Path("section_outline.json")]
     if dependency_ids:
         paths.append(Path("dependencies.json"))
+    if uses_semantic_context:
+        paths.append(Path("semantic_context_map.json"))
     if algorithm_capsule_ids:
         paths.append(Path("algorithm_capsules") / "index.json")
         capsule_paths = {
@@ -625,6 +629,86 @@ def _render_token_section(
     return lines, [], [], 0
 
 
+def _render_system_context(
+    *,
+    semantic_context_map: HistorySemanticContextMap,
+) -> tuple[list[str], list[str], list[str], int]:
+    lines: list[str] = []
+    _paragraph(
+        lines,
+        "This section summarizes the current system boundary and adjacent context nodes inferred from the checkpoint snapshot.",
+    )
+    ordered_nodes = sorted(
+        semantic_context_map.context_nodes,
+        key=lambda item: (0 if item.kind == "system" else 1, item.node_id),
+    )
+    _bullet_list(
+        lines,
+        [
+            (
+                f"`{node.title}` ({node.kind}): {node.summary}"
+                + (
+                    f" Related subsystems: {', '.join(f'`{item}`' for item in node.related_subsystem_ids)}."
+                    if node.related_subsystem_ids
+                    else ""
+                )
+                + (
+                    f" Related modules: {', '.join(f'`{item}`' for item in node.related_module_ids[:6])}."
+                    if node.related_module_ids
+                    else ""
+                )
+            )
+            for node in ordered_nodes
+        ],
+    )
+    return lines, [], [], 0
+
+
+def _render_interfaces(
+    *,
+    semantic_context_map: HistorySemanticContextMap,
+    modules_by_id: dict[str, HistoryModuleConcept],
+) -> tuple[list[str], list[str], list[str], int]:
+    lines: list[str] = []
+    subheading_count = 0
+    for interface in sorted(
+        semantic_context_map.interfaces,
+        key=lambda item: item.interface_id,
+    ):
+        lines.append(f"### {interface.title}")
+        lines.append("")
+        subheading_count += 1
+        _paragraph(lines, interface.summary)
+        bullets = [f"Kind: `{interface.kind}`."]
+        if interface.provider_subsystem_ids:
+            bullets.append(
+                "Providers: "
+                + ", ".join(f"`{item}`" for item in interface.provider_subsystem_ids)
+                + "."
+            )
+        if interface.consumer_context_node_ids:
+            bullets.append(
+                "Consumers: "
+                + ", ".join(f"`{item}`" for item in interface.consumer_context_node_ids)
+                + "."
+            )
+        if interface.related_module_ids:
+            bullets.append(
+                "Linked modules: "
+                + ", ".join(
+                    (
+                        f"`{modules_by_id[module_id].path.as_posix()}`"
+                        if module_id in modules_by_id
+                        else f"`{module_id}`"
+                    )
+                    for module_id in interface.related_module_ids
+                )
+                + "."
+            )
+        _bullet_list(lines, bullets)
+    return lines, [], [], subheading_count
+
+
 def _render_design_notes_rationale(
     checkpoint_model: HistoryCheckpointModel,
 ) -> tuple[list[str], list[str], list[str], int]:
@@ -717,6 +801,7 @@ def _render_section_content(
     dependency_inventory: HistoryDependencyInventory,
     capsule_index: HistoryAlgorithmCapsuleIndex,
     capsules: list[HistoryAlgorithmCapsule],
+    semantic_context_map: HistorySemanticContextMap | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     active_subsystems = _active_subsystems(checkpoint_model)
     active_modules = _active_modules(checkpoint_model)
@@ -734,8 +819,15 @@ def _render_section_content(
         )
     if section.section_id == "architectural_overview":
         return _render_architectural_overview(active_subsystems)
+    if section.section_id == "system_context" and semantic_context_map is not None:
+        return _render_system_context(semantic_context_map=semantic_context_map)
     if section.section_id == "subsystems_modules":
         return _render_subsystems_modules(active_subsystems, modules_by_subsystem)
+    if section.section_id == "interfaces" and semantic_context_map is not None:
+        return _render_interfaces(
+            semantic_context_map=semantic_context_map,
+            modules_by_id=modules_by_id,
+        )
     if section.section_id == "algorithms_core_logic":
         return _render_algorithms_core_logic(capsules, modules_by_id)
     if section.section_id == "dependencies":
@@ -776,6 +868,7 @@ def render_checkpoint_markdown(
     dependency_inventory: HistoryDependencyInventory,
     capsule_index: HistoryAlgorithmCapsuleIndex,
     capsules: list[HistoryAlgorithmCapsule],
+    semantic_context_map: HistorySemanticContextMap | None = None,
 ) -> tuple[str, HistoryRenderManifest]:
     """Render deterministic checkpoint markdown and its debug manifest."""
 
@@ -815,6 +908,7 @@ def render_checkpoint_markdown(
             dependency_inventory=dependency_inventory,
             capsule_index=capsule_index,
             capsules=capsules,
+            semantic_context_map=semantic_context_map,
         )
         lines.extend(section_lines)
         if section_lines and section_lines[-1] != "":
@@ -850,6 +944,8 @@ def render_checkpoint_markdown(
                     dependency_ids=manifest_dependencies,
                     algorithm_capsule_ids=manifest_capsules,
                     capsule_index=capsule_index,
+                    uses_semantic_context=section.section_id
+                    in {"system_context", "interfaces"},
                 ),
                 subheading_count=subheading_count,
             )

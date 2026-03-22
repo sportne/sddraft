@@ -86,6 +86,12 @@ The current implementation covers History Phases 1 through 11-02:
   - heuristic path-based fallback when clustering fails or validates poorly
   - normal builds keeping path grouping authoritative while the semantic map is
     emitted in shadow mode
+- checkpoint-scoped `semantic_context_map.json` artifacts with:
+  - one structured LLM extraction pass over compact snapshot plus semantic-structure evidence
+  - exactly one system node plus evidence-backed context nodes and interface candidates
+  - heuristic fallback that always preserves a conservative system boundary node
+  - normal builds keeping the artifact advisory while benchmark variants can
+    render `System Context` and `Interfaces`
 - tool-scoped `interval_delta_model.json` artifacts with:
   - first-parent commit diff semantics
   - diff-only fallback when the previous snapshot artifact is unavailable
@@ -126,6 +132,9 @@ The current implementation covers History Phases 1 through 11-02:
   - top-level benchmark `suite_manifest.json` artifacts that aggregate
     per-case results and coverage tags while leaving `engllm history-docs build`
     unchanged
+  - internal `real_benchmark` runs plus `promotion_gate_report.json` artifacts
+    for deciding whether shadow-mode semantic variants beat the path baseline on
+    real sibling repositories
 
 Quarterly checkpoint auto-selection is still deferred. H11-01 keeps the
 explicit target commit authoritative and uses the semantic checkpoint plan as

@@ -17,7 +17,7 @@ from engllm.tools.history_docs.benchmark import (
 from engllm.tools.history_docs.build import build_history_docs_checkpoint
 from engllm.tools.history_docs.models import (
     HistoryCheckpointModel,
-    HistoryDocsQualityJudgment,
+    HistoryDocsQualityJudgmentEnvelope,
     HistorySemanticStructureJudgment,
     HistorySemanticStructureMap,
     HistorySnapshotStructuralModel,
@@ -445,7 +445,7 @@ def test_h10_suite_can_compare_baseline_and_semantic_clustering_variants(
             ),
         ],
         llm_client_factory=lambda config: MockLLMClient(
-            canned={HistoryDocsQualityJudgment.__name__: _quality_payload()}
+            canned={HistoryDocsQualityJudgmentEnvelope.__name__: _quality_payload()}
         ),
     )
 

@@ -8,6 +8,7 @@ from engllm.prompts.history_docs.templates import (
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
     SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT,
+    SEMANTIC_CONTEXT_SYSTEM_PROMPT,
     SEMANTIC_STRUCTURE_SYSTEM_PROMPT,
 )
 from engllm.tools.history_docs.models import (
@@ -15,6 +16,7 @@ from engllm.tools.history_docs.models import (
     HistoryDependencyEntry,
     HistoryDocsBenchmarkCase,
     HistoryRenderManifest,
+    HistorySemanticContextMap,
     HistoryValidationReport,
 )
 
@@ -42,6 +44,7 @@ def build_history_docs_quality_judge_prompt(
     render_manifest: HistoryRenderManifest,
     validation_report: HistoryValidationReport,
     checkpoint_model: HistoryCheckpointModel,
+    semantic_context_map: HistorySemanticContextMap | None = None,
 ) -> tuple[str, str]:
     """Return prompts for one H10 single-document quality evaluation."""
 
@@ -80,6 +83,34 @@ def build_history_docs_quality_judge_prompt(
         }
         for section in render_manifest.sections
     ]
+    context_summary = (
+        []
+        if semantic_context_map is None
+        else [
+            {
+                "node_id": node.node_id,
+                "title": node.title,
+                "kind": node.kind,
+                "related_subsystem_ids": node.related_subsystem_ids,
+                "related_module_count": len(node.related_module_ids),
+            }
+            for node in semantic_context_map.context_nodes
+        ]
+    )
+    interface_summary = (
+        []
+        if semantic_context_map is None
+        else [
+            {
+                "interface_id": interface.interface_id,
+                "title": interface.title,
+                "kind": interface.kind,
+                "provider_subsystem_ids": interface.provider_subsystem_ids,
+                "related_module_count": len(interface.related_module_ids),
+            }
+            for interface in semantic_context_map.interfaces
+        ]
+    )
     validation_summary = {
         "error_count": validation_report.error_count,
         "warning_count": validation_report.warning_count,
@@ -99,6 +130,8 @@ def build_history_docs_quality_judge_prompt(
         f"Benchmark Case:\n{_json(case.model_dump(mode='json'))}\n"
         f"Checkpoint Summary:\n{_json(checkpoint_summary)}\n"
         f"Structure Summary:\n{_json(structure_summary)}\n"
+        f"Context Summary:\n{_json(context_summary)}\n"
+        f"Interface Summary:\n{_json(interface_summary)}\n"
         f"Rendered Sections:\n{_json(render_sections)}\n"
         f"Validation Summary:\n{_json(validation_summary)}\n"
         "Checkpoint Markdown:\n"
@@ -125,6 +158,28 @@ def build_semantic_structure_prompt(
         f"Active Modules:\n{_json(modules)}\n"
     )
     return SEMANTIC_STRUCTURE_SYSTEM_PROMPT, user_prompt
+
+
+def build_semantic_context_prompt(
+    *,
+    checkpoint_id: str,
+    target_commit: str,
+    previous_checkpoint_commit: str | None,
+    semantic_subsystems: list[dict[str, object]],
+    modules: list[dict[str, object]],
+    build_sources: list[dict[str, object]],
+) -> tuple[str, str]:
+    """Return prompts for one H11-03 semantic context and interface extraction request."""
+
+    user_prompt = (
+        "Extract a semantic system context and interface candidates using only the "
+        "supplied evidence.\n"
+        f"Checkpoint Context:\n{_json({'checkpoint_id': checkpoint_id, 'target_commit': target_commit, 'previous_checkpoint_commit': previous_checkpoint_commit})}\n"
+        f"Semantic Subsystems:\n{_json(semantic_subsystems)}\n"
+        f"Active Modules:\n{_json(modules)}\n"
+        f"Build Sources:\n{_json(build_sources)}\n"
+    )
+    return SEMANTIC_CONTEXT_SYSTEM_PROMPT, user_prompt
 
 
 def build_semantic_checkpoint_planner_prompt(

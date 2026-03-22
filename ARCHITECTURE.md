@@ -458,6 +458,7 @@ Current implemented slice:
   repo root
 * tool-scoped `snapshot_structural_model.json`
 * tool-scoped `semantic_structure_map.json`
+* tool-scoped `semantic_context_map.json`
 * tool-scoped `interval_delta_model.json`
 * tool-scoped `checkpoint_model.json`
 * tool-scoped `section_outline.json`
@@ -472,6 +473,9 @@ Current implemented slice:
   `checkpoint_model.json`
 * semantic display names, summaries, and capability labels that can be threaded
   into subsystem concepts when the internal semantic grouping mode is enabled
+* advisory semantic context and interface extraction that remains shadow-mode in
+  public builds while benchmark variants can render `System Context` and
+  `Interfaces`
 * separate conservative section planning with scored inclusion and depth
   metadata in `section_outline.json`
 * deterministic algorithm capsule linking into checkpoint concepts and the
@@ -480,6 +484,8 @@ Current implemented slice:
   order and existing structured artifacts only
 * deterministic post-render validation with hard-error build failure and
   warning-only quality findings
+* internal real-repo benchmark and promotion-gate reporting for shadow-mode
+  semantic structure/context variants
 * quarterly auto-selection still deferred
 
 ---

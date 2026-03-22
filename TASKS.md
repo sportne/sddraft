@@ -21,8 +21,8 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H11-02: explicit checkpoint traversal, shared interval manifests, advisory `semantic_checkpoint_plan.json` artifacts for semantic checkpoint anchors, temporary snapshot export, checkpoint structural analysis, checkpoint-scoped `semantic_structure_map.json` artifacts for shadow-mode semantic subsystem/capability clustering, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output, and build-integrated `validation_report.json` quality checks that fail only on hard structural/evidence violations.
-- H10 is now implemented as an internal benchmark/evaluation harness that leaves `engllm history-docs build` unchanged while adding reusable benchmark case manifests, structured LLM-judged `quality_report.json` artifacts, deterministic `comparison_report.json` outputs, and suite-level `suite_manifest.json` aggregation under benchmark workspaces.
+- `engllm history-docs build` now supports H1-H11-03: explicit checkpoint traversal, shared interval manifests, advisory `semantic_checkpoint_plan.json` artifacts for semantic checkpoint anchors, temporary snapshot export, checkpoint structural analysis, checkpoint-scoped `semantic_structure_map.json` artifacts for shadow-mode semantic subsystem/capability clustering, checkpoint-scoped `semantic_context_map.json` artifacts for shadow-mode system-context and interface extraction, tool-scoped interval-delta analysis, checkpoint-state models with active/retired subsystem/module/dependency concepts, evidence-scored `section_outline.json` planning artifacts, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output, and build-integrated `validation_report.json` quality checks that fail only on hard structural/evidence violations.
+- H10 is now implemented as an internal benchmark/evaluation harness that leaves `engllm history-docs build` unchanged while adding reusable benchmark case manifests, structured LLM-judged `quality_report.json` artifacts, deterministic `comparison_report.json` outputs, suite-level `suite_manifest.json` aggregation under benchmark workspaces, and internal real-repo promotion-gate reporting for shadow-mode semantic variants.
 
 ## 2) Guiding Principles / Scope
 
@@ -582,9 +582,11 @@ its own internal phases.
   `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h10.py tests/test_history_docs_h11_02.py tests/test_imports.py`  
   `Result:` pass
 
-- [ ] **H11-03**  
+- [x] **H11-03**  
   `Outcome:` Add LLM-assisted system-context and interface candidate extraction from snapshot evidence.  
-  `Definition of Done:` The checkpoint model can later support missing core sections such as `System Context` and richer `Interfaces`.
+  `Definition of Done:` The tool writes `semantic_context_map.json` during normal builds, exposes experimental `System Context` / `Interfaces` rendering for benchmark variants, and supports H10 real-repo promotion-gate evaluation against the path baseline.  
+  `Verification Command(s):` `.venv/bin/python -m pytest -q --no-cov tests/test_history_docs_h11_03.py tests/test_history_docs_real_benchmark.py tests/test_imports.py`  
+  `Result:` pass
 
 ### History Phase 12 — LLM-Assisted Change Interpretation And Model Enrichment
 

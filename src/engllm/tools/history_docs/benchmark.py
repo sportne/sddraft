@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import fmean
+from typing import cast
 
 from engllm.core.render.json_artifacts import write_json_model
 from engllm.core.workspaces import build_workspace_context, tool_artifact_root
@@ -33,12 +34,15 @@ from engllm.tools.history_docs.models import (
     HistoryDocsBenchmarkFocusTag,
     HistoryDocsBenchmarkSuiteReport,
     HistoryDocsQualityJudgment,
+    HistoryDocsQualityJudgmentEnvelope,
     HistoryDocsQualityReport,
     HistoryDocsRubricDelta,
     HistoryDocsRubricDimension,
     HistoryDocsRubricScore,
     HistoryDocsVariantComparison,
     HistoryRenderManifest,
+    HistorySectionPlanId,
+    HistorySemanticContextMap,
     HistoryValidationReport,
 )
 
@@ -63,6 +67,23 @@ _RUBRIC_DIMENSIONS: tuple[HistoryDocsRubricDimension, ...] = (
     "rationale_capture",
     "present_state_tone",
 )
+_VALID_SECTION_IDS = {
+    "introduction",
+    "architectural_overview",
+    "system_context",
+    "subsystems_modules",
+    "interfaces",
+    "algorithms_core_logic",
+    "dependencies",
+    "build_development_infrastructure",
+    "strategy_variants_design_alternatives",
+    "data_state_management",
+    "error_handling_robustness",
+    "performance_considerations",
+    "security_considerations",
+    "design_notes_rationale",
+    "limitations_constraints",
+}
 
 
 @dataclass(frozen=True)
@@ -89,6 +110,7 @@ class _LoadedBenchmarkArtifacts:
     render_manifest: HistoryRenderManifest
     validation_report: HistoryValidationReport
     markdown: str
+    semantic_context_map: HistorySemanticContextMap | None = None
 
 
 def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
@@ -632,6 +654,43 @@ def semantic_history_docs_benchmark_variant(
     return HistoryDocsBenchmarkVariant(variant_id="semantic-clustering", runner=_run)
 
 
+def semantic_structure_context_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H11-03 semantic structure plus context benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context",
+        runner=_run,
+    )
+
+
 def _empty_rubric_scores() -> list[HistoryDocsRubricScore]:
     return [
         HistoryDocsRubricScore(
@@ -671,11 +730,195 @@ def _load_benchmark_artifacts(
             Path(validation_report_path).read_text(encoding="utf-8")
         ),
         markdown=Path(checkpoint_markdown_path).read_text(encoding="utf-8"),
+        semantic_context_map=(
+            None
+            if build_result.semantic_context_map_path is None
+            else HistorySemanticContextMap.model_validate_json(
+                Path(build_result.semantic_context_map_path).read_text(encoding="utf-8")
+            )
+        ),
     )
 
 
 def _overall_score(scores: list[HistoryDocsRubricScore]) -> float:
     return round(fmean(score.score for score in scores), 3)
+
+
+def _coerce_string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if text:
+                result.append(text)
+        return result
+    if value is None:
+        return []
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _coerce_score_value(value: object) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return max(0, min(5, int(round(value))))
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return max(0, min(5, int(stripped)))
+        if stripped and stripped[0].isdigit():
+            return max(0, min(5, int(stripped[0])))
+    return None
+
+
+def _coerce_rubric_score(
+    dimension: HistoryDocsRubricDimension,
+    payload: object,
+) -> HistoryDocsRubricScore | None:
+    if isinstance(payload, HistoryDocsRubricScore):
+        return payload
+    if isinstance(payload, dict):
+        score = _coerce_score_value(
+            payload.get("score", payload.get("rating", payload.get("value")))
+        )
+        if score is None:
+            return None
+        rationale = str(
+            payload.get("rationale")
+            or payload.get("reason")
+            or payload.get("summary")
+            or payload.get("notes")
+            or "No rationale provided."
+        ).strip()
+        cited_section_ids = cast(
+            list[HistorySectionPlanId],
+            [
+                section_id
+                for section_id in _coerce_string_list(
+                    payload.get("cited_section_ids")
+                    or payload.get("section_ids")
+                    or payload.get("cited_sections")
+                )
+                if section_id in _VALID_SECTION_IDS
+            ],
+        )
+        return HistoryDocsRubricScore(
+            dimension=dimension,
+            score=score,
+            rationale=rationale or "No rationale provided.",
+            matched_expectation_ids=_coerce_string_list(
+                payload.get("matched_expectation_ids")
+                or payload.get("expectation_ids")
+                or payload.get("matched_expectations")
+            ),
+            cited_section_ids=cited_section_ids,
+        )
+    score = _coerce_score_value(payload)
+    if score is None:
+        return None
+    return HistoryDocsRubricScore(
+        dimension=dimension,
+        score=score,
+        rationale="No rationale provided.",
+    )
+
+
+def _normalize_quality_judgment(
+    raw_judgment: HistoryDocsQualityJudgmentEnvelope,
+) -> HistoryDocsQualityJudgment:
+    normalized_scores: dict[HistoryDocsRubricDimension, HistoryDocsRubricScore] = {}
+    normalization_notes: list[str] = []
+
+    def remember(dimension: str, payload: object) -> None:
+        if dimension not in _RUBRIC_DIMENSIONS or dimension in normalized_scores:
+            return
+        rubric_dimension = cast(HistoryDocsRubricDimension, dimension)
+        score = _coerce_rubric_score(rubric_dimension, payload)
+        if score is not None:
+            normalized_scores[rubric_dimension] = score
+
+    for payload in (raw_judgment.rubric_scores, raw_judgment.scores):
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, HistoryDocsRubricScore):
+                    remember(item.dimension, item)
+                elif isinstance(item, dict):
+                    remember(str(item.get("dimension", "")).strip(), item)
+        elif isinstance(payload, dict):
+            for dimension, item in payload.items():
+                remember(str(dimension).strip(), item)
+
+    for dimension in _RUBRIC_DIMENSIONS:
+        remember(dimension, getattr(raw_judgment, dimension, None))
+
+    for dimension, payload in (raw_judgment.model_extra or {}).items():
+        remember(str(dimension).strip(), payload)
+
+    missing_dimensions = [
+        dimension
+        for dimension in _RUBRIC_DIMENSIONS
+        if dimension not in normalized_scores
+    ]
+    if missing_dimensions and not normalized_scores:
+        raise ValueError(
+            "Evaluator response did not include any recognizable rubric scores"
+        )
+    if missing_dimensions:
+        normalization_notes.append(
+            "Evaluator omitted rubric dimensions: "
+            + ", ".join(missing_dimensions)
+            + ". Filled with conservative zero scores."
+        )
+        for dimension in missing_dimensions:
+            normalized_scores[dimension] = HistoryDocsRubricScore(
+                dimension=dimension,
+                score=0,
+                rationale="Evaluator omitted this rubric dimension.",
+            )
+
+    return HistoryDocsQualityJudgment(
+        rubric_scores=[
+            normalized_scores[dimension] for dimension in _RUBRIC_DIMENSIONS
+        ],
+        strengths=raw_judgment.strengths,
+        weaknesses=raw_judgment.weaknesses,
+        unsupported_claim_risks=raw_judgment.unsupported_claim_risks,
+        tbd_overuse=raw_judgment.tbd_overuse,
+        evaluator_notes=[*raw_judgment.evaluator_notes, *normalization_notes],
+        uncertainty=[*raw_judgment.uncertainty, *normalization_notes],
+    )
+
+
+def _failed_quality_report(
+    *,
+    case: PreparedHistoryDocsBenchmarkCase,
+    variant_id: str,
+    checkpoint_id: str,
+    failure_note: str,
+    build_failed: bool,
+) -> HistoryDocsQualityReport:
+    return HistoryDocsQualityReport(
+        case_id=case.manifest.case_id,
+        variant_id=variant_id,
+        checkpoint_id=checkpoint_id,
+        build_failed=build_failed,
+        evaluation_status="llm_failed",
+        validation_error_count=0,
+        validation_warning_count=0,
+        rubric_scores=_empty_rubric_scores(),
+        overall_score=0.0,
+        weaknesses=[
+            (
+                "Variant build failed before evaluation completed."
+                if build_failed
+                else "Quality evaluation failed before scoring completed."
+            )
+        ],
+        evaluator_notes=[failure_note],
+        uncertainty=[failure_note],
+        failure_note=failure_note,
+    )
 
 
 def evaluate_history_docs_quality(
@@ -696,24 +939,30 @@ def evaluate_history_docs_quality(
             render_manifest=artifacts.render_manifest,
             validation_report=artifacts.validation_report,
             checkpoint_model=artifacts.checkpoint_model,
+            semantic_context_map=artifacts.semantic_context_map,
         )
         response = llm_client.generate_structured(
             StructuredGenerationRequest(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                response_model=HistoryDocsQualityJudgment,
+                response_model=HistoryDocsQualityJudgmentEnvelope,
                 model_name=case.manifest.project_config.llm.model_name,
                 temperature=case.manifest.project_config.llm.temperature,
             )
         )
-        judgment = HistoryDocsQualityJudgment.model_validate(
-            response.content.model_dump(mode="python")
+        judgment = _normalize_quality_judgment(
+            HistoryDocsQualityJudgmentEnvelope.model_validate(
+                response.content.model_dump(mode="python")
+            )
         )
         return HistoryDocsQualityReport(
             case_id=case.manifest.case_id,
             variant_id=variant_id,
             checkpoint_id=checkpoint_id,
+            build_failed=False,
             evaluation_status="scored",
+            validation_error_count=artifacts.validation_report.error_count,
+            validation_warning_count=artifacts.validation_report.warning_count,
             rubric_scores=judgment.rubric_scores,
             overall_score=_overall_score(judgment.rubric_scores),
             strengths=judgment.strengths,
@@ -724,17 +973,12 @@ def evaluate_history_docs_quality(
             uncertainty=judgment.uncertainty,
         )
     except Exception as exc:
-        return HistoryDocsQualityReport(
-            case_id=case.manifest.case_id,
+        return _failed_quality_report(
+            case=case,
             variant_id=variant_id,
             checkpoint_id=checkpoint_id,
-            evaluation_status="llm_failed",
-            rubric_scores=_empty_rubric_scores(),
-            overall_score=0.0,
-            weaknesses=["Quality evaluation failed before scoring completed."],
-            evaluator_notes=[f"Evaluator failure: {type(exc).__name__}"],
-            uncertainty=[str(exc)],
-            failure_note=f"{type(exc).__name__}: {exc}",
+            build_failed=False,
+            failure_note=f"Evaluator failure: {type(exc).__name__}: {exc}",
         )
 
 
@@ -858,13 +1102,22 @@ def run_history_docs_benchmark_suite(
                 f"{benchmark_suite_workspace_id(suite_id)}"
                 f"__{case.manifest.case_id}__{variant.variant_id}"
             )
-            build_result = variant.runner(case, workspace_id)
-            quality_report = evaluate_history_docs_quality(
-                case=case,
-                variant_id=variant.variant_id,
-                build_result=build_result,
-                llm_client=llm_client,
-            )
+            try:
+                build_result = variant.runner(case, workspace_id)
+                quality_report = evaluate_history_docs_quality(
+                    case=case,
+                    variant_id=variant.variant_id,
+                    build_result=build_result,
+                    llm_client=llm_client,
+                )
+            except Exception as exc:
+                quality_report = _failed_quality_report(
+                    case=case,
+                    variant_id=variant.variant_id,
+                    checkpoint_id="build-failed",
+                    build_failed=True,
+                    failure_note=f"Build failure: {type(exc).__name__}: {exc}",
+                )
             if quality_report.evaluation_status != "scored":
                 failed_evaluation_count += 1
             case_quality_reports.append(quality_report)
@@ -878,11 +1131,6 @@ def run_history_docs_benchmark_suite(
             write_json_model(quality_path, quality_report)
             quality_report_paths[variant.variant_id] = quality_path
 
-        baseline_report = next(
-            report
-            for report in case_quality_reports
-            if report.variant_id == variants[0].variant_id
-        )
         comparison_report = HistoryDocsBenchmarkCaseComparisonReport(
             case_id=case.manifest.case_id,
             baseline_variant_id=variants[0].variant_id,
@@ -890,11 +1138,11 @@ def run_history_docs_benchmark_suite(
             comparisons=[
                 compare_history_docs_quality_reports(
                     case_id=case.manifest.case_id,
-                    baseline_report=baseline_report,
-                    candidate_report=report,
+                    baseline_report=left_report,
+                    candidate_report=right_report,
                 )
-                for report in case_quality_reports
-                if report.variant_id != variants[0].variant_id
+                for left_index, left_report in enumerate(case_quality_reports)
+                for right_report in case_quality_reports[left_index + 1 :]
             ],
         )
         comparison_path = benchmark_comparison_report_path(
@@ -954,6 +1202,7 @@ __all__ = [
     "compare_history_docs_quality_reports",
     "evaluate_history_docs_quality",
     "run_history_docs_benchmark_suite",
+    "semantic_structure_context_benchmark_variant",
     "semantic_history_docs_benchmark_variant",
     "validate_benchmark_focus_coverage",
 ]

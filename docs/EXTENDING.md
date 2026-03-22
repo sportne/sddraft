@@ -348,6 +348,10 @@ Current H1-H10 behavior:
 - H11-02 writes `tools/history_docs/checkpoints/<checkpoint_id>/semantic_structure_map.json`
 - H11-02 keeps path-based grouping as the public-build baseline while enabling
   an internal semantic grouping mode for H3-H9 benchmark variants
+- H11-03 writes `tools/history_docs/checkpoints/<checkpoint_id>/semantic_context_map.json`
+- H11-03 keeps system-context and interface extraction advisory in normal builds
+  while enabling candidate-only `System Context` / `Interfaces` rendering for
+  benchmark variants
 - interval deltas are derived from first-parent commit diffs plus snapshot
   comparison
 - interval artifacts are written to
@@ -388,6 +392,9 @@ Current H1-H10 behavior:
   `comparison_report.json` and `suite_manifest.json`
 - H11-02 adds a semantic-clustering benchmark variant so H10 can compare
   path-based grouping against semantic subsystem/capability clustering
+- H11-03 adds a semantic-structure-context benchmark variant plus an internal
+  real-repo runner that writes `promotion_gate_report.json` before either
+  semantic mode is promoted beyond shadow mode
 - H9 validates final rendered artifacts rather than live repo state
 - H9 fails the build only on hard validation errors and preserves the report on
   failure

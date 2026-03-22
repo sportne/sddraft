@@ -20,7 +20,7 @@ from engllm.tools.history_docs.models import (
     HistoryCheckpointModel,
     HistoryDocsBenchmarkCase,
     HistoryDocsBenchmarkExpectation,
-    HistoryDocsQualityJudgment,
+    HistoryDocsQualityJudgmentEnvelope,
     HistoryDocsQualityReport,
     HistoryDocsRubricScore,
     HistoryRenderedSection,
@@ -40,7 +40,7 @@ class _FailOnceJudgeClient:
     def __init__(self, payload: dict[str, object]) -> None:
         self._calls = 0
         self._delegate = MockLLMClient(
-            canned={HistoryDocsQualityJudgment.__name__: payload}
+            canned={HistoryDocsQualityJudgmentEnvelope.__name__: payload}
         )
 
     def generate_structured(self, request: StructuredGenerationRequest):
@@ -98,6 +98,36 @@ def _canned_quality_payload(score: int = 4) -> dict[str, object]:
         "tbd_overuse": False,
         "evaluator_notes": ["Mock benchmark review."],
         "uncertainty": ["Limited to fixture evidence."],
+    }
+
+
+def _loose_quality_payload(score: int = 4) -> dict[str, object]:
+    return {
+        "coverage": {"score": score, "rationale": "Coverage is strong."},
+        "coherence": {"score": score, "rationale": "Coherence is strong."},
+        "specificity": {"score": score, "rationale": "Specificity is strong."},
+        "algorithm_understanding": {
+            "score": score,
+            "rationale": "Algorithm understanding is strong.",
+        },
+        "dependency_understanding": {
+            "score": score,
+            "rationale": "Dependency understanding is strong.",
+        },
+        "rationale_capture": {
+            "score": score,
+            "rationale": "Rationale capture is strong.",
+        },
+        "present_state_tone": {
+            "score": score,
+            "rationale": "Present-state tone is strong.",
+        },
+        "strengths": ["Loose-shape evaluation complete."],
+        "weaknesses": [],
+        "unsupported_claim_risks": [],
+        "tbd_overuse": False,
+        "evaluator_notes": [],
+        "uncertainty": [],
     }
 
 
@@ -261,6 +291,125 @@ def test_compare_history_docs_quality_reports_uses_stable_tie_breaks() -> None:
     ]
 
 
+def test_evaluate_history_docs_quality_normalizes_loose_provider_payload(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    case = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )[0]
+    build_result = benchmark.baseline_history_docs_benchmark_variant().runner(
+        case,
+        "benchmark-normalization",
+    )
+
+    report = benchmark.evaluate_history_docs_quality(
+        case=case,
+        variant_id="baseline",
+        build_result=build_result,
+        llm_client=MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: _loose_quality_payload(3)
+            }
+        ),
+    )
+
+    assert report.evaluation_status == "scored"
+    assert report.overall_score == 3.0
+    assert len(report.rubric_scores) == 7
+
+
+def test_evaluate_history_docs_quality_normalizes_alias_fields_and_missing_dimensions(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    case = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )[0]
+    build_result = benchmark.baseline_history_docs_benchmark_variant().runner(
+        case,
+        "benchmark-alias-normalization",
+    )
+
+    report = benchmark.evaluate_history_docs_quality(
+        case=case,
+        variant_id="baseline",
+        build_result=build_result,
+        llm_client=MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: {
+                    "scores": {
+                        "coverage": {
+                            "rating": "4",
+                            "reason": "Coverage is strong.",
+                            "expectation_ids": ["exp-1"],
+                            "section_ids": ["architectural_overview"],
+                        },
+                        "coherence": 3,
+                        "specificity": {"value": 2, "notes": "Specific enough."},
+                        "algorithm_understanding": True,
+                        "dependency_understanding": "5 strong",
+                        "rationale_capture": {"score": 2, "summary": "Some rationale."},
+                    },
+                    "strengths": ["Alias payload normalized."],
+                    "weaknesses": [],
+                    "unsupported_claim_risks": [],
+                    "tbd_overuse": False,
+                    "evaluator_notes": [],
+                    "uncertainty": [],
+                }
+            }
+        ),
+    )
+
+    by_dimension = {score.dimension: score for score in report.rubric_scores}
+    assert report.evaluation_status == "scored"
+    assert by_dimension["coverage"].score == 4
+    assert by_dimension["coherence"].score == 3
+    assert by_dimension["algorithm_understanding"].score == 1
+    assert by_dimension["dependency_understanding"].score == 5
+    assert by_dimension["present_state_tone"].score == 0
+    assert any("omitted rubric dimensions" in note for note in report.evaluator_notes)
+
+
+def test_evaluate_history_docs_quality_marks_reports_failed_when_scores_are_unusable(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    case = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )[0]
+    build_result = benchmark.baseline_history_docs_benchmark_variant().runner(
+        case,
+        "benchmark-invalid-scores",
+    )
+
+    report = benchmark.evaluate_history_docs_quality(
+        case=case,
+        variant_id="baseline",
+        build_result=build_result,
+        llm_client=MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: {
+                    "strengths": ["No usable rubric scores returned."],
+                    "weaknesses": [],
+                    "unsupported_claim_risks": [],
+                    "tbd_overuse": False,
+                    "evaluator_notes": [],
+                    "uncertainty": [],
+                }
+            }
+        ),
+    )
+
+    assert report.evaluation_status == "llm_failed"
+    assert report.overall_score == 0.0
+    assert "recognizable rubric scores" in (report.failure_note or "")
+
+
 def test_run_history_docs_benchmark_suite_writes_suite_and_quality_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -274,7 +423,9 @@ def test_run_history_docs_benchmark_suite_writes_suite_and_quality_artifacts(
         output_root=output_root,
         cases=cases,
         llm_client_factory=lambda config: MockLLMClient(
-            canned={HistoryDocsQualityJudgment.__name__: _canned_quality_payload()}
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: _canned_quality_payload()
+            }
         ),
     )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from engllm.core.analysis.history import HistoryBuildSource, HistoryCommitSummary
 from engllm.domain.models import (
@@ -104,7 +104,9 @@ HistorySectionId = Literal[
 HistorySectionPlanId = Literal[
     "introduction",
     "architectural_overview",
+    "system_context",
     "subsystems_modules",
+    "interfaces",
     "algorithms_core_logic",
     "dependencies",
     "build_development_infrastructure",
@@ -168,6 +170,22 @@ HistorySemanticCheckpointEvaluationStatus = Literal[
     "llm_failed",
 ]
 HistorySemanticStructureStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistorySemanticContextStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistorySystemContextNodeKind = Literal[
+    "system",
+    "external_actor",
+    "external_system",
+    "data_store",
+    "runtime_environment",
+]
+HistorySemanticInterfaceKind = Literal[
+    "http_api",
+    "cli_surface",
+    "library_surface",
+    "data_contract",
+    "internal_service",
+    "protocol",
+]
 HistoryDocsBenchmarkFocusTag = Literal[
     "small",
     "medium",
@@ -180,6 +198,8 @@ HistoryDocsBenchmarkExpectationKind = Literal[
     "algorithm_signal",
     "dependency_understanding",
     "architectural_distinction",
+    "system_context_signal",
+    "interface_distinction",
     "present_state_tone",
 ]
 HistoryDocsRubricDimension = Literal[
@@ -709,6 +729,88 @@ class HistorySemanticStructureJudgment(DomainModel):
         return self
 
 
+class HistorySystemContextNode(DomainModel):
+    """One semantic system-context node for a checkpoint."""
+
+    node_id: str
+    title: str
+    kind: HistorySystemContextNodeKind
+    summary: str
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySemanticInterfaceCandidate(DomainModel):
+    """One evidence-backed semantic interface candidate."""
+
+    interface_id: str
+    title: str
+    kind: HistorySemanticInterfaceKind
+    summary: str
+    provider_subsystem_ids: list[str] = Field(default_factory=list)
+    consumer_context_node_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySemanticContextMap(DomainModel):
+    """Checkpoint-scoped semantic context and interface artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistorySemanticContextStatus
+    context_nodes: list[HistorySystemContextNode] = Field(default_factory=list)
+    interfaces: list[HistorySemanticInterfaceCandidate] = Field(default_factory=list)
+
+
+class HistorySemanticContextJudgmentNode(DomainModel):
+    """Structured LLM proposal for one context node."""
+
+    node_id: str
+    title: str
+    kind: HistorySystemContextNodeKind
+    summary: str
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+
+
+class HistorySemanticContextJudgmentInterface(DomainModel):
+    """Structured LLM proposal for one interface candidate."""
+
+    interface_id: str
+    title: str
+    kind: HistorySemanticInterfaceKind
+    summary: str
+    provider_subsystem_ids: list[str] = Field(default_factory=list)
+    consumer_context_node_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+
+
+class HistorySemanticContextJudgment(DomainModel):
+    """Validated LLM response for semantic context and interface extraction."""
+
+    context_nodes: list[HistorySemanticContextJudgmentNode] = Field(
+        default_factory=list
+    )
+    interfaces: list[HistorySemanticContextJudgmentInterface] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> HistorySemanticContextJudgment:
+        """Reject duplicate context-node or interface identifiers."""
+
+        node_ids = [node.node_id for node in self.context_nodes]
+        interface_ids = [interface.interface_id for interface in self.interfaces]
+        if len(node_ids) != len(set(node_ids)):
+            raise ValueError("context_nodes must not repeat node_id values")
+        if len(interface_ids) != len(set(interface_ids)):
+            raise ValueError("interfaces must not repeat interface_id values")
+        return self
+
+
 class HistorySemanticCheckpointJudgment(DomainModel):
     """Structured planner judgment for one deterministic candidate commit."""
 
@@ -790,6 +892,40 @@ class HistoryDocsRubricScore(DomainModel):
     cited_section_ids: list[HistorySectionPlanId] = Field(default_factory=list)
 
 
+class HistoryDocsLooseRubricScore(DomainModel):
+    """Looser rubric-shape model used to normalize real-provider judge output."""
+
+    model_config = ConfigDict(extra="allow")
+
+    dimension: str | None = None
+    score: int | None = Field(default=None, ge=0, le=5)
+    rationale: str | None = None
+    matched_expectation_ids: list[str] = Field(default_factory=list)
+    cited_section_ids: list[str] = Field(default_factory=list)
+
+
+class HistoryDocsQualityJudgmentEnvelope(DomainModel):
+    """Permissive H10 judge response model for provider-facing structured output."""
+
+    model_config = ConfigDict(extra="allow")
+
+    rubric_scores: object | None = None
+    scores: object | None = None
+    coverage: object | None = None
+    coherence: object | None = None
+    specificity: object | None = None
+    algorithm_understanding: object | None = None
+    dependency_understanding: object | None = None
+    rationale_capture: object | None = None
+    present_state_tone: object | None = None
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    unsupported_claim_risks: list[str] = Field(default_factory=list)
+    tbd_overuse: bool = False
+    evaluator_notes: list[str] = Field(default_factory=list)
+    uncertainty: list[str] = Field(default_factory=list)
+
+
 class HistoryDocsQualityJudgment(DomainModel):
     """Structured LLM-as-judge response for one rendered checkpoint document."""
 
@@ -815,7 +951,10 @@ class HistoryDocsQualityReport(DomainModel):
     case_id: str
     variant_id: str
     checkpoint_id: str
+    build_failed: bool = False
     evaluation_status: HistoryDocsQualityEvaluationStatus
+    validation_error_count: int = 0
+    validation_warning_count: int = 0
     rubric_scores: list[HistoryDocsRubricScore] = Field(default_factory=list)
     overall_score: float = 0.0
     strengths: list[str] = Field(default_factory=list)
@@ -887,6 +1026,34 @@ class HistoryDocsBenchmarkSuiteReport(DomainModel):
     coverage_tags: list[HistoryDocsBenchmarkFocusTag] = Field(default_factory=list)
 
 
+class HistoryDocsPromotionGateVerdict(DomainModel):
+    """Deterministic promotion-gate verdict for one candidate variant."""
+
+    phase_id: str
+    candidate_variant_id: str
+    baseline_variant_ids: list[str] = Field(default_factory=list)
+    passed: bool = False
+    reasons: list[str] = Field(default_factory=list)
+
+
+class HistoryDocsPromotionGateReport(DomainModel):
+    """Top-level promotion summary for one real-repo H10 benchmark run."""
+
+    suite_id: str
+    provider: str
+    model_name: str
+    temperature: float
+    repo_case_ids: list[str] = Field(default_factory=list)
+    average_score_by_variant: dict[str, float] = Field(default_factory=dict)
+    win_counts_by_variant: dict[str, int] = Field(default_factory=dict)
+    unsupported_claim_risk_totals: dict[str, int] = Field(default_factory=dict)
+    failed_build_or_evaluation_count_by_variant: dict[str, int] = Field(
+        default_factory=dict
+    )
+    validation_error_count_by_variant: dict[str, int] = Field(default_factory=dict)
+    gate_verdicts: list[HistoryDocsPromotionGateVerdict] = Field(default_factory=list)
+
+
 class HistoryBuildResult(DomainModel):
     """Result for one history-docs build run."""
 
@@ -900,6 +1067,7 @@ class HistoryBuildResult(DomainModel):
     intervals_path: Path
     semantic_checkpoint_plan_path: Path | None = None
     semantic_structure_map_path: Path | None = None
+    semantic_context_map_path: Path | None = None
     snapshot_manifest_path: Path | None = None
     snapshot_structural_model_path: Path | None = None
     interval_delta_model_path: Path | None = None
@@ -920,6 +1088,9 @@ class HistoryBuildResult(DomainModel):
     semantic_subsystem_count: int = 0
     semantic_capability_count: int = 0
     semantic_structure_status: HistorySemanticStructureStatus | None = None
+    semantic_context_status: HistorySemanticContextStatus | None = None
+    context_node_count: int = 0
+    interface_candidate_count: int = 0
     subsystem_change_count: int = 0
     interface_change_count: int = 0
     dependency_change_count: int = 0
@@ -959,8 +1130,12 @@ __all__ = [
     "HistoryDocsBenchmarkCaseReportRef",
     "HistoryDocsBenchmarkExpectation",
     "HistoryDocsBenchmarkFocusTag",
+    "HistoryDocsPromotionGateReport",
+    "HistoryDocsPromotionGateVerdict",
     "HistoryDocsBenchmarkSuiteReport",
+    "HistoryDocsLooseRubricScore",
     "HistoryDocsQualityEvaluationStatus",
+    "HistoryDocsQualityJudgmentEnvelope",
     "HistoryDocsQualityJudgment",
     "HistoryDocsQualityReport",
     "HistoryDocsRubricDelta",
@@ -993,6 +1168,13 @@ __all__ = [
     "HistorySemanticCheckpointPlan",
     "HistorySemanticCheckpointRecommendation",
     "HistorySemanticCheckpointSignalKind",
+    "HistorySemanticContextJudgment",
+    "HistorySemanticContextJudgmentInterface",
+    "HistorySemanticContextJudgmentNode",
+    "HistorySemanticContextMap",
+    "HistorySemanticContextStatus",
+    "HistorySemanticInterfaceCandidate",
+    "HistorySemanticInterfaceKind",
     "HistorySemanticStructureJudgment",
     "HistorySemanticStructureJudgmentCapability",
     "HistorySemanticStructureJudgmentSubsystem",
@@ -1000,6 +1182,8 @@ __all__ = [
     "HistorySemanticStructureStatus",
     "HistorySemanticSubsystemCluster",
     "HistorySemanticCapabilityCluster",
+    "HistorySystemContextNode",
+    "HistorySystemContextNodeKind",
     "HistorySectionDepth",
     "HistorySectionId",
     "HistorySectionKind",

@@ -14,6 +14,9 @@ Field semantics:
 - uncertainty: short caveats or missing-evidence notes
 - confidence: numeric 0.0-1.0 confidence based on evidence strength
 Return valid JSON that matches the provided schema.
+Return rubric scores in a rubric_scores array with exactly seven entries, one for
+each listed rubric dimension.
+Do not omit any rubric dimension.
 """.strip()
 
 HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT = """
@@ -51,6 +54,21 @@ Rules:
 - capability references may point only to returned semantic subsystem ids and listed module ids
 - summaries should be short present-state descriptions grounded in the supplied evidence
 Prefer semantic subsystems that reflect architecture or responsibility rather than raw directory names when the evidence supports it.
+Return valid JSON that matches the provided schema.
+""".strip()
+
+SEMANTIC_CONTEXT_SYSTEM_PROMPT = """
+You extract a semantic system context and interface candidates for one checkpointed
+project snapshot.
+Use only the structured evidence provided in the user prompt.
+Rules:
+- return exactly one context node with kind "system"
+- do not invent module ids, subsystem ids, context node ids, or interface ids
+- context node and interface references may point only to listed semantic subsystem ids,
+  listed module ids, and returned context node ids
+- keep summaries short, present-state, and grounded in the supplied evidence
+- interfaces should capture real boundaries or contracts only when the evidence is strong
+- do not invent external systems or consumers without evidence
 Return valid JSON that matches the provided schema.
 """.strip()
 

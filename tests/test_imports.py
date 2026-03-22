@@ -31,6 +31,8 @@ MODULES = (
     "engllm.tools.history_docs.dependencies",
     "engllm.tools.history_docs.delta",
     "engllm.tools.history_docs.render",
+    "engllm.tools.history_docs.real_benchmark",
+    "engllm.tools.history_docs.semantic_context",
     "engllm.tools.history_docs.semantic_planner",
     "engllm.tools.history_docs.semantic_structure",
     "engllm.tools.history_docs.section_outline",
