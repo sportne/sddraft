@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from engllm.cli.main import main
 from engllm.domain.models import CodeUnitSummary, SymbolSummary
 from engllm.llm.mock import MockLLMClient
 from engllm.tools.history_docs.build import build_history_docs_checkpoint
@@ -29,6 +30,7 @@ from tests.history_docs_helpers import (
     init_repo,
     section_outline_path,
     semantic_context_map_path,
+    write_project_config,
 )
 
 
@@ -427,3 +429,60 @@ def test_semantic_context_experimental_variant_renders_system_context_and_interf
         Path("semantic_context_map.json")
         in context_sections["interfaces"].source_artifact_paths
     )
+
+
+def test_history_docs_cli_build_promotes_semantic_context_rendering(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    repo_root, target = _create_semantic_context_repo(tmp_path)
+    output_root = tmp_path / "artifacts"
+    config_path = tmp_path / "project.yaml"
+    write_project_config(config_path, output_root, source_roots=["repo/src"])
+
+    rc = main(
+        [
+            "history-docs",
+            "build",
+            "--config",
+            str(config_path),
+            "--repo-root",
+            str(repo_root),
+            "--checkpoint-commit",
+            target,
+        ]
+    )
+    stdout = capsys.readouterr().out
+    checkpoint_root = (
+        output_root
+        / "workspaces"
+        / repo_root.name
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+    )
+    checkpoint_ids = sorted(path.name for path in checkpoint_root.iterdir() if path.is_dir())
+
+    markdown = checkpoint_markdown_path(
+        output_root,
+        repo_root.name,
+        checkpoint_ids[0],
+    ).read_text(encoding="utf-8")
+    outline = HistorySectionOutline.model_validate_json(
+        section_outline_path(
+            output_root,
+            repo_root.name,
+            checkpoint_ids[0],
+        ).read_text(encoding="utf-8")
+    )
+
+    assert rc == 0
+    assert checkpoint_ids
+    assert "Checkpoint markdown:" in stdout
+    assert "## System Context" in markdown
+    assert "## Interfaces" in markdown
+    assert {
+        section.section_id
+        for section in outline.sections
+        if section.status == "included"
+    } >= {"system_context", "interfaces"}

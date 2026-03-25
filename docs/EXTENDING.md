@@ -346,12 +346,11 @@ Current H1-H10 behavior:
 - manifest search scope is limited to analyzed source roots plus their ancestor
   chain back to repo root
 - H11-02 writes `tools/history_docs/checkpoints/<checkpoint_id>/semantic_structure_map.json`
-- H11-02 keeps path-based grouping as the public-build baseline while enabling
-  an internal semantic grouping mode for H3-H9 benchmark variants
+- H11-02 keeps standalone semantic clustering shadow-only while H10 retains an
+  explicit path-based baseline variant for comparison
 - H11-03 writes `tools/history_docs/checkpoints/<checkpoint_id>/semantic_context_map.json`
-- H11-03 keeps system-context and interface extraction advisory in normal builds
-  while enabling candidate-only `System Context` / `Interfaces` rendering for
-  benchmark variants
+- H11-03 promotes public `engllm history-docs build` rendering of `System Context`
+  and `Interfaces` through the combined semantic-structure-context path
 - interval deltas are derived from first-parent commit diffs plus snapshot
   comparison
 - interval artifacts are written to

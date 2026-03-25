@@ -616,6 +616,8 @@ def baseline_history_docs_benchmark_variant() -> HistoryDocsBenchmarkVariant:
             checkpoint_commit=prepared_case.manifest.target_commit,
             previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
             workspace_id=workspace_id,
+            subsystem_grouping_mode="path",
+            experimental_section_mode="default",
         )
 
     return HistoryDocsBenchmarkVariant(variant_id="baseline", runner=_run)
@@ -644,6 +646,7 @@ def semantic_history_docs_benchmark_variant(
             previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
             workspace_id=workspace_id,
             subsystem_grouping_mode="semantic",
+            experimental_section_mode="default",
             llm_client_override=(
                 None
                 if llm_client_builder is None

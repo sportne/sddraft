@@ -387,6 +387,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         previous_checkpoint_commit=args.previous_checkpoint_commit,
         workspace_id=args.workspace_id,
         progress_callback=_progress,
+        subsystem_grouping_mode="semantic",
+        experimental_section_mode="semantic_context",
     )
     print(
         f"Built history checkpoint {result.checkpoint_id} "

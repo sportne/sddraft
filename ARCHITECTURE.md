@@ -473,9 +473,9 @@ Current implemented slice:
   `checkpoint_model.json`
 * semantic display names, summaries, and capability labels that can be threaded
   into subsystem concepts when the internal semantic grouping mode is enabled
-* advisory semantic context and interface extraction that remains shadow-mode in
-  public builds while benchmark variants can render `System Context` and
-  `Interfaces`
+* promoted public-build semantic context and interface rendering through the
+  combined H11-03 path, while plain H11-02 semantic clustering remains
+  shadow-only
 * separate conservative section planning with scored inclusion and depth
   metadata in `section_outline.json`
 * deterministic algorithm capsule linking into checkpoint concepts and the

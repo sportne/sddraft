@@ -84,14 +84,14 @@ The current implementation covers History Phases 1 through 11-02:
   - exclusive semantic subsystem partitions over active modules
   - non-exclusive capability labels attached to modules and semantic subsystems
   - heuristic path-based fallback when clustering fails or validates poorly
-  - normal builds keeping path grouping authoritative while the semantic map is
-    emitted in shadow mode
+  - internal path-based baseline control still available for H10 comparisons
+  - plain semantic clustering without H11-03 remains shadow-only
 - checkpoint-scoped `semantic_context_map.json` artifacts with:
   - one structured LLM extraction pass over compact snapshot plus semantic-structure evidence
   - exactly one system node plus evidence-backed context nodes and interface candidates
   - heuristic fallback that always preserves a conservative system boundary node
-  - normal builds keeping the artifact advisory while benchmark variants can
-    render `System Context` and `Interfaces`
+  - public `engllm history-docs build` now renders `System Context` and
+    `Interfaces` through the promoted H11-03 path
 - tool-scoped `interval_delta_model.json` artifacts with:
   - first-parent commit diff semantics
   - diff-only fallback when the previous snapshot artifact is unavailable
