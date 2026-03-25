@@ -96,6 +96,11 @@ The current implementation covers History Phases 1 through 11-02:
   - first-parent commit diff semantics
   - diff-only fallback when the previous snapshot artifact is unavailable
   - structured subsystem, interface, dependency, and algorithm candidate signals
+- checkpoint-scoped `interval_interpretation.json` artifacts with:
+  - one structured LLM interpretation pass over compact H3/H2 evidence
+  - design-change insights, rationale clues, and significant change windows
+  - validation that prevents invented commits, change ids, subsystem ids, or evidence links
+  - conservative heuristic fallback when interpretation fails or returns empty results
 - tool-scoped `checkpoint_model.json` artifacts with:
   - active and retired subsystem/module/dependency-source concepts
   - optional semantic display names, summaries, capability labels, and baseline
@@ -331,6 +336,7 @@ H1 and H2 currently implement these shared artifacts:
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/manifest.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/snapshot_structural_model.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/interval_delta_model.json`
+- `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/interval_interpretation.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/section_outline.json`
 - `artifacts/workspaces/<workspace_id>/tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/index.json`
@@ -354,6 +360,13 @@ Current H3 behavior adds one tool-scoped interval artifact:
 - `interval_delta_model.json` as the deterministic checkpoint-window delta model
   derived from interval commits, first-parent diffs, current snapshot evidence,
   and previous-snapshot comparison when available
+
+Current H12-01 behavior adds one checkpoint-scoped interval interpretation
+artifact:
+
+- `interval_interpretation.json` as the structured LLM-assisted interpretation
+  layer over H3 evidence, with design-change insights, rationale clues,
+  significant windows, and conservative heuristic fallback
 
 Current H4 behavior adds one tool-scoped checkpoint-state artifact:
 

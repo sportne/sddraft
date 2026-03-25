@@ -68,6 +68,10 @@ from engllm.tools.history_docs.dependencies import (
     dependency_inventory_path,
     link_dependency_inventory_to_checkpoint_model,
 )
+from engllm.tools.history_docs.interval_interpretation import (
+    build_interval_interpretation,
+    interval_interpretation_path,
+)
 from engllm.tools.history_docs.models import (
     HistoryBuildResult,
     HistoryCheckpointModel,
@@ -687,6 +691,31 @@ def build_history_docs_checkpoint(
 
     _progress(
         progress_callback,
+        "history-docs: interpreting interval change significance",
+    )
+    interval_interpretation = build_interval_interpretation(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        snapshot=structural_model,
+        delta_model=interval_delta_model,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+        semantic_structure_map=semantic_structure_map,
+        semantic_context_map=semantic_context_map,
+    )
+    interval_interpretation_artifact_path = interval_interpretation_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    write_json_model(
+        interval_interpretation_artifact_path,
+        interval_interpretation,
+    )
+
+    _progress(
+        progress_callback,
         "history-docs: building checkpoint documentation model",
     )
     checkpoint_model = build_checkpoint_model(
@@ -864,6 +893,7 @@ def build_history_docs_checkpoint(
         snapshot_manifest_path=snapshot_manifest_path,
         snapshot_structural_model_path=snapshot_structural_model_path,
         interval_delta_model_path=interval_delta_path,
+        interval_interpretation_path=interval_interpretation_artifact_path,
         checkpoint_model_path=checkpoint_model_artifact_path,
         section_outline_path=section_outline_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
@@ -885,12 +915,17 @@ def build_history_docs_checkpoint(
         semantic_capability_count=len(semantic_structure_map.capabilities),
         semantic_structure_status=semantic_structure_map.evaluation_status,
         semantic_context_status=semantic_context_map.evaluation_status,
+        interval_interpretation_status=interval_interpretation.evaluation_status,
         context_node_count=len(semantic_context_map.context_nodes),
         interface_candidate_count=len(semantic_context_map.interfaces),
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
         interface_change_count=len(interval_delta_model.interface_changes),
         dependency_change_count=len(interval_delta_model.dependency_changes),
         algorithm_candidate_count=len(interval_delta_model.algorithm_candidates),
+        interval_insight_count=len(interval_interpretation.insights),
+        interval_significant_window_count=len(
+            interval_interpretation.significant_windows
+        ),
         subsystem_concept_count=len(checkpoint_model.subsystems),
         module_concept_count=len(checkpoint_model.modules),
         dependency_concept_count=len(checkpoint_model.dependencies),

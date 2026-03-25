@@ -171,6 +171,22 @@ HistorySemanticCheckpointEvaluationStatus = Literal[
 ]
 HistorySemanticStructureStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistorySemanticContextStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryIntervalInterpretationStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryIntervalInsightKind = Literal[
+    "subsystem_change",
+    "interface_change",
+    "dependency_change",
+    "algorithm_change",
+    "build_change",
+    "design_rationale",
+]
+HistoryIntervalSignificance = Literal["low", "medium", "high"]
+HistoryRationaleClueSourceKind = Literal[
+    "commit_message",
+    "signature_change",
+    "docstring",
+    "diff_pattern",
+]
 HistorySystemContextNodeKind = Literal[
     "system",
     "external_actor",
@@ -243,6 +259,7 @@ class HistorySubsystemChangeCandidate(DomainModel):
     """Structured subsystem-level change candidate derived from interval evidence."""
 
     candidate_id: str
+    change_id: str | None = None
     status: HistoryDeltaStatus
     source_root: Path
     group_path: Path
@@ -251,11 +268,19 @@ class HistorySubsystemChangeCandidate(DomainModel):
     changed_symbol_names: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def default_change_id(self) -> HistorySubsystemChangeCandidate:
+        """Mirror candidate identifiers into the H12 change-id field."""
+
+        self.change_id = self.change_id or self.candidate_id
+        return self
+
 
 class HistoryInterfaceChangeCandidate(DomainModel):
     """Structured interface-level change candidate derived from interval evidence."""
 
     candidate_id: str
+    change_id: str | None = None
     status: HistoryDeltaStatus
     scope_kind: HistoryInterfaceScopeKind
     source_path: Path
@@ -265,11 +290,19 @@ class HistoryInterfaceChangeCandidate(DomainModel):
     signature_changes: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def default_change_id(self) -> HistoryInterfaceChangeCandidate:
+        """Mirror candidate identifiers into the H12 change-id field."""
+
+        self.change_id = self.change_id or self.candidate_id
+        return self
+
 
 class HistoryDependencyChangeCandidate(DomainModel):
     """Structured dependency/infrastructure change candidate."""
 
     candidate_id: str
+    change_id: str | None = None
     status: HistoryDeltaStatus
     dependency_kind: HistoryDependencyKind
     path: Path | None = None
@@ -280,6 +313,13 @@ class HistoryDependencyChangeCandidate(DomainModel):
     file_paths: list[Path] = Field(default_factory=list)
     dependency_change_lines: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def default_change_id(self) -> HistoryDependencyChangeCandidate:
+        """Mirror candidate identifiers into the H12 change-id field."""
+
+        self.change_id = self.change_id or self.candidate_id
+        return self
 
 
 class HistoryAlgorithmCandidate(DomainModel):
@@ -391,6 +431,60 @@ class HistoryIntervalDeltaModel(DomainModel):
         default_factory=list
     )
     algorithm_candidates: list[HistoryAlgorithmCandidate] = Field(default_factory=list)
+
+
+class HistoryDesignChangeInsight(DomainModel):
+    """One interpreted design-change insight derived from interval evidence."""
+
+    insight_id: str
+    kind: HistoryIntervalInsightKind
+    title: str
+    summary: str
+    significance: HistoryIntervalSignificance
+    related_commit_ids: list[str] = Field(default_factory=list)
+    related_change_ids: list[str] = Field(default_factory=list)
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryRationaleClue(DomainModel):
+    """One conservative rationale clue linked to explicit interval evidence."""
+
+    clue_id: str
+    text: str
+    confidence: float = 0.0
+    related_commit_ids: list[str] = Field(default_factory=list)
+    related_change_ids: list[str] = Field(default_factory=list)
+    source_kind: HistoryRationaleClueSourceKind
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySignificantChangeWindow(DomainModel):
+    """One high-signal commit window interpreted from H3 interval evidence."""
+
+    window_id: str
+    start_commit: str
+    end_commit: str
+    commit_ids: list[str] = Field(default_factory=list)
+    title: str
+    summary: str
+    significance: HistoryIntervalSignificance
+    related_insight_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryIntervalInterpretation(DomainModel):
+    """Checkpoint-scoped H12 interval interpretation artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryIntervalInterpretationStatus
+    insights: list[HistoryDesignChangeInsight] = Field(default_factory=list)
+    rationale_clues: list[HistoryRationaleClue] = Field(default_factory=list)
+    significant_windows: list[HistorySignificantChangeWindow] = Field(
+        default_factory=list
+    )
 
 
 class HistorySubsystemConcept(DomainModel):
@@ -811,6 +905,31 @@ class HistorySemanticContextJudgment(DomainModel):
         return self
 
 
+class HistoryIntervalInterpretationJudgment(DomainModel):
+    """Validated LLM response for H12 interval interpretation."""
+
+    insights: list[HistoryDesignChangeInsight] = Field(default_factory=list)
+    rationale_clues: list[HistoryRationaleClue] = Field(default_factory=list)
+    significant_windows: list[HistorySignificantChangeWindow] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> HistoryIntervalInterpretationJudgment:
+        """Reject duplicate insight, clue, or window identifiers."""
+
+        insight_ids = [insight.insight_id for insight in self.insights]
+        clue_ids = [clue.clue_id for clue in self.rationale_clues]
+        window_ids = [window.window_id for window in self.significant_windows]
+        if len(insight_ids) != len(set(insight_ids)):
+            raise ValueError("insights must not repeat insight_id values")
+        if len(clue_ids) != len(set(clue_ids)):
+            raise ValueError("rationale_clues must not repeat clue_id values")
+        if len(window_ids) != len(set(window_ids)):
+            raise ValueError("significant_windows must not repeat window_id values")
+        return self
+
+
 class HistorySemanticCheckpointJudgment(DomainModel):
     """Structured planner judgment for one deterministic candidate commit."""
 
@@ -1071,6 +1190,7 @@ class HistoryBuildResult(DomainModel):
     snapshot_manifest_path: Path | None = None
     snapshot_structural_model_path: Path | None = None
     interval_delta_model_path: Path | None = None
+    interval_interpretation_path: Path | None = None
     checkpoint_model_path: Path | None = None
     section_outline_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
@@ -1089,12 +1209,15 @@ class HistoryBuildResult(DomainModel):
     semantic_capability_count: int = 0
     semantic_structure_status: HistorySemanticStructureStatus | None = None
     semantic_context_status: HistorySemanticContextStatus | None = None
+    interval_interpretation_status: HistoryIntervalInterpretationStatus | None = None
     context_node_count: int = 0
     interface_candidate_count: int = 0
     subsystem_change_count: int = 0
     interface_change_count: int = 0
     dependency_change_count: int = 0
     algorithm_candidate_count: int = 0
+    interval_insight_count: int = 0
+    interval_significant_window_count: int = 0
     subsystem_concept_count: int = 0
     module_concept_count: int = 0
     dependency_concept_count: int = 0
@@ -1125,6 +1248,7 @@ __all__ = [
     "HistoryCheckpointModel",
     "HistoryConceptChangeStatus",
     "HistoryConceptLifecycleStatus",
+    "HistoryDesignChangeInsight",
     "HistoryDocsBenchmarkCase",
     "HistoryDocsBenchmarkCaseComparisonReport",
     "HistoryDocsBenchmarkCaseReportRef",
@@ -1158,7 +1282,14 @@ __all__ = [
     "HistoryDependencyChangeCandidate",
     "HistoryInterfaceChangeCandidate",
     "HistoryIntervalDeltaModel",
+    "HistoryIntervalInsightKind",
+    "HistoryIntervalInterpretation",
+    "HistoryIntervalInterpretationJudgment",
+    "HistoryIntervalInterpretationStatus",
+    "HistoryIntervalSignificance",
     "HistoryModuleConcept",
+    "HistoryRationaleClue",
+    "HistoryRationaleClueSourceKind",
     "HistoryRenderManifest",
     "HistoryRenderedSection",
     "HistorySemanticCheckpointCandidate",
@@ -1182,6 +1313,7 @@ __all__ = [
     "HistorySemanticStructureStatus",
     "HistorySemanticSubsystemCluster",
     "HistorySemanticCapabilityCluster",
+    "HistorySignificantChangeWindow",
     "HistorySystemContextNode",
     "HistorySystemContextNodeKind",
     "HistorySectionDepth",

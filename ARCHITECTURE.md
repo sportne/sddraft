@@ -460,6 +460,7 @@ Current implemented slice:
 * tool-scoped `semantic_structure_map.json`
 * tool-scoped `semantic_context_map.json`
 * tool-scoped `interval_delta_model.json`
+* checkpoint-scoped `interval_interpretation.json`
 * tool-scoped `checkpoint_model.json`
 * tool-scoped `section_outline.json`
 * tool-scoped `algorithm_capsules/index.json` plus one JSON file per capsule

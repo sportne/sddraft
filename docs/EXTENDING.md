@@ -355,6 +355,9 @@ Current H1-H10 behavior:
   comparison
 - interval artifacts are written to
   `tools/history_docs/checkpoints/<checkpoint_id>/interval_delta_model.json`
+- H12-01 writes
+  `tools/history_docs/checkpoints/<checkpoint_id>/interval_interpretation.json`
+  as an advisory LLM-assisted interpretation layer over deterministic H3 output
 - missing previous snapshot artifacts trigger diff-only fallback with
   conservative `observed` statuses instead of failure
 - checkpoint-state artifacts are written to

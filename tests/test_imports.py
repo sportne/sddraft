@@ -30,6 +30,7 @@ MODULES = (
     "engllm.tools.history_docs.checkpoint_model",
     "engllm.tools.history_docs.dependencies",
     "engllm.tools.history_docs.delta",
+    "engllm.tools.history_docs.interval_interpretation",
     "engllm.tools.history_docs.render",
     "engllm.tools.history_docs.real_benchmark",
     "engllm.tools.history_docs.semantic_context",

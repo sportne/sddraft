@@ -7,6 +7,7 @@ import json
 from engllm.prompts.history_docs.templates import (
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
+    INTERVAL_INTERPRETATION_SYSTEM_PROMPT,
     SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT,
     SEMANTIC_CONTEXT_SYSTEM_PROMPT,
     SEMANTIC_STRUCTURE_SYSTEM_PROMPT,
@@ -200,3 +201,27 @@ def build_semantic_checkpoint_planner_prompt(
         f"Deterministic Candidate Commits:\n{_json(candidates)}\n"
     )
     return SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT, user_prompt
+
+
+def build_interval_interpretation_prompt(
+    *,
+    checkpoint_id: str,
+    target_commit: str,
+    previous_checkpoint_commit: str | None,
+    commit_deltas: list[dict[str, object]],
+    candidates: dict[str, list[dict[str, object]]],
+    modules: list[dict[str, object]],
+    semantic_labels: dict[str, list[dict[str, object]]],
+) -> tuple[str, str]:
+    """Return prompts for one H12 interval interpretation request."""
+
+    user_prompt = (
+        "Interpret this checkpoint interval using only the supplied structured "
+        "history evidence.\n"
+        f"Checkpoint Context:\n{_json({'checkpoint_id': checkpoint_id, 'target_commit': target_commit, 'previous_checkpoint_commit': previous_checkpoint_commit})}\n"
+        f"Commit Deltas:\n{_json(commit_deltas)}\n"
+        f"Interval Change Candidates:\n{_json(candidates)}\n"
+        f"Snapshot Module Labels:\n{_json(modules)}\n"
+        f"Semantic Labels:\n{_json(semantic_labels)}\n"
+    )
+    return INTERVAL_INTERPRETATION_SYSTEM_PROMPT, user_prompt

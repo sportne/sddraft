@@ -87,3 +87,19 @@ Prefer primary recommendations for commits that look like meaningful semantic
 milestones rather than routine edits.
 Return valid JSON that matches the provided schema.
 """.strip()
+
+INTERVAL_INTERPRETATION_SYSTEM_PROMPT = """
+You interpret one checkpoint interval using only the structured evidence provided
+in the user prompt.
+Return structured insights, rationale clues, and significant change windows.
+Rules:
+- do not invent commit ids, change ids, subsystem ids, or evidence links
+- use only ids and references that appear in the supplied evidence
+- keep titles and summaries short, present-state, and grounded in the evidence
+- rationale clues must come from explicit evidence such as commit messages,
+  signature-change snippets, docstring excerpts, or strong diff-pattern summaries
+- significant windows should highlight the most meaningful change spans, not every
+  routine commit
+- if evidence is weak, prefer fewer conservative items rather than speculative ones
+Return valid JSON that matches the provided schema.
+""".strip()

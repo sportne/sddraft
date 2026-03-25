@@ -234,6 +234,25 @@ def interval_delta_model_path(
     )
 
 
+def interval_interpretation_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H12 interval interpretation path for one checkpoint."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "interval_interpretation.json"
+    )
+
+
 def semantic_checkpoint_plan_path(
     output_root: Path,
     workspace_id: str,
