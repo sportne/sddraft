@@ -300,10 +300,17 @@ def _ecosystem_summary(entries: list[HistoryDependencyEntry]) -> str:
 
 
 def _summary_line_for_module(module: HistoryModuleConcept) -> str:
-    return (
+    summary = (
         f"`{module.path.as_posix()}` ({module.language}); "
         f"functions {len(module.functions)}, classes {len(module.classes)}, imports {len(module.imports)}"
     )
+    if module.summary:
+        summary += f"; summary: {module.summary}"
+    if module.responsibility_labels:
+        summary += "; responsibility labels: " + ", ".join(
+            f"`{label}`" for label in module.responsibility_labels
+        )
+    return summary
 
 
 def _dependency_paragraph(value: str) -> str:

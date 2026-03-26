@@ -1,6 +1,7 @@
 """History-docs prompt builders."""
 
 from engllm.prompts.history_docs.builders import (
+    build_checkpoint_model_enrichment_prompt,
     build_dependency_summary_prompt,
     build_history_docs_quality_judge_prompt,
     build_interval_interpretation_prompt,
@@ -10,6 +11,7 @@ from engllm.prompts.history_docs.builders import (
 )
 
 __all__ = [
+    "build_checkpoint_model_enrichment_prompt",
     "build_dependency_summary_prompt",
     "build_history_docs_quality_judge_prompt",
     "build_interval_interpretation_prompt",

@@ -59,6 +59,11 @@ from engllm.tools.history_docs.checkpoint_model import (
     checkpoint_model_path,
     load_checkpoint_model,
 )
+from engllm.tools.history_docs.checkpoint_model_enrichment import (
+    apply_checkpoint_model_enrichment,
+    build_checkpoint_model_enrichment,
+    checkpoint_model_enrichment_path,
+)
 from engllm.tools.history_docs.delta import (
     build_interval_delta_model,
     interval_delta_model_path,
@@ -353,6 +358,7 @@ def build_history_docs_checkpoint(
     progress_callback: ProgressCallback | None = None,
     subsystem_grouping_mode: Literal["path", "semantic"] = "path",
     experimental_section_mode: Literal["default", "semantic_context"] = "default",
+    checkpoint_model_enrichment_mode: Literal["baseline", "enriched"] = "baseline",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -730,6 +736,37 @@ def build_history_docs_checkpoint(
     checkpoint_model_artifact_path = checkpoint_model_path(
         history_tool_root, checkpoint_id
     )
+    checkpoint_model_enrichment_artifact_path = checkpoint_model_enrichment_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+
+    _progress(
+        progress_callback,
+        "history-docs: enriching checkpoint model in shadow mode",
+    )
+    checkpoint_model_enrichment = build_checkpoint_model_enrichment(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        checkpoint_model=checkpoint_model,
+        snapshot=structural_model,
+        interval_interpretation=interval_interpretation,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+        semantic_structure_map=semantic_structure_map,
+        semantic_context_map=semantic_context_map,
+    )
+    write_json_model(
+        checkpoint_model_enrichment_artifact_path,
+        checkpoint_model_enrichment,
+    )
+    if checkpoint_model_enrichment_mode == "enriched":
+        checkpoint_model = apply_checkpoint_model_enrichment(
+            checkpoint_model,
+            checkpoint_model_enrichment,
+        )
 
     _progress(
         progress_callback,
@@ -895,6 +932,7 @@ def build_history_docs_checkpoint(
         interval_delta_model_path=interval_delta_path,
         interval_interpretation_path=interval_interpretation_artifact_path,
         checkpoint_model_path=checkpoint_model_artifact_path,
+        checkpoint_model_enrichment_path=checkpoint_model_enrichment_artifact_path,
         section_outline_path=section_outline_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
         dependencies_artifact_path=dependencies_artifact_path,
@@ -916,6 +954,9 @@ def build_history_docs_checkpoint(
         semantic_structure_status=semantic_structure_map.evaluation_status,
         semantic_context_status=semantic_context_map.evaluation_status,
         interval_interpretation_status=interval_interpretation.evaluation_status,
+        checkpoint_model_enrichment_status=(
+            checkpoint_model_enrichment.evaluation_status
+        ),
         context_node_count=len(semantic_context_map.context_nodes),
         interface_candidate_count=len(semantic_context_map.interfaces),
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
@@ -926,6 +967,10 @@ def build_history_docs_checkpoint(
         interval_significant_window_count=len(
             interval_interpretation.significant_windows
         ),
+        enriched_subsystem_count=len(checkpoint_model_enrichment.subsystem_enrichments),
+        enriched_module_count=len(checkpoint_model_enrichment.module_enrichments),
+        capability_proposal_count=len(checkpoint_model_enrichment.capability_proposals),
+        design_note_anchor_count=len(checkpoint_model_enrichment.design_note_anchors),
         subsystem_concept_count=len(checkpoint_model.subsystems),
         module_concept_count=len(checkpoint_model.modules),
         dependency_concept_count=len(checkpoint_model.dependencies),

@@ -62,7 +62,9 @@ def _evidence_sort_key(link: HistoryEvidenceLink) -> tuple[str, str, str]:
     return (link.kind, link.reference, link.detail or "")
 
 
-def _dedupe_evidence(*groups: Iterable[HistoryEvidenceLink]) -> list[HistoryEvidenceLink]:
+def _dedupe_evidence(
+    *groups: Iterable[HistoryEvidenceLink],
+) -> list[HistoryEvidenceLink]:
     deduped: dict[tuple[str, str, str | None], HistoryEvidenceLink] = {}
     for group in groups:
         for link in group:
@@ -87,7 +89,9 @@ def _title_case(value: str) -> str:
 
 
 def _slug(value: str) -> str:
-    cleaned = "".join(character.lower() if character.isalnum() else "-" for character in value)
+    cleaned = "".join(
+        character.lower() if character.isalnum() else "-" for character in value
+    )
     return "-".join(part for part in cleaned.split("-") if part) or "item"
 
 
@@ -197,10 +201,14 @@ def _commit_strength(commit_delta: object) -> int:
     affected_subsystems = len(getattr(commit_delta, "affected_subsystem_ids", []))
     build_sources = len(getattr(commit_delta, "touched_build_sources", []))
     changed_symbols = min(len(getattr(commit_delta, "changed_symbol_names", [])), 4)
-    return signal_count * 3 + affected_subsystems * 2 + build_sources * 2 + changed_symbols
+    return (
+        signal_count * 3 + affected_subsystems * 2 + build_sources * 2 + changed_symbols
+    )
 
 
-def _sorted_prompt_commits(delta_model: HistoryIntervalDeltaModel) -> list[dict[str, object]]:
+def _sorted_prompt_commits(
+    delta_model: HistoryIntervalDeltaModel,
+) -> list[dict[str, object]]:
     ranked = sorted(
         delta_model.commit_deltas,
         key=lambda item: (
@@ -218,7 +226,9 @@ def _sorted_prompt_commits(delta_model: HistoryIntervalDeltaModel) -> list[dict[
             "signal_kinds": item.signal_kinds,
             "changed_symbol_names": item.changed_symbol_names[:12],
             "affected_subsystem_ids": item.affected_subsystem_ids,
-            "touched_build_sources": [path.as_posix() for path in item.touched_build_sources],
+            "touched_build_sources": [
+                path.as_posix() for path in item.touched_build_sources
+            ],
             "impact_change_kinds": item.impact.change_kinds,
             "impact_summary": item.impact.summary,
         }
@@ -248,11 +258,13 @@ def _module_payloads(
             "classes": summary.classes[:8],
             "imports": summary.imports[:8],
             "docstring_excerpts": _short_docstrings(summary),
-            "semantic_labels": semantic_titles_by_module.get(module_id_for(summary), []),
+            "semantic_labels": semantic_titles_by_module.get(
+                module_id_for(summary), []
+            ),
         }
-        for summary in sorted(snapshot.code_summaries, key=lambda item: item.path.as_posix())[
-            :_MAX_PROMPT_SUMMARIES
-        ]
+        for summary in sorted(
+            snapshot.code_summaries, key=lambda item: item.path.as_posix()
+        )[:_MAX_PROMPT_SUMMARIES]
     ]
 
 
@@ -294,7 +306,9 @@ def _semantic_labels_payload(
                 "title": node.title,
                 "kind": node.kind,
             }
-            for node in sorted(semantic_context_map.context_nodes, key=lambda item: item.node_id)
+            for node in sorted(
+                semantic_context_map.context_nodes, key=lambda item: item.node_id
+            )
         ]
     return {
         "semantic_subsystems": subsystem_labels,
@@ -316,9 +330,7 @@ def _fallback_insight_from_subsystem(
 ) -> HistoryDesignChangeInsight:
     title = f"Subsystem {change.status}: {change.group_path.as_posix()}"
     changed_symbols = ", ".join(change.changed_symbol_names[:4])
-    summary = (
-        f"The {change.group_path.as_posix()} subsystem is {change.status} in this interval."
-    )
+    summary = f"The {change.group_path.as_posix()} subsystem is {change.status} in this interval."
     if changed_symbols:
         summary = f"{summary} Changed symbols include {changed_symbols}."
     return HistoryDesignChangeInsight(
@@ -326,7 +338,9 @@ def _fallback_insight_from_subsystem(
         kind="subsystem_change",
         title=title,
         summary=summary,
-        significance=_significance_for_score(len(change.commit_ids) + len(change.file_paths)),
+        significance=_significance_for_score(
+            len(change.commit_ids) + len(change.file_paths)
+        ),
         related_commit_ids=sorted(change.commit_ids),
         related_change_ids=[_change_id(change)],
         related_subsystem_ids=[_change_id(change)],
@@ -337,7 +351,9 @@ def _fallback_insight_from_subsystem(
 def _fallback_insight_from_interface(
     change: HistoryInterfaceChangeCandidate,
 ) -> HistoryDesignChangeInsight:
-    symbol_label = change.qualified_name or change.symbol_name or change.source_path.as_posix()
+    symbol_label = (
+        change.qualified_name or change.symbol_name or change.source_path.as_posix()
+    )
     return HistoryDesignChangeInsight(
         insight_id=f"interval-insight::{_slug(_change_id(change))}",
         kind="interface_change",
@@ -358,7 +374,11 @@ def _fallback_insight_from_interface(
 def _fallback_insight_from_dependency(
     change: HistoryDependencyChangeCandidate,
 ) -> HistoryDesignChangeInsight:
-    label = change.path.as_posix() if change.path is not None else (change.subsystem_id or "dependency")
+    label = (
+        change.path.as_posix()
+        if change.path is not None
+        else (change.subsystem_id or "dependency")
+    )
     kind: HistoryIntervalInsightKind = (
         "build_change"
         if change.dependency_kind == "build_source"
@@ -372,7 +392,9 @@ def _fallback_insight_from_dependency(
             f"{label} contributes a {change.status} {change.dependency_kind.replace('_', ' ')} signal in this interval."
         ),
         significance=_significance_for_score(
-            len(change.commit_ids) + len(change.file_paths) + len(change.dependency_change_lines)
+            len(change.commit_ids)
+            + len(change.file_paths)
+            + len(change.dependency_change_lines)
         ),
         related_commit_ids=sorted(change.commit_ids),
         related_change_ids=[_change_id(change)],
@@ -387,9 +409,7 @@ def _fallback_insight_from_algorithm(
     candidate: HistoryAlgorithmCandidate,
 ) -> HistoryDesignChangeInsight:
     label = candidate.scope_path.as_posix()
-    summary = (
-        f"{label} carries algorithm-oriented signals: {', '.join(candidate.signal_kinds) or 'TBD'}."
-    )
+    summary = f"{label} carries algorithm-oriented signals: {', '.join(candidate.signal_kinds) or 'TBD'}."
     if candidate.variant_names:
         summary = f"{summary} Variant families include {', '.join(candidate.variant_names[:4])}."
     return HistoryDesignChangeInsight(
@@ -461,7 +481,11 @@ def _heuristic_rationale_clues(
                 related_change_ids=[],
                 source_kind="commit_message",
                 evidence_links=_dedupe_evidence(
-                    [HistoryEvidenceLink(kind="commit", reference=commit_delta.commit.sha)]
+                    [
+                        HistoryEvidenceLink(
+                            kind="commit", reference=commit_delta.commit.sha
+                        )
+                    ]
                 ),
             )
         )
@@ -492,7 +516,9 @@ def _heuristic_rationale_clues(
                 )
             )
 
-    for summary in sorted(snapshot.code_summaries, key=lambda item: item.path.as_posix()):
+    for summary in sorted(
+        snapshot.code_summaries, key=lambda item: item.path.as_posix()
+    ):
         for docstring in summary.docstrings:
             text = " ".join(docstring.split())
             if not text or not _token_match(text):
@@ -510,7 +536,11 @@ def _heuristic_rationale_clues(
                     related_change_ids=[],
                     source_kind="docstring",
                     evidence_links=_dedupe_evidence(
-                        [HistoryEvidenceLink(kind="file", reference=summary.path.as_posix())]
+                        [
+                            HistoryEvidenceLink(
+                                kind="file", reference=summary.path.as_posix()
+                            )
+                        ]
                     ),
                 )
             )
@@ -559,7 +589,9 @@ def _heuristic_windows(
     for index, group in enumerate(_commit_windows(delta_model), start=1):
         commit_ids = [item.commit.sha for item in group]
         titles = [item.commit.subject for item in group]
-        signal_kinds = sorted({signal for item in group for signal in item.signal_kinds})
+        signal_kinds = sorted(
+            {signal for item in group for signal in item.signal_kinds}
+        )
         evidence_links = _dedupe_evidence(*(item.evidence_links for item in group))
         max_score = max(_commit_strength(item) for item in group)
         windows.append(
@@ -656,9 +688,10 @@ def _validate_interpretation(
             raise ValueError("interval insight referenced unknown change ids")
         if not set(insight.related_subsystem_ids) <= known_subsystem_ids:
             raise ValueError("interval insight referenced unknown subsystem ids")
-        if not {
-            (link.kind, link.reference) for link in insight.evidence_links
-        } <= known_evidence_links:
+        if (
+            not {(link.kind, link.reference) for link in insight.evidence_links}
+            <= known_evidence_links
+        ):
             raise ValueError("interval insight referenced unknown evidence links")
     for clue in interpretation.rationale_clues:
         if not clue.text.strip():
@@ -667,22 +700,29 @@ def _validate_interpretation(
             raise ValueError("rationale clue referenced unknown commit ids")
         if not set(clue.related_change_ids) <= known_change_ids:
             raise ValueError("rationale clue referenced unknown change ids")
-        if not {
-            (link.kind, link.reference) for link in clue.evidence_links
-        } <= known_evidence_links:
+        if (
+            not {(link.kind, link.reference) for link in clue.evidence_links}
+            <= known_evidence_links
+        ):
             raise ValueError("rationale clue referenced unknown evidence links")
     for window in interpretation.significant_windows:
         if not window.title.strip() or not window.summary.strip():
-            raise ValueError("significant windows must have non-empty title and summary")
-        if window.start_commit not in known_commit_ids or window.end_commit not in known_commit_ids:
+            raise ValueError(
+                "significant windows must have non-empty title and summary"
+            )
+        if (
+            window.start_commit not in known_commit_ids
+            or window.end_commit not in known_commit_ids
+        ):
             raise ValueError("significant window referenced unknown boundary commits")
         if not set(window.commit_ids) <= known_commit_ids:
             raise ValueError("significant window referenced unknown commit ids")
         if not set(window.related_insight_ids) <= insight_ids:
             raise ValueError("significant window referenced unknown insight ids")
-        if not {
-            (link.kind, link.reference) for link in window.evidence_links
-        } <= known_evidence_links:
+        if (
+            not {(link.kind, link.reference) for link in window.evidence_links}
+            <= known_evidence_links
+        ):
             raise ValueError("significant window referenced unknown evidence links")
 
 
@@ -694,7 +734,9 @@ def _materialize_interpretation(
     judgment: HistoryIntervalInterpretationJudgment,
     status: HistoryIntervalInterpretationStatus,
 ) -> HistoryIntervalInterpretation:
-    insights = sorted(judgment.insights, key=lambda item: (item.kind, item.title, item.insight_id))
+    insights = sorted(
+        judgment.insights, key=lambda item: (item.kind, item.title, item.insight_id)
+    )
     clues = sorted(
         judgment.rationale_clues,
         key=lambda item: (item.source_kind, item.text, item.clue_id),
@@ -792,7 +834,9 @@ def build_interval_interpretation(
             known_evidence_links=known_evidence_links,
         )
         if not (
-            judgment.insights or judgment.rationale_clues or judgment.significant_windows
+            judgment.insights
+            or judgment.rationale_clues
+            or judgment.significant_windows
         ):
             return _fallback_interval_interpretation(
                 checkpoint_id=checkpoint_id,

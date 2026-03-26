@@ -24,10 +24,11 @@ Today it ships four tool namespaces:
 
 `engllm history-docs build` now also emits advisory semantic checkpoint-planning
 artifacts, checkpoint-scoped semantic subsystem/capability maps,
-checkpoint-scoped dependency documentation artifacts, final checkpoint
-Markdown, and build-integrated validation over those historical snapshots. An
-internal H10 benchmark harness now evaluates those rendered outputs with
-structured LLM judging while keeping the public CLI unchanged.
+checkpoint-scoped interval interpretation and checkpoint-model enrichment
+artifacts, checkpoint-scoped dependency documentation artifacts, final
+checkpoint Markdown, and build-integrated validation over those historical
+snapshots. An internal H10 benchmark harness now evaluates those rendered
+outputs with structured LLM judging while keeping the public CLI unchanged.
 The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
@@ -218,19 +219,22 @@ in reusable deterministic modules.
 
 ### `tools/history_docs/`
 
-The history-walk documentation tool now implements H1-H11-02 of its current
+The history-walk documentation tool now implements H1-H12-02 of its current
 roadmap. It combines:
 
 * checkpoint selection and history traversal
 * advisory semantic checkpoint planning
 * semantic subsystem and capability clustering
+* semantic context and interface extraction
 * checkpoint snapshot analysis
 * interval delta analysis
+* interval interpretation and checkpoint-model enrichment
 * structured checkpoint documentation models
 * final holistic rendering for each checkpoint
 * build-integrated rendered-artifact validation
 * an internal benchmark/evaluation harness for comparing future variants,
-  including semantic clustering against the path-based baseline
+  including semantic clustering and enriched-model variants against the
+  path-based and promoted semantic baselines
 
 Its key architectural rule is that deltas are used to improve generation
 internally, while rendered checkpoint docs remain standalone present-state

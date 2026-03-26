@@ -52,7 +52,7 @@ Planned future CLI surface:
 
 - `engllm history-docs build`
 
-History Phases 1 through 11-02 now implement that command end to end, from
+History Phases 1 through 12-02 now implement that command end to end, from
 single-checkpoint traversal through semantic checkpoint advisories,
 checkpoint-scoped semantic subsystem/capability maps, final rendered checkpoint
 Markdown, and build-integrated validation. H10 adds an internal benchmark and
@@ -61,7 +61,7 @@ unchanged.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 11-02:
+The current implementation covers History Phases 1 through 12-02:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -101,10 +101,16 @@ The current implementation covers History Phases 1 through 11-02:
   - design-change insights, rationale clues, and significant change windows
   - validation that prevents invented commits, change ids, subsystem ids, or evidence links
   - conservative heuristic fallback when interpretation fails or returns empty results
+- checkpoint-scoped `checkpoint_model_enrichment.json` artifacts with:
+  - one structured LLM enrichment pass over the deterministic H4 model plus H12 interval interpretation
+  - subsystem/module summary enrichment plus capability/design-note proposals
+  - validation that prevents invented concept ids, insight ids, rationale clue ids, or evidence links
+  - shadow-only public behavior, with an internal enriched-model variant available for H10 benchmarking
 - tool-scoped `checkpoint_model.json` artifacts with:
   - active and retired subsystem/module/dependency-source concepts
   - optional semantic display names, summaries, capability labels, and baseline
     subsystem references on subsystem concepts
+  - optional module summaries and responsibility labels when the internal enriched-model mode is selected
   - deterministic core section stubs
   - previous-model fallback when the prior checkpoint model artifact is missing
 - tool-scoped `section_outline.json` artifacts with:

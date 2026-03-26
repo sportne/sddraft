@@ -329,6 +329,25 @@ def checkpoint_model_path(
     )
 
 
+def checkpoint_model_enrichment_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H12-02 checkpoint-model enrichment path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "checkpoint_model_enrichment.json"
+    )
+
+
 def section_outline_path(
     output_root: Path,
     workspace_id: str,

@@ -103,3 +103,16 @@ Rules:
 - if evidence is weak, prefer fewer conservative items rather than speculative ones
 Return valid JSON that matches the provided schema.
 """.strip()
+
+CHECKPOINT_MODEL_ENRICHMENT_SYSTEM_PROMPT = """
+You enrich an existing checkpoint documentation model using only the structured
+evidence provided in the user prompt.
+Rules:
+- do not invent concept ids, insight ids, rationale clue ids, subsystem ids, module ids, or evidence links
+- use only ids and references that appear in the supplied evidence
+- enrich only the listed existing subsystem and module concepts
+- keep display names, summaries, labels, capability proposals, and design-note anchors short, present-state, and grounded in the evidence
+- capability proposals and design-note anchors must reference only listed subsystem/module concepts
+- if evidence is weak, return fewer conservative enrichments rather than speculative ones
+Return valid JSON that matches the provided schema.
+""".strip()

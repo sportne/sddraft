@@ -461,7 +461,9 @@ def test_history_docs_cli_build_promotes_semantic_context_rendering(
         / "history_docs"
         / "checkpoints"
     )
-    checkpoint_ids = sorted(path.name for path in checkpoint_root.iterdir() if path.is_dir())
+    checkpoint_ids = sorted(
+        path.name for path in checkpoint_root.iterdir() if path.is_dir()
+    )
 
     markdown = checkpoint_markdown_path(
         output_root,

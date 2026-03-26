@@ -409,6 +409,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Interval interpretation: {result.interval_interpretation_path}")
     if result.checkpoint_model_path is not None:
         print(f"Checkpoint model: {result.checkpoint_model_path}")
+    if result.checkpoint_model_enrichment_path is not None:
+        print(f"Checkpoint model enrichment: {result.checkpoint_model_enrichment_path}")
     if result.section_outline_path is not None:
         print(f"Section outline: {result.section_outline_path}")
     if result.algorithm_capsule_index_path is not None:

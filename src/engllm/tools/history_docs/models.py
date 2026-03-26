@@ -172,6 +172,11 @@ HistorySemanticCheckpointEvaluationStatus = Literal[
 HistorySemanticStructureStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistorySemanticContextStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistoryIntervalInterpretationStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryCheckpointModelEnrichmentStatus = Literal[
+    "scored",
+    "heuristic_only",
+    "llm_failed",
+]
 HistoryIntervalInsightKind = Literal[
     "subsystem_change",
     "interface_change",
@@ -181,6 +186,13 @@ HistoryIntervalInsightKind = Literal[
     "design_rationale",
 ]
 HistoryIntervalSignificance = Literal["low", "medium", "high"]
+HistoryConceptEnrichmentKind = Literal[
+    "subsystem",
+    "module",
+    "dependency",
+    "capability",
+    "design_note",
+]
 HistoryRationaleClueSourceKind = Literal[
     "commit_message",
     "signature_change",
@@ -487,6 +499,72 @@ class HistoryIntervalInterpretation(DomainModel):
     )
 
 
+class HistorySubsystemConceptEnrichment(DomainModel):
+    """Structured enrichment for one existing subsystem concept."""
+
+    concept_id: str
+    display_name: str
+    summary: str
+    capability_labels: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_rationale_clue_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryModuleConceptEnrichment(DomainModel):
+    """Structured enrichment for one existing module concept."""
+
+    concept_id: str
+    summary: str
+    responsibility_labels: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_rationale_clue_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryCapabilityConceptProposal(DomainModel):
+    """Proposed capability concept anchored to existing concepts."""
+
+    capability_id: str
+    title: str
+    summary: str
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDesignNoteAnchor(DomainModel):
+    """Proposed design-note anchor grounded in interval interpretation evidence."""
+
+    note_id: str
+    title: str
+    summary: str
+    related_concept_ids: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_rationale_clue_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryCheckpointModelEnrichment(DomainModel):
+    """Checkpoint-scoped H12-02 checkpoint-model enrichment artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryCheckpointModelEnrichmentStatus
+    subsystem_enrichments: list[HistorySubsystemConceptEnrichment] = Field(
+        default_factory=list
+    )
+    module_enrichments: list[HistoryModuleConceptEnrichment] = Field(
+        default_factory=list
+    )
+    capability_proposals: list[HistoryCapabilityConceptProposal] = Field(
+        default_factory=list
+    )
+    design_note_anchors: list[HistoryDesignNoteAnchor] = Field(default_factory=list)
+
+
 class HistorySubsystemConcept(DomainModel):
     """Checkpoint-scoped subsystem concept."""
 
@@ -526,6 +604,8 @@ class HistoryModuleConcept(DomainModel):
     imports: list[str] = Field(default_factory=list)
     docstrings: list[str] = Field(default_factory=list)
     symbol_names: list[str] = Field(default_factory=list)
+    summary: str | None = None
+    responsibility_labels: list[str] = Field(default_factory=list)
     algorithm_capsule_ids: list[str] = Field(default_factory=list)
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
 
@@ -930,6 +1010,45 @@ class HistoryIntervalInterpretationJudgment(DomainModel):
         return self
 
 
+class HistoryCheckpointModelEnrichmentJudgment(DomainModel):
+    """Validated LLM response for H12-02 checkpoint-model enrichment."""
+
+    subsystem_enrichments: list[HistorySubsystemConceptEnrichment] = Field(
+        default_factory=list
+    )
+    module_enrichments: list[HistoryModuleConceptEnrichment] = Field(
+        default_factory=list
+    )
+    capability_proposals: list[HistoryCapabilityConceptProposal] = Field(
+        default_factory=list
+    )
+    design_note_anchors: list[HistoryDesignNoteAnchor] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> HistoryCheckpointModelEnrichmentJudgment:
+        """Reject duplicate enrichment or proposal identifiers."""
+
+        subsystem_ids = [
+            enrichment.concept_id for enrichment in self.subsystem_enrichments
+        ]
+        module_ids = [enrichment.concept_id for enrichment in self.module_enrichments]
+        capability_ids = [
+            proposal.capability_id for proposal in self.capability_proposals
+        ]
+        note_ids = [anchor.note_id for anchor in self.design_note_anchors]
+        if len(subsystem_ids) != len(set(subsystem_ids)):
+            raise ValueError("subsystem_enrichments must not repeat concept_id values")
+        if len(module_ids) != len(set(module_ids)):
+            raise ValueError("module_enrichments must not repeat concept_id values")
+        if len(capability_ids) != len(set(capability_ids)):
+            raise ValueError(
+                "capability_proposals must not repeat capability_id values"
+            )
+        if len(note_ids) != len(set(note_ids)):
+            raise ValueError("design_note_anchors must not repeat note_id values")
+        return self
+
+
 class HistorySemanticCheckpointJudgment(DomainModel):
     """Structured planner judgment for one deterministic candidate commit."""
 
@@ -1192,6 +1311,7 @@ class HistoryBuildResult(DomainModel):
     interval_delta_model_path: Path | None = None
     interval_interpretation_path: Path | None = None
     checkpoint_model_path: Path | None = None
+    checkpoint_model_enrichment_path: Path | None = None
     section_outline_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
     dependencies_artifact_path: Path | None = None
@@ -1210,6 +1330,9 @@ class HistoryBuildResult(DomainModel):
     semantic_structure_status: HistorySemanticStructureStatus | None = None
     semantic_context_status: HistorySemanticContextStatus | None = None
     interval_interpretation_status: HistoryIntervalInterpretationStatus | None = None
+    checkpoint_model_enrichment_status: (
+        HistoryCheckpointModelEnrichmentStatus | None
+    ) = None
     context_node_count: int = 0
     interface_candidate_count: int = 0
     subsystem_change_count: int = 0
@@ -1218,6 +1341,10 @@ class HistoryBuildResult(DomainModel):
     algorithm_candidate_count: int = 0
     interval_insight_count: int = 0
     interval_significant_window_count: int = 0
+    enriched_subsystem_count: int = 0
+    enriched_module_count: int = 0
+    capability_proposal_count: int = 0
+    design_note_anchor_count: int = 0
     subsystem_concept_count: int = 0
     module_concept_count: int = 0
     dependency_concept_count: int = 0
@@ -1246,9 +1373,15 @@ __all__ = [
     "HistoryBuildResult",
     "HistoryCommitDelta",
     "HistoryCheckpointModel",
+    "HistoryCheckpointModelEnrichment",
+    "HistoryCheckpointModelEnrichmentJudgment",
+    "HistoryCheckpointModelEnrichmentStatus",
+    "HistoryCapabilityConceptProposal",
+    "HistoryConceptEnrichmentKind",
     "HistoryConceptChangeStatus",
     "HistoryConceptLifecycleStatus",
     "HistoryDesignChangeInsight",
+    "HistoryDesignNoteAnchor",
     "HistoryDocsBenchmarkCase",
     "HistoryDocsBenchmarkCaseComparisonReport",
     "HistoryDocsBenchmarkCaseReportRef",
@@ -1287,6 +1420,7 @@ __all__ = [
     "HistoryIntervalInterpretationJudgment",
     "HistoryIntervalInterpretationStatus",
     "HistoryIntervalSignificance",
+    "HistoryModuleConceptEnrichment",
     "HistoryModuleConcept",
     "HistoryRationaleClue",
     "HistoryRationaleClueSourceKind",
@@ -1327,6 +1461,7 @@ __all__ = [
     "HistorySectionState",
     "HistorySnapshotStructuralModel",
     "HistorySubsystemConcept",
+    "HistorySubsystemConceptEnrichment",
     "HistorySubsystemChangeCandidate",
     "HistorySubsystemCandidate",
     "HistoryValidationCheckId",

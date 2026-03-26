@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from engllm.prompts.history_docs.templates import (
+    CHECKPOINT_MODEL_ENRICHMENT_SYSTEM_PROMPT,
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
     INTERVAL_INTERPRETATION_SYSTEM_PROMPT,
@@ -14,6 +15,7 @@ from engllm.prompts.history_docs.templates import (
 )
 from engllm.tools.history_docs.models import (
     HistoryCheckpointModel,
+    HistoryCheckpointModelEnrichment,
     HistoryDependencyEntry,
     HistoryDocsBenchmarkCase,
     HistoryRenderManifest,
@@ -38,6 +40,29 @@ def build_dependency_summary_prompt(
     return DEPENDENCY_SUMMARY_SYSTEM_PROMPT, user_prompt
 
 
+def build_checkpoint_model_enrichment_prompt(
+    *,
+    checkpoint_id: str,
+    target_commit: str,
+    previous_checkpoint_commit: str | None,
+    subsystems: list[dict[str, object]],
+    modules: list[dict[str, object]],
+    interval_interpretation: dict[str, object],
+    semantic_labels: dict[str, list[dict[str, object]]],
+) -> tuple[str, str]:
+    """Return prompts for one H12-02 checkpoint-model enrichment request."""
+
+    user_prompt = (
+        "Enrich the checkpoint model using only the supplied structured evidence.\n"
+        f"Checkpoint Context:\n{_json({'checkpoint_id': checkpoint_id, 'target_commit': target_commit, 'previous_checkpoint_commit': previous_checkpoint_commit})}\n"
+        f"Subsystem Concepts:\n{_json(subsystems)}\n"
+        f"Module Concepts:\n{_json(modules)}\n"
+        f"Interval Interpretation:\n{_json(interval_interpretation)}\n"
+        f"Semantic Labels:\n{_json(semantic_labels)}\n"
+    )
+    return CHECKPOINT_MODEL_ENRICHMENT_SYSTEM_PROMPT, user_prompt
+
+
 def build_history_docs_quality_judge_prompt(
     *,
     case: HistoryDocsBenchmarkCase,
@@ -46,6 +71,7 @@ def build_history_docs_quality_judge_prompt(
     validation_report: HistoryValidationReport,
     checkpoint_model: HistoryCheckpointModel,
     semantic_context_map: HistorySemanticContextMap | None = None,
+    checkpoint_model_enrichment: HistoryCheckpointModelEnrichment | None = None,
 ) -> tuple[str, str]:
     """Return prompts for one H10 single-document quality evaluation."""
 
@@ -112,6 +138,32 @@ def build_history_docs_quality_judge_prompt(
             for interface in semantic_context_map.interfaces
         ]
     )
+    enrichment_summary = (
+        {"subsystems": [], "modules": [], "design_note_anchor_titles": []}
+        if checkpoint_model_enrichment is None
+        else {
+            "subsystems": [
+                {
+                    "concept_id": enrichment.concept_id,
+                    "display_name": enrichment.display_name,
+                    "capability_labels": enrichment.capability_labels,
+                }
+                for enrichment in checkpoint_model_enrichment.subsystem_enrichments
+            ],
+            "modules": [
+                {
+                    "concept_id": enrichment.concept_id,
+                    "summary": enrichment.summary,
+                    "responsibility_labels": enrichment.responsibility_labels,
+                }
+                for enrichment in checkpoint_model_enrichment.module_enrichments
+            ],
+            "design_note_anchor_titles": [
+                anchor.title
+                for anchor in checkpoint_model_enrichment.design_note_anchors
+            ],
+        }
+    )
     validation_summary = {
         "error_count": validation_report.error_count,
         "warning_count": validation_report.warning_count,
@@ -133,6 +185,7 @@ def build_history_docs_quality_judge_prompt(
         f"Structure Summary:\n{_json(structure_summary)}\n"
         f"Context Summary:\n{_json(context_summary)}\n"
         f"Interface Summary:\n{_json(interface_summary)}\n"
+        f"Model Enrichment Summary:\n{_json(enrichment_summary)}\n"
         f"Rendered Sections:\n{_json(render_sections)}\n"
         f"Validation Summary:\n{_json(validation_summary)}\n"
         "Checkpoint Markdown:\n"

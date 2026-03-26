@@ -213,7 +213,10 @@ def test_h3_change_ids_are_stable_and_interval_llm_cannot_invent_references(
         baseline.checkpoint_id,
     )
 
-    assert delta_model.subsystem_changes[0].change_id == delta_model.subsystem_changes[0].candidate_id
+    assert (
+        delta_model.subsystem_changes[0].change_id
+        == delta_model.subsystem_changes[0].candidate_id
+    )
     if delta_model.interface_changes:
         assert (
             delta_model.interface_changes[0].change_id
@@ -317,8 +320,10 @@ def test_build_history_docs_checkpoint_h12_supports_scored_interpretation_and_is
                         "title": "Core API contract tightened",
                         "summary": "The fetch_state interface now carries a stricter request contract.",
                         "significance": "high",
-                            "related_commit_ids": [commits["interface"]],
-                        "related_change_ids": ["interface::src/core/api.py::fetch_state"],
+                        "related_commit_ids": [commits["interface"]],
+                        "related_change_ids": [
+                            "interface::src/core/api.py::fetch_state"
+                        ],
                         "related_subsystem_ids": [],
                         "evidence_links": [
                             {
@@ -359,9 +364,7 @@ def test_build_history_docs_checkpoint_h12_supports_scored_interpretation_and_is
                         "title": "Strict API boundary update",
                         "summary": "This window concentrates interface and tooling changes.",
                         "significance": "high",
-                        "related_insight_ids": [
-                            "interval-insight::interface-core-api"
-                        ],
+                        "related_insight_ids": ["interval-insight::interface-core-api"],
                         "evidence_links": [
                             {
                                 "kind": "commit",

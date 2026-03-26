@@ -18,6 +18,8 @@ from engllm.llm.mock import MockLLMClient
 from engllm.prompts.history_docs.builders import build_history_docs_quality_judge_prompt
 from engllm.tools.history_docs.models import (
     HistoryCheckpointModel,
+    HistoryCheckpointModelEnrichment,
+    HistoryDesignNoteAnchor,
     HistoryDocsBenchmarkCase,
     HistoryDocsBenchmarkExpectation,
     HistoryDocsQualityJudgmentEnvelope,
@@ -26,6 +28,7 @@ from engllm.tools.history_docs.models import (
     HistoryRenderedSection,
     HistoryRenderManifest,
     HistorySubsystemConcept,
+    HistorySubsystemConceptEnrichment,
     HistoryValidationReport,
 )
 from tests.history_docs_helpers import (
@@ -241,6 +244,26 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
         markdown_path=Path("checkpoint.md"),
         render_manifest_path=Path("render_manifest.json"),
     )
+    enrichment = HistoryCheckpointModelEnrichment(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="a" * 40,
+        evaluation_status="scored",
+        subsystem_enrichments=[
+            HistorySubsystemConceptEnrichment(
+                concept_id="semantic-subsystem::api",
+                display_name="API Layer",
+                summary="Owns request handling.",
+                capability_labels=["Request Handling"],
+            )
+        ],
+        design_note_anchors=[
+            HistoryDesignNoteAnchor(
+                note_id="design-note::api-contract",
+                title="API Contract",
+                summary="Current boundary remains strict.",
+            )
+        ],
+    )
 
     system_prompt, user_prompt = build_history_docs_quality_judge_prompt(
         case=case,
@@ -248,6 +271,7 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
         render_manifest=render_manifest,
         validation_report=validation_report,
         checkpoint_model=checkpoint_model,
+        checkpoint_model_enrichment=enrichment,
     )
 
     assert "coverage" in system_prompt
@@ -255,8 +279,10 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
     assert "Current design summary." in user_prompt
     assert "Introduction" in user_prompt
     assert "Structure Summary" in user_prompt
+    assert "Model Enrichment Summary" in user_prompt
     assert "API Layer" in user_prompt
     assert "Request Handling" in user_prompt
+    assert "API Contract" in user_prompt
 
 
 def test_compare_history_docs_quality_reports_uses_stable_tie_breaks() -> None:
@@ -507,3 +533,41 @@ def test_run_history_docs_benchmark_suite_persists_llm_failed_reports_and_contin
     assert baseline_report.evaluation_status == "llm_failed"
     assert shadow_report.evaluation_status == "scored"
     assert shadow_report.overall_score == 3.0
+
+
+def test_h12_enriched_model_variant_runs_through_benchmark_suite(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    cases = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )
+
+    suite_report = benchmark.run_history_docs_benchmark_suite(
+        suite_id="h12-enriched",
+        output_root=output_root,
+        cases=cases,
+        variant_runners=[
+            benchmark.semantic_structure_context_benchmark_variant(),
+            benchmark.semantic_structure_context_enriched_model_benchmark_variant(),
+        ],
+        llm_client_factory=lambda config: MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: _canned_quality_payload(
+                    score=4
+                )
+            }
+        ),
+    )
+
+    assert suite_report.variant_ids == [
+        "semantic-structure-context",
+        "semantic-structure-context-enriched-model",
+    ]
+    assert benchmark_quality_report_path(
+        output_root,
+        "h12-enriched",
+        cases[0].manifest.case_id,
+        "semantic-structure-context-enriched-model",
+    ).exists()

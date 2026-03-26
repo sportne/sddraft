@@ -27,6 +27,7 @@ from engllm.tools.history_docs.build import build_history_docs_checkpoint
 from engllm.tools.history_docs.models import (
     HistoryBuildResult,
     HistoryCheckpointModel,
+    HistoryCheckpointModelEnrichment,
     HistoryDocsBenchmarkCase,
     HistoryDocsBenchmarkCaseComparisonReport,
     HistoryDocsBenchmarkCaseReportRef,
@@ -111,6 +112,7 @@ class _LoadedBenchmarkArtifacts:
     validation_report: HistoryValidationReport
     markdown: str
     semantic_context_map: HistorySemanticContextMap | None = None
+    checkpoint_model_enrichment: HistoryCheckpointModelEnrichment | None = None
 
 
 def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
@@ -694,6 +696,44 @@ def semantic_structure_context_benchmark_variant(
     )
 
 
+def semantic_structure_context_enriched_model_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H12-02 enriched-model benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            checkpoint_model_enrichment_mode="enriched",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-enriched-model",
+        runner=_run,
+    )
+
+
 def _empty_rubric_scores() -> list[HistoryDocsRubricScore]:
     return [
         HistoryDocsRubricScore(
@@ -712,6 +752,11 @@ def _load_benchmark_artifacts(
     render_manifest_path = getattr(build_result, "render_manifest_path", None)
     validation_report_path = getattr(build_result, "validation_report_path", None)
     checkpoint_markdown_path = getattr(build_result, "checkpoint_markdown_path", None)
+    checkpoint_model_enrichment_path = getattr(
+        build_result,
+        "checkpoint_model_enrichment_path",
+        None,
+    )
     if (
         checkpoint_model_path is None
         or render_manifest_path is None
@@ -738,6 +783,13 @@ def _load_benchmark_artifacts(
             if build_result.semantic_context_map_path is None
             else HistorySemanticContextMap.model_validate_json(
                 Path(build_result.semantic_context_map_path).read_text(encoding="utf-8")
+            )
+        ),
+        checkpoint_model_enrichment=(
+            None
+            if checkpoint_model_enrichment_path is None
+            else HistoryCheckpointModelEnrichment.model_validate_json(
+                Path(checkpoint_model_enrichment_path).read_text(encoding="utf-8")
             )
         ),
     )
@@ -943,6 +995,7 @@ def evaluate_history_docs_quality(
             validation_report=artifacts.validation_report,
             checkpoint_model=artifacts.checkpoint_model,
             semantic_context_map=artifacts.semantic_context_map,
+            checkpoint_model_enrichment=artifacts.checkpoint_model_enrichment,
         )
         response = llm_client.generate_structured(
             StructuredGenerationRequest(
@@ -1205,6 +1258,7 @@ __all__ = [
     "compare_history_docs_quality_reports",
     "evaluate_history_docs_quality",
     "run_history_docs_benchmark_suite",
+    "semantic_structure_context_enriched_model_benchmark_variant",
     "semantic_structure_context_benchmark_variant",
     "semantic_history_docs_benchmark_variant",
     "validate_benchmark_focus_coverage",

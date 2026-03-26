@@ -290,6 +290,8 @@ Primary tests:
 
 - `tests/test_history_docs_h11.py`
 - `tests/test_history_docs_h11_02.py`
+- `tests/test_history_docs_h12_01.py`
+- `tests/test_history_docs_h12_02.py`
 - `tests/test_history_docs_h10.py`
 - `tests/test_imports.py`
 - `tests/test_layer_boundaries.py`
@@ -358,12 +360,18 @@ Current H1-H10 behavior:
 - H12-01 writes
   `tools/history_docs/checkpoints/<checkpoint_id>/interval_interpretation.json`
   as an advisory LLM-assisted interpretation layer over deterministic H3 output
+- H12-02 writes
+  `tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model_enrichment.json`
+  as a shadow-mode enrichment layer over the deterministic H4 checkpoint model
 - missing previous snapshot artifacts trigger diff-only fallback with
   conservative `observed` statuses instead of failure
 - checkpoint-state artifacts are written to
   `tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model.json`
 - checkpoint models keep both active and retired concepts while section records
   reference active concepts only
+- H12-02 keeps public downstream behavior baseline-only while H10 can compare
+  the internal `semantic-structure-context-enriched-model` variant against the
+  current promoted semantic-structure-context flow
 - section-plan artifacts are written to
   `tools/history_docs/checkpoints/<checkpoint_id>/section_outline.json`
 - H5 keeps checkpoint-model sections as H4 core stubs and writes the scored
