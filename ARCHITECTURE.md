@@ -483,6 +483,9 @@ Current implemented slice:
   shadow-only
 * separate conservative section planning with scored inclusion and depth
   metadata in `section_outline.json`
+* shadow `section_outline_llm.json` planning artifacts that consume H12
+  interval interpretation plus checkpoint-model enrichment evidence before any
+  public promotion
 * deterministic algorithm capsule linking into checkpoint concepts and the
   evidence-gated `algorithms_core_logic` / strategy-variant sections
 * deterministic final rendering driven by `section_outline.json` inclusion
@@ -491,6 +494,8 @@ Current implemented slice:
   warning-only quality findings
 * internal real-repo benchmark and promotion-gate reporting for shadow-mode
   semantic structure/context variants
+* internal H10 benchmark comparison for shadow-mode LLM section planning before
+  it can replace the baseline section scaffold in public builds
 * quarterly auto-selection still deferred
 
 ---

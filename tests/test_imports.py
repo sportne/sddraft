@@ -37,6 +37,7 @@ MODULES = (
     "engllm.tools.history_docs.semantic_context",
     "engllm.tools.history_docs.semantic_planner",
     "engllm.tools.history_docs.semantic_structure",
+    "engllm.tools.history_docs.section_planning_llm",
     "engllm.tools.history_docs.section_outline",
     "engllm.tools.history_docs.structure",
     "engllm.tools.history_docs.validation",

@@ -177,6 +177,7 @@ HistoryCheckpointModelEnrichmentStatus = Literal[
     "heuristic_only",
     "llm_failed",
 ]
+HistorySectionPlanningStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistoryIntervalInsightKind = Literal[
     "subsystem_change",
     "interface_change",
@@ -728,6 +729,10 @@ class HistorySectionPlan(DomainModel):
     evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
     trigger_signals: list[HistorySectionSignalKind] = Field(default_factory=list)
     omission_reason: str | None = None
+    planning_rationale: str | None = None
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_capability_ids: list[str] = Field(default_factory=list)
+    source_design_note_ids: list[str] = Field(default_factory=list)
 
 
 class HistorySectionOutline(DomainModel):
@@ -736,6 +741,44 @@ class HistorySectionOutline(DomainModel):
     checkpoint_id: str
     target_commit: str
     previous_checkpoint_commit: str | None = None
+    sections: list[HistorySectionPlan] = Field(default_factory=list)
+
+
+class HistoryLLMSectionPlanDecision(DomainModel):
+    """Structured LLM decision for one known section id."""
+
+    section_id: HistorySectionPlanId
+    status: HistorySectionPlanStatus
+    depth: HistorySectionDepth | None = None
+    confidence_score: int = Field(ge=0, le=100)
+    planning_rationale: str
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_capability_ids: list[str] = Field(default_factory=list)
+    source_design_note_ids: list[str] = Field(default_factory=list)
+
+
+class HistoryLLMSectionOutlineJudgment(DomainModel):
+    """Validated LLM response for H12-03 section planning."""
+
+    sections: list[HistoryLLMSectionPlanDecision] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_section_ids(self) -> HistoryLLMSectionOutlineJudgment:
+        """Reject duplicate section decisions for one outline judgment."""
+
+        section_ids = [section.section_id for section in self.sections]
+        if len(section_ids) != len(set(section_ids)):
+            raise ValueError("sections must not repeat section_id values")
+        return self
+
+
+class HistoryLLMSectionOutline(DomainModel):
+    """Checkpoint-scoped shadow H12-03 LLM section-planning artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistorySectionPlanningStatus
     sections: list[HistorySectionPlan] = Field(default_factory=list)
 
 
@@ -1313,6 +1356,7 @@ class HistoryBuildResult(DomainModel):
     checkpoint_model_path: Path | None = None
     checkpoint_model_enrichment_path: Path | None = None
     section_outline_path: Path | None = None
+    section_outline_llm_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
     dependencies_artifact_path: Path | None = None
     checkpoint_markdown_path: Path | None = None
@@ -1333,6 +1377,7 @@ class HistoryBuildResult(DomainModel):
     checkpoint_model_enrichment_status: (
         HistoryCheckpointModelEnrichmentStatus | None
     ) = None
+    section_planning_status: HistorySectionPlanningStatus | None = None
     context_node_count: int = 0
     interface_candidate_count: int = 0
     subsystem_change_count: int = 0
@@ -1352,6 +1397,7 @@ class HistoryBuildResult(DomainModel):
     included_section_count: int = 0
     omitted_section_count: int = 0
     algorithm_capsule_count: int = 0
+    llm_included_section_count: int = 0
     documented_dependency_count: int = 0
     dependency_warning_count: int = 0
     dependency_summary_failure_count: int = 0
@@ -1420,6 +1466,9 @@ __all__ = [
     "HistoryIntervalInterpretationJudgment",
     "HistoryIntervalInterpretationStatus",
     "HistoryIntervalSignificance",
+    "HistoryLLMSectionOutline",
+    "HistoryLLMSectionOutlineJudgment",
+    "HistoryLLMSectionPlanDecision",
     "HistoryModuleConceptEnrichment",
     "HistoryModuleConcept",
     "HistoryRationaleClue",
@@ -1454,6 +1503,7 @@ __all__ = [
     "HistorySectionId",
     "HistorySectionKind",
     "HistorySectionOutline",
+    "HistorySectionPlanningStatus",
     "HistorySectionPlan",
     "HistorySectionPlanId",
     "HistorySectionPlanStatus",

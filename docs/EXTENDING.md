@@ -363,6 +363,10 @@ Current H1-H10 behavior:
 - H12-02 writes
   `tools/history_docs/checkpoints/<checkpoint_id>/checkpoint_model_enrichment.json`
   as a shadow-mode enrichment layer over the deterministic H4 checkpoint model
+- H12-03 writes
+  `tools/history_docs/checkpoints/<checkpoint_id>/section_outline_llm.json`
+  as a shadow-mode LLM section-planning layer over the deterministic H5
+  section scaffold plus H12 interval/enrichment evidence
 - missing previous snapshot artifacts trigger diff-only fallback with
   conservative `observed` statuses instead of failure
 - checkpoint-state artifacts are written to
@@ -376,6 +380,9 @@ Current H1-H10 behavior:
   `tools/history_docs/checkpoints/<checkpoint_id>/section_outline.json`
 - H5 keeps checkpoint-model sections as H4 core stubs and writes the scored
   section outline separately
+- H12-03 keeps public downstream behavior baseline-only while H10 can compare
+  the internal `semantic-structure-context-llm-section-planning` variant
+  against the current promoted semantic-structure-context flow
 - H6 writes `tools/history_docs/checkpoints/<checkpoint_id>/algorithm_capsules/index.json`
   plus one JSON file per capsule
 - H6 links capsule ids into checkpoint concepts, the fixed checkpoint-model

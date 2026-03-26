@@ -106,6 +106,10 @@ The current implementation covers History Phases 1 through 12-02:
   - subsystem/module summary enrichment plus capability/design-note proposals
   - validation that prevents invented concept ids, insight ids, rationale clue ids, or evidence links
   - shadow-only public behavior, with an internal enriched-model variant available for H10 benchmarking
+- checkpoint-scoped `section_outline_llm.json` artifacts with:
+  - one structured LLM planning pass over the deterministic section scaffold plus H12 interpretation/enrichment evidence
+  - shadow-only public behavior, with an internal LLM-planning variant available for H10 benchmarking
+  - validation that prevents invented section ids, insight ids, capability ids, or design-note ids
 - tool-scoped `checkpoint_model.json` artifacts with:
   - active and retired subsystem/module/dependency-source concepts
   - optional semantic display names, summaries, capability labels, and baseline

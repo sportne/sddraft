@@ -25,8 +25,10 @@ from engllm.tools.history_docs.models import (
     HistoryDocsQualityJudgmentEnvelope,
     HistoryDocsQualityReport,
     HistoryDocsRubricScore,
+    HistoryLLMSectionOutline,
     HistoryRenderedSection,
     HistoryRenderManifest,
+    HistorySectionPlan,
     HistorySubsystemConcept,
     HistorySubsystemConceptEnrichment,
     HistoryValidationReport,
@@ -264,6 +266,33 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
             )
         ],
     )
+    llm_outline = HistoryLLMSectionOutline(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="a" * 40,
+        evaluation_status="scored",
+        sections=[
+            HistorySectionPlan(
+                section_id="introduction",
+                title="Introduction",
+                kind="core",
+                status="included",
+                confidence_score=90,
+                evidence_score=7,
+                depth="standard",
+                planning_rationale="Intro remains foundational.",
+            ),
+            HistorySectionPlan(
+                section_id="interfaces",
+                title="Interfaces",
+                kind="optional",
+                status="omitted",
+                confidence_score=30,
+                evidence_score=2,
+                planning_rationale="Interface evidence stayed weak.",
+                omission_reason="llm_planner_omitted",
+            ),
+        ],
+    )
 
     system_prompt, user_prompt = build_history_docs_quality_judge_prompt(
         case=case,
@@ -272,6 +301,7 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
         validation_report=validation_report,
         checkpoint_model=checkpoint_model,
         checkpoint_model_enrichment=enrichment,
+        llm_section_outline=llm_outline,
     )
 
     assert "coverage" in system_prompt
@@ -280,9 +310,11 @@ def test_quality_judge_prompt_includes_expectations_and_markdown(
     assert "Introduction" in user_prompt
     assert "Structure Summary" in user_prompt
     assert "Model Enrichment Summary" in user_prompt
+    assert "Section Planning Summary" in user_prompt
     assert "API Layer" in user_prompt
     assert "Request Handling" in user_prompt
     assert "API Contract" in user_prompt
+    assert "Intro remains foundational." in user_prompt
 
 
 def test_compare_history_docs_quality_reports_uses_stable_tie_breaks() -> None:
@@ -570,4 +602,42 @@ def test_h12_enriched_model_variant_runs_through_benchmark_suite(
         "h12-enriched",
         cases[0].manifest.case_id,
         "semantic-structure-context-enriched-model",
+    ).exists()
+
+
+def test_h12_llm_section_planning_variant_runs_through_benchmark_suite(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    cases = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )
+
+    suite_report = benchmark.run_history_docs_benchmark_suite(
+        suite_id="h12-section-planning",
+        output_root=output_root,
+        cases=cases,
+        variant_runners=[
+            benchmark.semantic_structure_context_benchmark_variant(),
+            benchmark.semantic_structure_context_llm_section_planning_benchmark_variant(),
+        ],
+        llm_client_factory=lambda config: MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: _canned_quality_payload(
+                    score=4
+                )
+            }
+        ),
+    )
+
+    assert suite_report.variant_ids == [
+        "semantic-structure-context",
+        "semantic-structure-context-llm-section-planning",
+    ]
+    assert benchmark_quality_report_path(
+        output_root,
+        "h12-section-planning",
+        cases[0].manifest.case_id,
+        "semantic-structure-context-llm-section-planning",
     ).exists()

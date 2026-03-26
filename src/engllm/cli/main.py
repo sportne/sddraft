@@ -413,6 +413,8 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Checkpoint model enrichment: {result.checkpoint_model_enrichment_path}")
     if result.section_outline_path is not None:
         print(f"Section outline: {result.section_outline_path}")
+    if result.section_outline_llm_path is not None:
+        print(f"LLM section outline: {result.section_outline_llm_path}")
     if result.algorithm_capsule_index_path is not None:
         print(f"Algorithm capsules: {result.algorithm_capsule_index_path}")
     if result.dependencies_artifact_path is not None:

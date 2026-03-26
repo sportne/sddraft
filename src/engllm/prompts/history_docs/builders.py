@@ -9,6 +9,7 @@ from engllm.prompts.history_docs.templates import (
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
     INTERVAL_INTERPRETATION_SYSTEM_PROMPT,
+    SECTION_PLANNING_LLM_SYSTEM_PROMPT,
     SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT,
     SEMANTIC_CONTEXT_SYSTEM_PROMPT,
     SEMANTIC_STRUCTURE_SYSTEM_PROMPT,
@@ -18,6 +19,7 @@ from engllm.tools.history_docs.models import (
     HistoryCheckpointModelEnrichment,
     HistoryDependencyEntry,
     HistoryDocsBenchmarkCase,
+    HistoryLLMSectionOutline,
     HistoryRenderManifest,
     HistorySemanticContextMap,
     HistoryValidationReport,
@@ -72,6 +74,7 @@ def build_history_docs_quality_judge_prompt(
     checkpoint_model: HistoryCheckpointModel,
     semantic_context_map: HistorySemanticContextMap | None = None,
     checkpoint_model_enrichment: HistoryCheckpointModelEnrichment | None = None,
+    llm_section_outline: HistoryLLMSectionOutline | None = None,
 ) -> tuple[str, str]:
     """Return prompts for one H10 single-document quality evaluation."""
 
@@ -164,6 +167,42 @@ def build_history_docs_quality_judge_prompt(
             ],
         }
     )
+    section_planning_summary: dict[str, object] = (
+        {
+            "evaluation_status": None,
+            "included_section_ids": [],
+            "omitted_section_ids": [],
+            "depth_by_section": {},
+            "rationale_snippets": [],
+        }
+        if llm_section_outline is None
+        else {
+            "evaluation_status": llm_section_outline.evaluation_status,
+            "included_section_ids": [
+                section.section_id
+                for section in llm_section_outline.sections
+                if section.status == "included"
+            ],
+            "omitted_section_ids": [
+                section.section_id
+                for section in llm_section_outline.sections
+                if section.status == "omitted"
+            ],
+            "depth_by_section": {
+                section.section_id: section.depth
+                for section in llm_section_outline.sections
+                if section.depth is not None
+            },
+            "rationale_snippets": [
+                {
+                    "section_id": section.section_id,
+                    "planning_rationale": section.planning_rationale,
+                }
+                for section in llm_section_outline.sections
+                if section.planning_rationale is not None
+            ][:6],
+        }
+    )
     validation_summary = {
         "error_count": validation_report.error_count,
         "warning_count": validation_report.warning_count,
@@ -186,6 +225,7 @@ def build_history_docs_quality_judge_prompt(
         f"Context Summary:\n{_json(context_summary)}\n"
         f"Interface Summary:\n{_json(interface_summary)}\n"
         f"Model Enrichment Summary:\n{_json(enrichment_summary)}\n"
+        f"Section Planning Summary:\n{_json(section_planning_summary)}\n"
         f"Rendered Sections:\n{_json(render_sections)}\n"
         f"Validation Summary:\n{_json(validation_summary)}\n"
         "Checkpoint Markdown:\n"
@@ -278,3 +318,29 @@ def build_interval_interpretation_prompt(
         f"Semantic Labels:\n{_json(semantic_labels)}\n"
     )
     return INTERVAL_INTERPRETATION_SYSTEM_PROMPT, user_prompt
+
+
+def build_section_planning_llm_prompt(
+    *,
+    checkpoint_id: str,
+    target_commit: str,
+    previous_checkpoint_commit: str | None,
+    section_scaffold: list[dict[str, object]],
+    checkpoint_summary: dict[str, object],
+    interval_interpretation: dict[str, object],
+    checkpoint_model_enrichment: dict[str, object],
+    semantic_context_summary: dict[str, object],
+) -> tuple[str, str]:
+    """Return prompts for one H12-03 shadow section-planning request."""
+
+    user_prompt = (
+        "Plan checkpoint documentation sections using only the supplied "
+        "structured evidence.\n"
+        f"Checkpoint Context:\n{_json({'checkpoint_id': checkpoint_id, 'target_commit': target_commit, 'previous_checkpoint_commit': previous_checkpoint_commit})}\n"
+        f"Deterministic Section Scaffold:\n{_json(section_scaffold)}\n"
+        f"Checkpoint Summary:\n{_json(checkpoint_summary)}\n"
+        f"Interval Interpretation:\n{_json(interval_interpretation)}\n"
+        f"Checkpoint Model Enrichment:\n{_json(checkpoint_model_enrichment)}\n"
+        f"Semantic Context Summary:\n{_json(semantic_context_summary)}\n"
+    )
+    return SECTION_PLANNING_LLM_SYSTEM_PROMPT, user_prompt

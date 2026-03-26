@@ -94,8 +94,13 @@ from engllm.tools.history_docs.section_outline import (
     build_section_outline,
     section_outline_path,
 )
+from engllm.tools.history_docs.section_planning_llm import (
+    build_llm_section_outline,
+    build_section_planning_scaffold,
+    link_section_planning_outline_to_scaffold,
+    section_outline_llm_path,
+)
 from engllm.tools.history_docs.semantic_context import (
-    augment_section_outline_with_semantic_context,
     build_semantic_context_map,
     semantic_context_map_path,
 )
@@ -359,6 +364,7 @@ def build_history_docs_checkpoint(
     subsystem_grouping_mode: Literal["path", "semantic"] = "path",
     experimental_section_mode: Literal["default", "semantic_context"] = "default",
     checkpoint_model_enrichment_mode: Literal["baseline", "enriched"] = "baseline",
+    section_planning_mode: Literal["baseline", "llm"] = "baseline",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -779,6 +785,16 @@ def build_history_docs_checkpoint(
     section_outline_artifact_path = section_outline_path(
         history_tool_root, checkpoint_id
     )
+    section_outline_llm_artifact_path = section_outline_llm_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    scaffold_outline = build_section_planning_scaffold(
+        checkpoint_model=checkpoint_model,
+        section_outline=section_outline,
+        semantic_context_map=semantic_context_map,
+        include_semantic_context=experimental_section_mode == "semantic_context",
+    )
     algorithm_capsule_index_artifact_path = algorithm_capsule_index_path(
         history_tool_root, checkpoint_id
     )
@@ -795,18 +811,44 @@ def build_history_docs_checkpoint(
         checkpoint_model,
         algorithm_capsules,
     )
-    section_outline = link_algorithm_capsules_to_section_outline(
+    scaffold_outline = link_algorithm_capsules_to_section_outline(
         checkpoint_model,
-        section_outline,
+        scaffold_outline,
         interval_delta_model,
         algorithm_capsules,
     )
-    if experimental_section_mode == "semantic_context":
-        section_outline = augment_section_outline_with_semantic_context(
-            checkpoint_model=checkpoint_model,
-            section_outline=section_outline,
-            semantic_context_map=semantic_context_map,
+    _progress(
+        progress_callback,
+        "history-docs: building shadow LLM section outline",
+    )
+    section_outline_llm = build_llm_section_outline(
+        checkpoint_model=checkpoint_model,
+        section_scaffold=scaffold_outline,
+        interval_interpretation=interval_interpretation,
+        checkpoint_model_enrichment=checkpoint_model_enrichment,
+        semantic_context_map=(
+            semantic_context_map
+            if experimental_section_mode == "semantic_context"
+            else None
+        ),
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    section_outline_llm = link_section_planning_outline_to_scaffold(
+        section_scaffold=scaffold_outline,
+        llm_section_outline=section_outline_llm,
+    )
+    authoritative_section_outline = (
+        HistorySectionOutline(
+            checkpoint_id=section_outline_llm.checkpoint_id,
+            target_commit=section_outline_llm.target_commit,
+            previous_checkpoint_commit=section_outline_llm.previous_checkpoint_commit,
+            sections=section_outline_llm.sections,
         )
+        if section_planning_mode == "llm"
+        else scaffold_outline
+    )
 
     checkpoint_root = history_tool_root / "checkpoints" / checkpoint_id
     for index_entry, capsule in zip(
@@ -816,7 +858,8 @@ def build_history_docs_checkpoint(
     ):
         write_json_model(checkpoint_root / index_entry.artifact_path, capsule)
     write_json_model(algorithm_capsule_index_artifact_path, algorithm_capsule_index)
-    write_json_model(section_outline_artifact_path, section_outline)
+    write_json_model(section_outline_artifact_path, scaffold_outline)
+    write_json_model(section_outline_llm_artifact_path, section_outline_llm)
 
     _progress(
         progress_callback,
@@ -859,7 +902,7 @@ def build_history_docs_checkpoint(
     checkpoint_markdown, render_manifest = render_checkpoint_markdown(
         workspace_id=resolved_workspace_id,
         checkpoint_model=checkpoint_model,
-        section_outline=section_outline,
+        section_outline=authoritative_section_outline,
         dependency_inventory=dependency_inventory,
         capsule_index=algorithm_capsule_index,
         capsules=algorithm_capsules,
@@ -886,7 +929,7 @@ def build_history_docs_checkpoint(
     validation_report = validate_checkpoint_render(
         checkpoint_dir=checkpoint_root,
         checkpoint_model=checkpoint_model,
-        section_outline=section_outline,
+        section_outline=authoritative_section_outline,
         dependency_inventory=dependency_inventory,
         capsule_index=algorithm_capsule_index,
         markdown=checkpoint_markdown,
@@ -934,6 +977,7 @@ def build_history_docs_checkpoint(
         checkpoint_model_path=checkpoint_model_artifact_path,
         checkpoint_model_enrichment_path=checkpoint_model_enrichment_artifact_path,
         section_outline_path=section_outline_artifact_path,
+        section_outline_llm_path=section_outline_llm_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
         dependencies_artifact_path=dependencies_artifact_path,
         checkpoint_markdown_path=checkpoint_markdown_artifact_path,
@@ -957,6 +1001,7 @@ def build_history_docs_checkpoint(
         checkpoint_model_enrichment_status=(
             checkpoint_model_enrichment.evaluation_status
         ),
+        section_planning_status=section_outline_llm.evaluation_status,
         context_node_count=len(semantic_context_map.context_nodes),
         interface_candidate_count=len(semantic_context_map.interfaces),
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
@@ -975,9 +1020,18 @@ def build_history_docs_checkpoint(
         module_concept_count=len(checkpoint_model.modules),
         dependency_concept_count=len(checkpoint_model.dependencies),
         retired_concept_count=retired_concept_count,
-        included_section_count=_count_section_status(section_outline, "included"),
-        omitted_section_count=_count_section_status(section_outline, "omitted"),
+        included_section_count=_count_section_status(scaffold_outline, "included"),
+        omitted_section_count=_count_section_status(scaffold_outline, "omitted"),
         algorithm_capsule_count=len(algorithm_capsules),
+        llm_included_section_count=_count_section_status(
+            HistorySectionOutline(
+                checkpoint_id=section_outline_llm.checkpoint_id,
+                target_commit=section_outline_llm.target_commit,
+                previous_checkpoint_commit=section_outline_llm.previous_checkpoint_commit,
+                sections=section_outline_llm.sections,
+            ),
+            "included",
+        ),
         documented_dependency_count=len(dependency_inventory.entries),
         dependency_warning_count=len(dependency_inventory.warnings),
         dependency_summary_failure_count=_count_dependency_summary_failures(

@@ -588,46 +588,45 @@ def build_semantic_context_map(
         )
 
 
-def _context_concept_ids(
-    semantic_context_map: HistorySemanticContextMap,
+def _concept_ids_for_modules(
+    checkpoint_model: HistoryCheckpointModel,
+    module_ids: set[str],
 ) -> list[str]:
+    active_modules = {
+        module.concept_id: module
+        for module in checkpoint_model.modules
+        if module.lifecycle_status == "active"
+    }
+    active_subsystem_ids = {
+        subsystem.concept_id
+        for subsystem in checkpoint_model.subsystems
+        if subsystem.lifecycle_status == "active"
+    }
     concept_ids: set[str] = set()
-    for node in semantic_context_map.context_nodes:
-        concept_ids.update(node.related_subsystem_ids)
-        concept_ids.update(node.related_module_ids)
+    for module_id in module_ids:
+        module = active_modules.get(module_id)
+        if module is None:
+            continue
+        concept_ids.add(module.concept_id)
+        if module.subsystem_id in active_subsystem_ids:
+            concept_ids.add(module.subsystem_id)
     return sorted(
         concept_ids,
         key=lambda item: (
-            (
-                0
-                if item.startswith("semantic-subsystem::")
-                or item.startswith("subsystem::")
-                else 1
-            ),
+            (0 if item.startswith("subsystem::") else 1),
             item,
         ),
     )
 
 
 def _interface_concept_ids(
+    checkpoint_model: HistoryCheckpointModel,
     semantic_context_map: HistorySemanticContextMap,
 ) -> list[str]:
-    concept_ids: set[str] = set()
+    module_ids: set[str] = set()
     for interface in semantic_context_map.interfaces:
-        concept_ids.update(interface.provider_subsystem_ids)
-        concept_ids.update(interface.related_module_ids)
-    return sorted(
-        concept_ids,
-        key=lambda item: (
-            (
-                0
-                if item.startswith("semantic-subsystem::")
-                or item.startswith("subsystem::")
-                else 1
-            ),
-            item,
-        ),
-    )
+        module_ids.update(interface.related_module_ids)
+    return _concept_ids_for_modules(checkpoint_model, module_ids)
 
 
 def _depth_for_optional_score(score: int) -> HistorySectionDepth | None:
@@ -684,7 +683,14 @@ def augment_section_outline_with_semantic_context(
             if system_context_included
             else None
         ),
-        concept_ids=_context_concept_ids(semantic_context_map),
+        concept_ids=_concept_ids_for_modules(
+            checkpoint_model,
+            {
+                module_id
+                for node in semantic_context_map.context_nodes
+                for module_id in node.related_module_ids
+            },
+        ),
         evidence_links=system_context_links,
         trigger_signals=(
             ["active_subsystems", "interface_change"]
@@ -714,7 +720,7 @@ def augment_section_outline_with_semantic_context(
         depth=(
             _depth_for_optional_score(interface_score) if interface_included else None
         ),
-        concept_ids=_interface_concept_ids(semantic_context_map),
+        concept_ids=_interface_concept_ids(checkpoint_model, semantic_context_map),
         evidence_links=interface_links,
         trigger_signals=(
             ["active_modules", "interface_change"]

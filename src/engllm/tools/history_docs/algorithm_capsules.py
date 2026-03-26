@@ -757,6 +757,7 @@ def link_algorithm_capsules_to_section_outline(
     """Return a scored section outline rewritten with H6 capsule links."""
 
     linked_outline = section_outline.model_copy(deep=True)
+    ordered_section_ids = [section.section_id for section in linked_outline.sections]
     sections: dict[HistorySectionPlanId, HistorySectionPlan] = {
         section.section_id: section.model_copy(deep=True)
         for section in linked_outline.sections
@@ -775,21 +776,16 @@ def link_algorithm_capsules_to_section_outline(
         interval_delta_model=interval_delta_model,
         capsules=capsules,
     )
+    if "algorithms_core_logic" not in ordered_section_ids:
+        if "subsystems_modules" in ordered_section_ids:
+            insert_at = ordered_section_ids.index("subsystems_modules") + 1
+            ordered_section_ids.insert(insert_at, "algorithms_core_logic")
+        else:
+            ordered_section_ids.append("algorithms_core_logic")
     linked_outline.sections = [
-        sections.get(
-            section_id,
-            HistorySectionPlan(
-                section_id=section_id,
-                title=_OUTLINE_SECTION_TITLES[section_id],
-                kind="optional",
-                status="omitted",
-                confidence_score=0,
-                evidence_score=0,
-                depth=None,
-                omission_reason="insufficient_evidence",
-            ),
-        )
-        for section_id in _OUTLINE_SECTION_ORDER
+        sections[section_id]
+        for section_id in ordered_section_ids
+        if section_id in sections
     ]
     return linked_outline
 

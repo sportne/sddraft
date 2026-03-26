@@ -367,6 +367,25 @@ def section_outline_path(
     )
 
 
+def section_outline_llm_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H12-03 shadow section outline path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "section_outline_llm.json"
+    )
+
+
 def algorithm_capsule_index_path(
     output_root: Path,
     workspace_id: str,
