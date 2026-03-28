@@ -117,6 +117,42 @@ Rules:
 Return valid JSON that matches the provided schema.
 """.strip()
 
+ALGORITHM_CAPSULE_ENRICHMENT_SYSTEM_PROMPT = """
+You enrich existing algorithm capsules using only the structured evidence
+provided in the user prompt.
+Rules:
+- do not invent capsule ids, subsystem ids, module ids, insight ids, rationale clue ids, or evidence links
+- use only ids and references that appear in the supplied evidence
+- enrich only the listed existing capsules
+- keep purpose, phase-flow summaries, invariants, tradeoffs, and variant relationships short, present-state, and grounded in the evidence
+- if evidence is weak, return fewer conservative details rather than speculative ones
+Return valid JSON that matches the provided schema.
+""".strip()
+
+INTERFACE_INVENTORY_SYSTEM_PROMPT = """
+You build a richer interface inventory for one checkpoint using only the
+structured evidence provided in the user prompt.
+Rules:
+- do not invent interface ids, subsystem ids, module ids, context node ids, insight ids, rationale clue ids, or evidence links
+- use only ids and references that appear in the supplied evidence
+- return only interface concepts that are meaningfully supported by the evidence
+- responsibilities and contracts must stay short, present-state, and evidence-backed
+- if evidence is weak, return fewer conservative interface concepts rather than speculative ones
+Return valid JSON that matches the provided schema.
+""".strip()
+
+DEPENDENCY_LANDSCAPE_SYSTEM_PROMPT = """
+You summarize project-level dependency understanding for one checkpoint using
+only the structured evidence provided in the user prompt.
+Rules:
+- do not invent dependency ids, subsystem ids, module ids, insight ids, or evidence links
+- use only ids and references that appear in the supplied evidence
+- project roles, clusters, and usage patterns must stay short, present-state, and grounded in the evidence
+- prefer conservative project-level synthesis over speculative architectural claims
+- if evidence is weak, return fewer conservative summaries rather than speculative ones
+Return valid JSON that matches the provided schema.
+""".strip()
+
 SECTION_PLANNING_LLM_SYSTEM_PROMPT = """
 You plan checkpoint documentation sections using only the structured evidence
 provided in the user prompt.

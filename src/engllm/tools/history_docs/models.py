@@ -177,6 +177,13 @@ HistoryCheckpointModelEnrichmentStatus = Literal[
     "heuristic_only",
     "llm_failed",
 ]
+HistoryAlgorithmCapsuleEnrichmentStatus = Literal[
+    "scored",
+    "heuristic_only",
+    "llm_failed",
+]
+HistoryInterfaceInventoryStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryDependencyLandscapeStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistorySectionPlanningStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistoryIntervalInsightKind = Literal[
     "subsystem_change",
@@ -424,6 +431,67 @@ class HistoryAlgorithmCapsuleIndex(DomainModel):
     target_commit: str
     previous_checkpoint_commit: str | None = None
     capsules: list[HistoryAlgorithmCapsuleIndexEntry] = Field(default_factory=list)
+
+
+class HistoryAlgorithmInvariant(DomainModel):
+    """Evidence-backed invariant attached to one enriched algorithm capsule."""
+
+    text: str
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmTradeoff(DomainModel):
+    """One tradeoff or operational tension captured for an algorithm capsule."""
+
+    title: str
+    summary: str
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmVariantRelationship(DomainModel):
+    """Relationship note for one known algorithm variant family."""
+
+    variant_name: str
+    relationship: str
+    summary: str
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmCapsuleEnrichment(DomainModel):
+    """Structured H13-01 enrichment for one existing algorithm capsule."""
+
+    capsule_id: str
+    purpose: str
+    phase_flow_summary: str
+    invariants: list[HistoryAlgorithmInvariant] = Field(default_factory=list)
+    tradeoffs: list[HistoryAlgorithmTradeoff] = Field(default_factory=list)
+    variant_relationships: list[HistoryAlgorithmVariantRelationship] = Field(
+        default_factory=list
+    )
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_rationale_clue_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryAlgorithmCapsuleEnrichmentIndexEntry(DomainModel):
+    """Index entry for one serialized enriched algorithm capsule artifact."""
+
+    capsule_id: str
+    artifact_path: Path
+
+
+class HistoryAlgorithmCapsuleEnrichmentIndex(DomainModel):
+    """Index of H13-01 enriched algorithm capsule artifacts."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryAlgorithmCapsuleEnrichmentStatus
+    capsules: list[HistoryAlgorithmCapsuleEnrichmentIndexEntry] = Field(
+        default_factory=list
+    )
 
 
 class HistoryIntervalDeltaModel(DomainModel):
@@ -688,6 +756,105 @@ class HistoryDependencyInventory(DomainModel):
     previous_checkpoint_commit: str | None = None
     entries: list[HistoryDependencyEntry] = Field(default_factory=list)
     warnings: list[HistoryDependencyWarning] = Field(default_factory=list)
+
+
+class HistoryInterfaceResponsibility(DomainModel):
+    """One interface responsibility or obligation statement."""
+
+    title: str
+    summary: str
+    related_module_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryCrossModuleContract(DomainModel):
+    """One cross-module contract signal tied to an interface concept."""
+
+    contract_id: str
+    title: str
+    summary: str
+    provider_module_ids: list[str] = Field(default_factory=list)
+    consumer_module_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryInterfaceConcept(DomainModel):
+    """Structured H13-02 interface concept built on top of H11-03 candidates."""
+
+    interface_id: str
+    title: str
+    kind: HistorySemanticInterfaceKind
+    summary: str
+    provider_subsystem_ids: list[str] = Field(default_factory=list)
+    consumer_context_node_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    responsibilities: list[HistoryInterfaceResponsibility] = Field(default_factory=list)
+    cross_module_contracts: list[HistoryCrossModuleContract] = Field(
+        default_factory=list
+    )
+    collaboration_notes: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_rationale_clue_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryInterfaceInventory(DomainModel):
+    """Checkpoint-scoped H13-02 interface documentation artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryInterfaceInventoryStatus
+    interfaces: list[HistoryInterfaceConcept] = Field(default_factory=list)
+
+
+class HistoryDependencyProjectRole(DomainModel):
+    """Project-level role grouping for one set of related dependencies."""
+
+    role_id: str
+    title: str
+    summary: str
+    dependency_ids: list[str] = Field(default_factory=list)
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDependencyCluster(DomainModel):
+    """Cluster of dependencies sharing a common role or ecosystem pattern."""
+
+    cluster_id: str
+    title: str
+    summary: str
+    dependency_ids: list[str] = Field(default_factory=list)
+    ecosystems: list[str] = Field(default_factory=list)
+    scope_roles: list[HistoryDependencyRole] = Field(default_factory=list)
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDependencyUsagePattern(DomainModel):
+    """Project-specific dependency usage pattern across modules or subsystems."""
+
+    pattern_id: str
+    title: str
+    summary: str
+    dependency_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDependencyLandscape(DomainModel):
+    """Checkpoint-scoped H13-03 project-level dependency understanding artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryDependencyLandscapeStatus
+    project_roles: list[HistoryDependencyProjectRole] = Field(default_factory=list)
+    clusters: list[HistoryDependencyCluster] = Field(default_factory=list)
+    usage_patterns: list[HistoryDependencyUsagePattern] = Field(default_factory=list)
 
 
 class HistorySectionState(DomainModel):
@@ -1092,6 +1259,61 @@ class HistoryCheckpointModelEnrichmentJudgment(DomainModel):
         return self
 
 
+class HistoryAlgorithmCapsuleEnrichmentJudgment(DomainModel):
+    """Validated LLM response for H13-01 algorithm capsule enrichment."""
+
+    enrichments: list[HistoryAlgorithmCapsuleEnrichment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_capsule_ids(
+        self,
+    ) -> HistoryAlgorithmCapsuleEnrichmentJudgment:
+        """Reject duplicate enriched algorithm capsule identifiers."""
+
+        capsule_ids = [enrichment.capsule_id for enrichment in self.enrichments]
+        if len(capsule_ids) != len(set(capsule_ids)):
+            raise ValueError("enrichments must not repeat capsule_id values")
+        return self
+
+
+class HistoryInterfaceInventoryJudgment(DomainModel):
+    """Validated LLM response for H13-02 interface documentation."""
+
+    interfaces: list[HistoryInterfaceConcept] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_interface_ids(self) -> HistoryInterfaceInventoryJudgment:
+        """Reject duplicate interface identifiers."""
+
+        interface_ids = [interface.interface_id for interface in self.interfaces]
+        if len(interface_ids) != len(set(interface_ids)):
+            raise ValueError("interfaces must not repeat interface_id values")
+        return self
+
+
+class HistoryDependencyLandscapeJudgment(DomainModel):
+    """Validated LLM response for H13-03 dependency landscape generation."""
+
+    project_roles: list[HistoryDependencyProjectRole] = Field(default_factory=list)
+    clusters: list[HistoryDependencyCluster] = Field(default_factory=list)
+    usage_patterns: list[HistoryDependencyUsagePattern] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> HistoryDependencyLandscapeJudgment:
+        """Reject duplicate role, cluster, or usage-pattern identifiers."""
+
+        role_ids = [role.role_id for role in self.project_roles]
+        cluster_ids = [cluster.cluster_id for cluster in self.clusters]
+        pattern_ids = [pattern.pattern_id for pattern in self.usage_patterns]
+        if len(role_ids) != len(set(role_ids)):
+            raise ValueError("project_roles must not repeat role_id values")
+        if len(cluster_ids) != len(set(cluster_ids)):
+            raise ValueError("clusters must not repeat cluster_id values")
+        if len(pattern_ids) != len(set(pattern_ids)):
+            raise ValueError("usage_patterns must not repeat pattern_id values")
+        return self
+
+
 class HistorySemanticCheckpointJudgment(DomainModel):
     """Structured planner judgment for one deterministic candidate commit."""
 
@@ -1355,6 +1577,9 @@ class HistoryBuildResult(DomainModel):
     interval_interpretation_path: Path | None = None
     checkpoint_model_path: Path | None = None
     checkpoint_model_enrichment_path: Path | None = None
+    algorithm_capsule_enrichment_index_path: Path | None = None
+    interface_inventory_path: Path | None = None
+    dependency_landscape_path: Path | None = None
     section_outline_path: Path | None = None
     section_outline_llm_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
@@ -1377,6 +1602,11 @@ class HistoryBuildResult(DomainModel):
     checkpoint_model_enrichment_status: (
         HistoryCheckpointModelEnrichmentStatus | None
     ) = None
+    algorithm_capsule_enrichment_status: (
+        HistoryAlgorithmCapsuleEnrichmentStatus | None
+    ) = None
+    interface_inventory_status: HistoryInterfaceInventoryStatus | None = None
+    dependency_landscape_status: HistoryDependencyLandscapeStatus | None = None
     section_planning_status: HistorySectionPlanningStatus | None = None
     context_node_count: int = 0
     interface_candidate_count: int = 0
@@ -1390,6 +1620,10 @@ class HistoryBuildResult(DomainModel):
     enriched_module_count: int = 0
     capability_proposal_count: int = 0
     design_note_anchor_count: int = 0
+    enriched_algorithm_capsule_count: int = 0
+    interface_inventory_count: int = 0
+    dependency_cluster_count: int = 0
+    dependency_usage_pattern_count: int = 0
     subsystem_concept_count: int = 0
     module_concept_count: int = 0
     dependency_concept_count: int = 0
@@ -1410,12 +1644,20 @@ __all__ = [
     "HistoryAlgorithmAssumption",
     "HistoryAlgorithmCandidate",
     "HistoryAlgorithmCapsule",
+    "HistoryAlgorithmCapsuleEnrichment",
+    "HistoryAlgorithmCapsuleEnrichmentIndex",
+    "HistoryAlgorithmCapsuleEnrichmentIndexEntry",
+    "HistoryAlgorithmCapsuleEnrichmentJudgment",
+    "HistoryAlgorithmCapsuleEnrichmentStatus",
     "HistoryAlgorithmCapsuleIndex",
     "HistoryAlgorithmCapsuleIndexEntry",
     "HistoryAlgorithmCapsuleStatus",
     "HistoryAlgorithmDataStructure",
+    "HistoryAlgorithmInvariant",
     "HistoryAlgorithmPhase",
     "HistoryAlgorithmSharedAbstraction",
+    "HistoryAlgorithmTradeoff",
+    "HistoryAlgorithmVariantRelationship",
     "HistoryBuildResult",
     "HistoryCommitDelta",
     "HistoryCheckpointModel",
@@ -1445,21 +1687,33 @@ __all__ = [
     "HistoryDocsRubricDimension",
     "HistoryDocsRubricScore",
     "HistoryDocsVariantComparison",
+    "HistoryCrossModuleContract",
+    "HistoryDependencyCluster",
     "HistoryDependencyDeclaration",
     "HistoryDependencyEntry",
     "HistoryDependencyConcept",
     "HistoryDependencyInventory",
+    "HistoryDependencyLandscape",
+    "HistoryDependencyLandscapeJudgment",
+    "HistoryDependencyLandscapeStatus",
+    "HistoryDependencyProjectRole",
     "HistoryDependencyRole",
     "HistoryDependencySectionTarget",
     "HistoryDependencySourceKind",
     "HistoryDependencySummary",
     "HistoryDependencySummaryStatus",
+    "HistoryDependencyUsagePattern",
     "HistoryDependencyWarning",
     "HistoryEvidenceKind",
     "HistoryEvidenceLink",
     "HistoryDeltaEvidenceLink",
     "HistoryDependencyChangeCandidate",
     "HistoryInterfaceChangeCandidate",
+    "HistoryInterfaceConcept",
+    "HistoryInterfaceInventory",
+    "HistoryInterfaceInventoryJudgment",
+    "HistoryInterfaceInventoryStatus",
+    "HistoryInterfaceResponsibility",
     "HistoryIntervalDeltaModel",
     "HistoryIntervalInsightKind",
     "HistoryIntervalInterpretation",

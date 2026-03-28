@@ -406,6 +406,64 @@ def algorithm_capsule_index_path(
     )
 
 
+def algorithm_capsule_enrichment_index_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H13-01 enriched algorithm capsule index path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "algorithm_capsules_enriched"
+        / "index.json"
+    )
+
+
+def interface_inventory_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H13-02 interface inventory path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "interface_inventory.json"
+    )
+
+
+def dependency_landscape_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H13-03 dependency landscape path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "dependency_landscape.json"
+    )
+
+
 def dependencies_artifact_path(
     output_root: Path,
     workspace_id: str,

@@ -21,7 +21,7 @@
 - Commit-aware graph edges (`changed_in`, `impacts_section`) are generated in propose-updates and are now used intentionally in `ask` for change-impact questions.
 - `ask` intensive mode screens a structured cross-file corpus chunk-by-chunk and persists corpus/run artifacts under `artifacts/workspaces/<workspace_id>/tools/ask/intensive/`.
 - Shared integration capability interfaces now exist for future repo-host, issue-tracker, and CI-backed tools, but those future tools are not implemented yet.
-- `engllm history-docs build` now supports H1-H12-03: explicit checkpoint traversal, shared interval manifests, advisory `semantic_checkpoint_plan.json` artifacts for semantic checkpoint anchors, temporary snapshot export, checkpoint structural analysis, checkpoint-scoped `semantic_structure_map.json` artifacts for semantic subsystem/capability clustering that remain shadow-only when used without H11-03, checkpoint-scoped `semantic_context_map.json` artifacts for system-context and interface extraction, promoted public-build rendering of `System Context` / `Interfaces` through the combined H11-03 path, tool-scoped interval-delta analysis, checkpoint-scoped `interval_interpretation.json` artifacts with LLM-assisted design-change insights/rationale clues/significant windows, checkpoint-state models with active/retired subsystem/module/dependency concepts, checkpoint-scoped `checkpoint_model_enrichment.json` artifacts that enrich subsystem/module summaries plus propose capability/design-note anchors while remaining shadow-only in public builds, baseline `section_outline.json` artifacts plus shadow `section_outline_llm.json` artifacts for evidence-backed LLM section planning, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output, and build-integrated `validation_report.json` quality checks that fail only on hard structural/evidence violations.
+- `engllm history-docs build` now supports H1-H13: explicit checkpoint traversal, shared interval manifests, advisory `semantic_checkpoint_plan.json` artifacts for semantic checkpoint anchors, temporary snapshot export, checkpoint structural analysis, checkpoint-scoped `semantic_structure_map.json` artifacts for semantic subsystem/capability clustering that remain shadow-only when used without H11-03, checkpoint-scoped `semantic_context_map.json` artifacts for system-context and interface extraction, promoted public-build rendering of `System Context` / `Interfaces` through the combined H11-03 path, tool-scoped interval-delta analysis, checkpoint-scoped `interval_interpretation.json` artifacts with LLM-assisted design-change insights/rationale clues/significant windows, checkpoint-state models with active/retired subsystem/module/dependency concepts, checkpoint-scoped `checkpoint_model_enrichment.json` artifacts that enrich subsystem/module summaries plus propose capability/design-note anchors while remaining shadow-only in public builds, baseline `section_outline.json` artifacts plus shadow `section_outline_llm.json` artifacts for evidence-backed LLM section planning, deterministic `algorithm_capsules/` artifacts linked back into checkpoint concepts and sections, shadow `algorithm_capsules_enriched/`, `interface_inventory.json`, and `dependency_landscape.json` artifacts for H13 algorithm/interface/dependency understanding, LLM-assisted `dependencies.json` artifacts with direct dependency inventories plus checkpoint-model links, deterministic final `checkpoint.md` rendering with `render_manifest.json` debug output, and build-integrated `validation_report.json` quality checks that fail only on hard structural/evidence violations.
 - H10 is now implemented as an internal benchmark/evaluation harness that leaves `engllm history-docs build` unchanged while adding reusable benchmark case manifests, structured LLM-judged `quality_report.json` artifacts, deterministic `comparison_report.json` outputs, suite-level `suite_manifest.json` aggregation under benchmark workspaces, and internal real-repo promotion-gate reporting for shadow-mode semantic variants.
 
 ## 2) Guiding Principles / Scope
@@ -614,17 +614,17 @@ its own internal phases.
 `Dependencies:` History Phases 10-12.
 `Completion Criteria:` The tool produces materially better structured knowledge for the hardest technical sections.
 
-- [ ] **H13-01**  
+- [x] **H13-01**  
   `Outcome:` Add LLM-assisted algorithm capsule enrichment on top of H6 candidates.  
-  `Definition of Done:` Capsules can capture algorithm purpose, phase flow, invariants, tradeoffs, and variant relationships in structured form.
+  `Definition of Done:` Normal builds now always write shadow `algorithm_capsules_enriched/` artifacts with per-capsule purpose, phase flow, invariants, tradeoffs, and variant relationships, while internal `algorithm_capsule_mode="enriched"` runs and H10 can compare the richer rendering against the promoted semantic-structure-context baseline.
 
-- [ ] **H13-02**  
+- [x] **H13-02**  
   `Outcome:` Add interface documentation artifacts and section support.  
-  `Definition of Done:` The tool can synthesize interface concepts, responsibilities, and cross-module contracts from code plus change evidence.
+  `Definition of Done:` Normal builds now always write shadow `interface_inventory.json` artifacts with interface concepts, responsibilities, and cross-module contracts, while internal `interface_render_mode="inventory"` runs and H10 can compare the richer `Interfaces` section against the promoted semantic-structure-context baseline.
 
-- [ ] **H13-03**  
+- [x] **H13-03**  
   `Outcome:` Expand H7 from per-dependency blurbs to project-level dependency understanding.  
-  `Definition of Done:` The tool can explain dependency roles, dependency clusters, and project-specific usage patterns more holistically than one-entry-at-a-time summaries.
+  `Definition of Done:` Normal builds now always write shadow `dependency_landscape.json` artifacts with project roles, dependency clusters, and usage patterns, while internal `dependency_render_mode="landscape"` runs and H10 can compare the project-level dependency rendering against the promoted semantic-structure-context baseline.
 
 ### History Phase 14 — LLM-Assisted Drafting, Review, And Repair
 

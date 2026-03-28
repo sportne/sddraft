@@ -48,6 +48,12 @@ from engllm.domain.errors import (
 from engllm.domain.models import ProjectConfig
 from engllm.llm.base import LLMClient
 from engllm.llm.factory import create_llm_client
+from engllm.tools.history_docs.algorithm_capsule_enrichment import (
+    algorithm_capsule_enrichment_dir,
+    algorithm_capsule_enrichment_filename,
+    algorithm_capsule_enrichment_index_path,
+    build_algorithm_capsule_enrichments,
+)
 from engllm.tools.history_docs.algorithm_capsules import (
     algorithm_capsule_index_path,
     build_algorithm_capsules,
@@ -72,6 +78,14 @@ from engllm.tools.history_docs.dependencies import (
     build_dependency_inventory,
     dependency_inventory_path,
     link_dependency_inventory_to_checkpoint_model,
+)
+from engllm.tools.history_docs.dependency_landscape import (
+    build_dependency_landscape,
+    dependency_landscape_path,
+)
+from engllm.tools.history_docs.interface_inventory import (
+    build_interface_inventory,
+    interface_inventory_path,
 )
 from engllm.tools.history_docs.interval_interpretation import (
     build_interval_interpretation,
@@ -365,6 +379,9 @@ def build_history_docs_checkpoint(
     experimental_section_mode: Literal["default", "semantic_context"] = "default",
     checkpoint_model_enrichment_mode: Literal["baseline", "enriched"] = "baseline",
     section_planning_mode: Literal["baseline", "llm"] = "baseline",
+    algorithm_capsule_mode: Literal["baseline", "enriched"] = "baseline",
+    interface_render_mode: Literal["baseline", "inventory"] = "baseline",
+    dependency_render_mode: Literal["baseline", "landscape"] = "baseline",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -884,8 +901,97 @@ def build_history_docs_checkpoint(
         history_tool_root,
         checkpoint_id,
     )
+    algorithm_capsule_enrichment_index_artifact_path = (
+        algorithm_capsule_enrichment_index_path(history_tool_root, checkpoint_id)
+    )
+    interface_inventory_artifact_path = interface_inventory_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    dependency_landscape_artifact_path = dependency_landscape_path(
+        history_tool_root,
+        checkpoint_id,
+    )
     write_json_model(dependencies_artifact_path, dependency_inventory)
     write_json_model(checkpoint_model_artifact_path, checkpoint_model)
+
+    _progress(
+        progress_callback,
+        "history-docs: enriching algorithm capsules in shadow mode",
+    )
+    algorithm_capsule_enrichment_index, algorithm_capsule_enrichments = (
+        build_algorithm_capsule_enrichments(
+            checkpoint_id=checkpoint_id,
+            target_commit=target_metadata.sha,
+            previous_checkpoint_commit=resolved_previous,
+            checkpoint_model=checkpoint_model,
+            interval_interpretation=interval_interpretation,
+            checkpoint_model_enrichment=checkpoint_model_enrichment,
+            dependency_inventory=dependency_inventory,
+            capsule_index=algorithm_capsule_index,
+            capsules=algorithm_capsules,
+            semantic_context_map=semantic_context_map,
+            llm_client=llm_client,
+            model_name=project_config.llm.model_name,
+            temperature=project_config.llm.temperature,
+        )
+    )
+    enriched_capsule_root = algorithm_capsule_enrichment_dir(
+        history_tool_root,
+        checkpoint_id,
+    )
+    for enrichment in algorithm_capsule_enrichments:
+        write_json_model(
+            enriched_capsule_root
+            / algorithm_capsule_enrichment_filename(enrichment.capsule_id),
+            enrichment,
+        )
+    write_json_model(
+        algorithm_capsule_enrichment_index_artifact_path,
+        algorithm_capsule_enrichment_index,
+    )
+
+    _progress(
+        progress_callback,
+        "history-docs: building interface inventory in shadow mode",
+    )
+    interface_inventory = build_interface_inventory(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        checkpoint_model=checkpoint_model,
+        interval_interpretation=interval_interpretation,
+        checkpoint_model_enrichment=checkpoint_model_enrichment,
+        dependency_inventory=dependency_inventory,
+        semantic_context_map=semantic_context_map,
+        capsule_index=algorithm_capsule_index,
+        capsules=algorithm_capsules,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    write_json_model(interface_inventory_artifact_path, interface_inventory)
+
+    _progress(
+        progress_callback,
+        "history-docs: building dependency landscape in shadow mode",
+    )
+    dependency_landscape = build_dependency_landscape(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        checkpoint_model=checkpoint_model,
+        interval_interpretation=interval_interpretation,
+        checkpoint_model_enrichment=checkpoint_model_enrichment,
+        dependency_inventory=dependency_inventory,
+        semantic_context_map=semantic_context_map,
+        capsule_index=algorithm_capsule_index,
+        capsules=algorithm_capsules,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    write_json_model(dependency_landscape_artifact_path, dependency_landscape)
 
     _progress(
         progress_callback,
@@ -906,10 +1012,26 @@ def build_history_docs_checkpoint(
         dependency_inventory=dependency_inventory,
         capsule_index=algorithm_capsule_index,
         capsules=algorithm_capsules,
+        algorithm_capsule_enrichment_index=(
+            algorithm_capsule_enrichment_index
+            if algorithm_capsule_mode == "enriched"
+            else None
+        ),
+        algorithm_capsule_enrichments=(
+            algorithm_capsule_enrichments
+            if algorithm_capsule_mode == "enriched"
+            else None
+        ),
         semantic_context_map=(
             semantic_context_map
             if experimental_section_mode == "semantic_context"
             else None
+        ),
+        interface_inventory=(
+            interface_inventory if interface_render_mode == "inventory" else None
+        ),
+        dependency_landscape=(
+            dependency_landscape if dependency_render_mode == "landscape" else None
         ),
     )
     write_checkpoint_markdown(
@@ -976,6 +1098,11 @@ def build_history_docs_checkpoint(
         interval_interpretation_path=interval_interpretation_artifact_path,
         checkpoint_model_path=checkpoint_model_artifact_path,
         checkpoint_model_enrichment_path=checkpoint_model_enrichment_artifact_path,
+        algorithm_capsule_enrichment_index_path=(
+            algorithm_capsule_enrichment_index_artifact_path
+        ),
+        interface_inventory_path=interface_inventory_artifact_path,
+        dependency_landscape_path=dependency_landscape_artifact_path,
         section_outline_path=section_outline_artifact_path,
         section_outline_llm_path=section_outline_llm_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
@@ -1001,6 +1128,11 @@ def build_history_docs_checkpoint(
         checkpoint_model_enrichment_status=(
             checkpoint_model_enrichment.evaluation_status
         ),
+        algorithm_capsule_enrichment_status=(
+            algorithm_capsule_enrichment_index.evaluation_status
+        ),
+        interface_inventory_status=interface_inventory.evaluation_status,
+        dependency_landscape_status=dependency_landscape.evaluation_status,
         section_planning_status=section_outline_llm.evaluation_status,
         context_node_count=len(semantic_context_map.context_nodes),
         interface_candidate_count=len(semantic_context_map.interfaces),
@@ -1016,6 +1148,10 @@ def build_history_docs_checkpoint(
         enriched_module_count=len(checkpoint_model_enrichment.module_enrichments),
         capability_proposal_count=len(checkpoint_model_enrichment.capability_proposals),
         design_note_anchor_count=len(checkpoint_model_enrichment.design_note_anchors),
+        enriched_algorithm_capsule_count=len(algorithm_capsule_enrichments),
+        interface_inventory_count=len(interface_inventory.interfaces),
+        dependency_cluster_count=len(dependency_landscape.clusters),
+        dependency_usage_pattern_count=len(dependency_landscape.usage_patterns),
         subsystem_concept_count=len(checkpoint_model.subsystems),
         module_concept_count=len(checkpoint_model.modules),
         dependency_concept_count=len(checkpoint_model.dependencies),

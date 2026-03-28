@@ -25,9 +25,12 @@ from engllm.llm.factory import create_llm_client
 from engllm.prompts.history_docs.builders import build_history_docs_quality_judge_prompt
 from engllm.tools.history_docs.build import build_history_docs_checkpoint
 from engllm.tools.history_docs.models import (
+    HistoryAlgorithmCapsuleEnrichment,
+    HistoryAlgorithmCapsuleEnrichmentIndex,
     HistoryBuildResult,
     HistoryCheckpointModel,
     HistoryCheckpointModelEnrichment,
+    HistoryDependencyLandscape,
     HistoryDocsBenchmarkCase,
     HistoryDocsBenchmarkCaseComparisonReport,
     HistoryDocsBenchmarkCaseReportRef,
@@ -41,6 +44,7 @@ from engllm.tools.history_docs.models import (
     HistoryDocsRubricDimension,
     HistoryDocsRubricScore,
     HistoryDocsVariantComparison,
+    HistoryInterfaceInventory,
     HistoryLLMSectionOutline,
     HistoryRenderManifest,
     HistorySectionPlanId,
@@ -115,6 +119,12 @@ class _LoadedBenchmarkArtifacts:
     semantic_context_map: HistorySemanticContextMap | None = None
     checkpoint_model_enrichment: HistoryCheckpointModelEnrichment | None = None
     section_outline_llm: HistoryLLMSectionOutline | None = None
+    algorithm_capsule_enrichment_index: (
+        HistoryAlgorithmCapsuleEnrichmentIndex | None
+    ) = None
+    algorithm_capsule_enrichments: list[HistoryAlgorithmCapsuleEnrichment] | None = None
+    interface_inventory: HistoryInterfaceInventory | None = None
+    dependency_landscape: HistoryDependencyLandscape | None = None
 
 
 def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
@@ -775,6 +785,160 @@ def semantic_structure_context_llm_section_planning_benchmark_variant(
     )
 
 
+def semantic_structure_context_enriched_algorithms_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H13-01 enriched-algorithms benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            algorithm_capsule_mode="enriched",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-enriched-algorithms",
+        runner=_run,
+    )
+
+
+def semantic_structure_context_interface_inventory_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H13-02 interface-inventory benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            interface_render_mode="inventory",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-interface-inventory",
+        runner=_run,
+    )
+
+
+def semantic_structure_context_dependency_landscape_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H13-03 dependency-landscape benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            dependency_render_mode="landscape",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-dependency-landscape",
+        runner=_run,
+    )
+
+
+def semantic_structure_context_h13_full_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the combined H13 benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            algorithm_capsule_mode="enriched",
+            interface_render_mode="inventory",
+            dependency_render_mode="landscape",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-h13-full",
+        runner=_run,
+    )
+
+
 def _empty_rubric_scores() -> list[HistoryDocsRubricScore]:
     return [
         HistoryDocsRubricScore(
@@ -798,6 +962,17 @@ def _load_benchmark_artifacts(
         "checkpoint_model_enrichment_path",
         None,
     )
+    algorithm_capsule_enrichment_index_path = getattr(
+        build_result,
+        "algorithm_capsule_enrichment_index_path",
+        None,
+    )
+    interface_inventory_path = getattr(build_result, "interface_inventory_path", None)
+    dependency_landscape_path = getattr(
+        build_result,
+        "dependency_landscape_path",
+        None,
+    )
     section_outline_llm_artifact_path = getattr(
         build_result,
         "section_outline_llm_path",
@@ -814,6 +989,32 @@ def _load_benchmark_artifacts(
         )
 
     return _LoadedBenchmarkArtifacts(
+        algorithm_capsule_enrichments=(
+            None
+            if algorithm_capsule_enrichment_index_path is None
+            else [
+                HistoryAlgorithmCapsuleEnrichment.model_validate_json(
+                    (
+                        Path(algorithm_capsule_enrichment_index_path).parent
+                        / entry.artifact_path
+                    ).read_text(encoding="utf-8")
+                )
+                for entry in HistoryAlgorithmCapsuleEnrichmentIndex.model_validate_json(
+                    Path(algorithm_capsule_enrichment_index_path).read_text(
+                        encoding="utf-8"
+                    )
+                ).capsules
+            ]
+        ),
+        algorithm_capsule_enrichment_index=(
+            None
+            if algorithm_capsule_enrichment_index_path is None
+            else HistoryAlgorithmCapsuleEnrichmentIndex.model_validate_json(
+                Path(algorithm_capsule_enrichment_index_path).read_text(
+                    encoding="utf-8"
+                )
+            )
+        ),
         checkpoint_model=HistoryCheckpointModel.model_validate_json(
             Path(checkpoint_model_path).read_text(encoding="utf-8")
         ),
@@ -836,6 +1037,20 @@ def _load_benchmark_artifacts(
             if checkpoint_model_enrichment_path is None
             else HistoryCheckpointModelEnrichment.model_validate_json(
                 Path(checkpoint_model_enrichment_path).read_text(encoding="utf-8")
+            )
+        ),
+        interface_inventory=(
+            None
+            if interface_inventory_path is None
+            else HistoryInterfaceInventory.model_validate_json(
+                Path(interface_inventory_path).read_text(encoding="utf-8")
+            )
+        ),
+        dependency_landscape=(
+            None
+            if dependency_landscape_path is None
+            else HistoryDependencyLandscape.model_validate_json(
+                Path(dependency_landscape_path).read_text(encoding="utf-8")
             )
         ),
         section_outline_llm=(
@@ -1052,6 +1267,42 @@ def evaluate_history_docs_quality(
             llm_section_outline=(
                 artifacts.section_outline_llm
                 if variant_id == "semantic-structure-context-llm-section-planning"
+                else None
+            ),
+            algorithm_capsule_enrichment_index=(
+                artifacts.algorithm_capsule_enrichment_index
+                if variant_id
+                in {
+                    "semantic-structure-context-enriched-algorithms",
+                    "semantic-structure-context-h13-full",
+                }
+                else None
+            ),
+            algorithm_capsule_enrichments=(
+                artifacts.algorithm_capsule_enrichments
+                if variant_id
+                in {
+                    "semantic-structure-context-enriched-algorithms",
+                    "semantic-structure-context-h13-full",
+                }
+                else None
+            ),
+            interface_inventory=(
+                artifacts.interface_inventory
+                if variant_id
+                in {
+                    "semantic-structure-context-interface-inventory",
+                    "semantic-structure-context-h13-full",
+                }
+                else None
+            ),
+            dependency_landscape=(
+                artifacts.dependency_landscape
+                if variant_id
+                in {
+                    "semantic-structure-context-dependency-landscape",
+                    "semantic-structure-context-h13-full",
+                }
                 else None
             ),
         )
@@ -1316,7 +1567,12 @@ __all__ = [
     "compare_history_docs_quality_reports",
     "evaluate_history_docs_quality",
     "run_history_docs_benchmark_suite",
+    "semantic_structure_context_dependency_landscape_benchmark_variant",
+    "semantic_structure_context_enriched_algorithms_benchmark_variant",
     "semantic_structure_context_enriched_model_benchmark_variant",
+    "semantic_structure_context_h13_full_benchmark_variant",
+    "semantic_structure_context_interface_inventory_benchmark_variant",
+    "semantic_structure_context_llm_section_planning_benchmark_variant",
     "semantic_structure_context_benchmark_variant",
     "semantic_history_docs_benchmark_variant",
     "validate_benchmark_focus_coverage",

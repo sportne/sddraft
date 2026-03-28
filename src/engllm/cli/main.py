@@ -417,6 +417,15 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"LLM section outline: {result.section_outline_llm_path}")
     if result.algorithm_capsule_index_path is not None:
         print(f"Algorithm capsules: {result.algorithm_capsule_index_path}")
+    if result.algorithm_capsule_enrichment_index_path is not None:
+        print(
+            "Algorithm capsule enrichments: "
+            f"{result.algorithm_capsule_enrichment_index_path}"
+        )
+    if result.interface_inventory_path is not None:
+        print(f"Interface inventory: {result.interface_inventory_path}")
+    if result.dependency_landscape_path is not None:
+        print(f"Dependency landscape: {result.dependency_landscape_path}")
     if result.dependencies_artifact_path is not None:
         print(f"Dependencies: {result.dependencies_artifact_path}")
     if result.checkpoint_markdown_path is not None:

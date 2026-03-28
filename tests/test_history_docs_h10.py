@@ -641,3 +641,47 @@ def test_h12_llm_section_planning_variant_runs_through_benchmark_suite(
         cases[0].manifest.case_id,
         "semantic-structure-context-llm-section-planning",
     ).exists()
+
+
+def test_h13_variants_run_through_benchmark_suite(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    cases = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )
+
+    suite_report = benchmark.run_history_docs_benchmark_suite(
+        suite_id="h13-variants",
+        output_root=output_root,
+        cases=cases,
+        variant_runners=[
+            benchmark.semantic_structure_context_benchmark_variant(),
+            benchmark.semantic_structure_context_enriched_algorithms_benchmark_variant(),
+            benchmark.semantic_structure_context_interface_inventory_benchmark_variant(),
+            benchmark.semantic_structure_context_dependency_landscape_benchmark_variant(),
+            benchmark.semantic_structure_context_h13_full_benchmark_variant(),
+        ],
+        llm_client_factory=lambda config: MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: _canned_quality_payload(
+                    score=4
+                )
+            }
+        ),
+    )
+
+    assert suite_report.variant_ids == [
+        "semantic-structure-context",
+        "semantic-structure-context-enriched-algorithms",
+        "semantic-structure-context-interface-inventory",
+        "semantic-structure-context-dependency-landscape",
+        "semantic-structure-context-h13-full",
+    ]
+    assert benchmark_quality_report_path(
+        output_root,
+        "h13-variants",
+        cases[0].manifest.case_id,
+        "semantic-structure-context-h13-full",
+    ).exists()

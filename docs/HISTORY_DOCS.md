@@ -52,7 +52,7 @@ Planned future CLI surface:
 
 - `engllm history-docs build`
 
-History Phases 1 through 12-02 now implement that command end to end, from
+History Phases 1 through 13 now implement that command end to end, from
 single-checkpoint traversal through semantic checkpoint advisories,
 checkpoint-scoped semantic subsystem/capability maps, final rendered checkpoint
 Markdown, and build-integrated validation. H10 adds an internal benchmark and
@@ -61,7 +61,7 @@ unchanged.
 
 ## Current Implemented Slice
 
-The current implementation covers History Phases 1 through 12-02:
+The current implementation covers History Phases 1 through 13:
 
 - explicit target-commit selection via `engllm history-docs build`
 - optional explicit previous-checkpoint override
@@ -110,6 +110,11 @@ The current implementation covers History Phases 1 through 12-02:
   - one structured LLM planning pass over the deterministic section scaffold plus H12 interpretation/enrichment evidence
   - shadow-only public behavior, with an internal LLM-planning variant available for H10 benchmarking
   - validation that prevents invented section ids, insight ids, capability ids, or design-note ids
+- checkpoint-scoped H13 artifacts with:
+  - `algorithm_capsules_enriched/index.json` plus one JSON file per existing capsule id for purpose, phase-flow, invariant, tradeoff, and variant-relationship enrichment
+  - `interface_inventory.json` for interface concepts, responsibilities, cross-module contracts, and collaboration notes built on top of semantic context
+  - `dependency_landscape.json` for project roles, dependency clusters, and subsystem-scoped usage patterns
+  - shadow-only public behavior, with internal render modes and H10 variants available for benchmarking richer algorithm, interface, and dependency sections against the promoted semantic-structure-context baseline
 - tool-scoped `checkpoint_model.json` artifacts with:
   - active and retired subsystem/module/dependency-source concepts
   - optional semantic display names, summaries, capability labels, and baseline

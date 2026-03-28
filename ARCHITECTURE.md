@@ -25,10 +25,11 @@ Today it ships four tool namespaces:
 `engllm history-docs build` now also emits advisory semantic checkpoint-planning
 artifacts, checkpoint-scoped semantic subsystem/capability maps,
 checkpoint-scoped interval interpretation and checkpoint-model enrichment
-artifacts, checkpoint-scoped dependency documentation artifacts, final
-checkpoint Markdown, and build-integrated validation over those historical
-snapshots. An internal H10 benchmark harness now evaluates those rendered
-outputs with structured LLM judging while keeping the public CLI unchanged.
+artifacts, shadow H13 algorithm/interface/dependency understanding artifacts,
+checkpoint-scoped dependency documentation artifacts, final checkpoint
+Markdown, and build-integrated validation over those historical snapshots. An
+internal H10 benchmark harness now evaluates those rendered outputs with
+structured LLM judging while keeping the public CLI unchanged.
 The design for that tool lives in `docs/HISTORY_DOCS.md`.
 
 The system intentionally performs deterministic analysis first and LLM generation second.
@@ -219,7 +220,7 @@ in reusable deterministic modules.
 
 ### `tools/history_docs/`
 
-The history-walk documentation tool now implements H1-H12-02 of its current
+The history-walk documentation tool now implements H1-H13 of its current
 roadmap. It combines:
 
 * checkpoint selection and history traversal
@@ -229,6 +230,7 @@ roadmap. It combines:
 * checkpoint snapshot analysis
 * interval delta analysis
 * interval interpretation and checkpoint-model enrichment
+* shadow H13 algorithm capsule enrichment, interface inventory synthesis, and project-level dependency landscape artifacts
 * structured checkpoint documentation models
 * final holistic rendering for each checkpoint
 * build-integrated rendered-artifact validation

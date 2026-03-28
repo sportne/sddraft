@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 
 from engllm.prompts.history_docs.templates import (
+    ALGORITHM_CAPSULE_ENRICHMENT_SYSTEM_PROMPT,
     CHECKPOINT_MODEL_ENRICHMENT_SYSTEM_PROMPT,
+    DEPENDENCY_LANDSCAPE_SYSTEM_PROMPT,
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
+    INTERFACE_INVENTORY_SYSTEM_PROMPT,
     INTERVAL_INTERPRETATION_SYSTEM_PROMPT,
     SECTION_PLANNING_LLM_SYSTEM_PROMPT,
     SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT,
@@ -15,10 +18,14 @@ from engllm.prompts.history_docs.templates import (
     SEMANTIC_STRUCTURE_SYSTEM_PROMPT,
 )
 from engllm.tools.history_docs.models import (
+    HistoryAlgorithmCapsuleEnrichment,
+    HistoryAlgorithmCapsuleEnrichmentIndex,
     HistoryCheckpointModel,
     HistoryCheckpointModelEnrichment,
     HistoryDependencyEntry,
+    HistoryDependencyLandscape,
     HistoryDocsBenchmarkCase,
+    HistoryInterfaceInventory,
     HistoryLLMSectionOutline,
     HistoryRenderManifest,
     HistorySemanticContextMap,
@@ -40,6 +47,23 @@ def build_dependency_summary_prompt(
         f"Dependency Evidence:\n{_json(entry.model_dump(mode='json'))}\n"
     )
     return DEPENDENCY_SUMMARY_SYSTEM_PROMPT, user_prompt
+
+
+def build_algorithm_capsule_enrichment_prompt(
+    *,
+    checkpoint_summary: dict[str, object],
+    capsules: list[dict[str, object]],
+    design_note_anchors: list[dict[str, object]],
+) -> tuple[str, str]:
+    """Return prompts for one H13-01 algorithm-capsule enrichment request."""
+
+    user_prompt = (
+        "Enrich the listed algorithm capsules using only the supplied structured evidence.\n"
+        f"Checkpoint Summary:\n{_json(checkpoint_summary)}\n"
+        f"Algorithm Capsules:\n{_json(capsules)}\n"
+        f"Design Note Anchors:\n{_json(design_note_anchors)}\n"
+    )
+    return ALGORITHM_CAPSULE_ENRICHMENT_SYSTEM_PROMPT, user_prompt
 
 
 def build_checkpoint_model_enrichment_prompt(
@@ -65,6 +89,40 @@ def build_checkpoint_model_enrichment_prompt(
     return CHECKPOINT_MODEL_ENRICHMENT_SYSTEM_PROMPT, user_prompt
 
 
+def build_interface_inventory_prompt(
+    *,
+    checkpoint_summary: dict[str, object],
+    interface_context: dict[str, object],
+    design_note_anchors: list[dict[str, object]],
+) -> tuple[str, str]:
+    """Return prompts for one H13-02 interface-inventory request."""
+
+    user_prompt = (
+        "Build a richer interface inventory using only the supplied structured evidence.\n"
+        f"Checkpoint Summary:\n{_json(checkpoint_summary)}\n"
+        f"Interface Context:\n{_json(interface_context)}\n"
+        f"Design Note Anchors:\n{_json(design_note_anchors)}\n"
+    )
+    return INTERFACE_INVENTORY_SYSTEM_PROMPT, user_prompt
+
+
+def build_dependency_landscape_prompt(
+    *,
+    checkpoint_summary: dict[str, object],
+    dependency_context: dict[str, object],
+    design_note_anchors: list[dict[str, object]],
+) -> tuple[str, str]:
+    """Return prompts for one H13-03 dependency-landscape request."""
+
+    user_prompt = (
+        "Build a project-level dependency landscape using only the supplied structured evidence.\n"
+        f"Checkpoint Summary:\n{_json(checkpoint_summary)}\n"
+        f"Dependency Context:\n{_json(dependency_context)}\n"
+        f"Design Note Anchors:\n{_json(design_note_anchors)}\n"
+    )
+    return DEPENDENCY_LANDSCAPE_SYSTEM_PROMPT, user_prompt
+
+
 def build_history_docs_quality_judge_prompt(
     *,
     case: HistoryDocsBenchmarkCase,
@@ -75,6 +133,14 @@ def build_history_docs_quality_judge_prompt(
     semantic_context_map: HistorySemanticContextMap | None = None,
     checkpoint_model_enrichment: HistoryCheckpointModelEnrichment | None = None,
     llm_section_outline: HistoryLLMSectionOutline | None = None,
+    algorithm_capsule_enrichment_index: (
+        HistoryAlgorithmCapsuleEnrichmentIndex | None
+    ) = None,
+    algorithm_capsule_enrichments: (
+        list[HistoryAlgorithmCapsuleEnrichment] | None
+    ) = None,
+    interface_inventory: HistoryInterfaceInventory | None = None,
+    dependency_landscape: HistoryDependencyLandscape | None = None,
 ) -> tuple[str, str]:
     """Return prompts for one H10 single-document quality evaluation."""
 
@@ -203,6 +269,88 @@ def build_history_docs_quality_judge_prompt(
             ][:6],
         }
     )
+    algorithm_enrichment_summary: dict[str, object] = (
+        {"evaluation_status": None, "capsules": []}
+        if algorithm_capsule_enrichment_index is None
+        or algorithm_capsule_enrichments is None
+        else {
+            "evaluation_status": algorithm_capsule_enrichment_index.evaluation_status,
+            "capsules": [
+                {
+                    "capsule_id": enrichment.capsule_id,
+                    "purpose": enrichment.purpose,
+                    "phase_flow_summary": enrichment.phase_flow_summary,
+                    "invariant_count": len(enrichment.invariants),
+                    "tradeoff_count": len(enrichment.tradeoffs),
+                    "variant_relationship_count": len(enrichment.variant_relationships),
+                }
+                for enrichment in algorithm_capsule_enrichments
+            ],
+        }
+    )
+    interface_inventory_summary: dict[str, object] = (
+        {"evaluation_status": None, "interfaces": []}
+        if interface_inventory is None
+        else {
+            "evaluation_status": interface_inventory.evaluation_status,
+            "interfaces": [
+                {
+                    "interface_id": interface.interface_id,
+                    "title": interface.title,
+                    "kind": interface.kind,
+                    "provider_subsystem_ids": interface.provider_subsystem_ids,
+                    "responsibility_titles": [
+                        responsibility.title
+                        for responsibility in interface.responsibilities
+                    ],
+                    "contract_titles": [
+                        contract.title for contract in interface.cross_module_contracts
+                    ],
+                }
+                for interface in interface_inventory.interfaces
+            ],
+        }
+    )
+    dependency_landscape_summary: dict[str, object] = (
+        {
+            "evaluation_status": None,
+            "project_roles": [],
+            "clusters": [],
+            "usage_patterns": [],
+        }
+        if dependency_landscape is None
+        else {
+            "evaluation_status": dependency_landscape.evaluation_status,
+            "project_roles": [
+                {
+                    "role_id": role.role_id,
+                    "title": role.title,
+                    "dependency_count": len(role.dependency_ids),
+                    "related_subsystem_ids": role.related_subsystem_ids,
+                }
+                for role in dependency_landscape.project_roles
+            ],
+            "clusters": [
+                {
+                    "cluster_id": cluster.cluster_id,
+                    "title": cluster.title,
+                    "dependency_count": len(cluster.dependency_ids),
+                    "ecosystems": cluster.ecosystems,
+                    "scope_roles": cluster.scope_roles,
+                }
+                for cluster in dependency_landscape.clusters
+            ],
+            "usage_patterns": [
+                {
+                    "pattern_id": pattern.pattern_id,
+                    "title": pattern.title,
+                    "dependency_count": len(pattern.dependency_ids),
+                    "related_subsystem_ids": pattern.related_subsystem_ids,
+                }
+                for pattern in dependency_landscape.usage_patterns
+            ],
+        }
+    )
     validation_summary = {
         "error_count": validation_report.error_count,
         "warning_count": validation_report.warning_count,
@@ -226,6 +374,9 @@ def build_history_docs_quality_judge_prompt(
         f"Interface Summary:\n{_json(interface_summary)}\n"
         f"Model Enrichment Summary:\n{_json(enrichment_summary)}\n"
         f"Section Planning Summary:\n{_json(section_planning_summary)}\n"
+        f"Algorithm Enrichment Summary:\n{_json(algorithm_enrichment_summary)}\n"
+        f"Interface Inventory Summary:\n{_json(interface_inventory_summary)}\n"
+        f"Dependency Landscape Summary:\n{_json(dependency_landscape_summary)}\n"
         f"Rendered Sections:\n{_json(render_sections)}\n"
         f"Validation Summary:\n{_json(validation_summary)}\n"
         "Checkpoint Markdown:\n"

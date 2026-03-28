@@ -433,3 +433,25 @@ These are planned directions, not implemented tools yet:
 3. Start with the fastest targeted tests for the phase.
 4. Run the full quality gates before marking work complete.
 5. Update `TASKS.md` in the same change when the roadmap status changes.
+## History-Docs H13 Extension Points
+
+History-docs now writes three shadow H13 artifacts on every build:
+
+- `algorithm_capsules_enriched/`
+- `interface_inventory.json`
+- `dependency_landscape.json`
+
+They are intentionally additive:
+
+- normal public builds still use the promoted semantic-structure-context path
+- internal benchmark variants can opt into:
+  - `algorithm_capsule_mode="enriched"`
+  - `interface_render_mode="inventory"`
+  - `dependency_render_mode="landscape"`
+
+When extending these stages:
+
+- keep prompt inputs compact and artifact-backed
+- validate all returned ids against existing checkpoint concepts/artifacts
+- preserve evidence links
+- keep fallback behavior conservative and non-fatal

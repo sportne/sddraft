@@ -8,11 +8,15 @@ from pathlib import Path
 from engllm.domain.errors import RenderingError
 from engllm.tools.history_docs.models import (
     HistoryAlgorithmCapsule,
+    HistoryAlgorithmCapsuleEnrichment,
+    HistoryAlgorithmCapsuleEnrichmentIndex,
     HistoryAlgorithmCapsuleIndex,
     HistoryCheckpointModel,
     HistoryDependencyConcept,
     HistoryDependencyEntry,
     HistoryDependencyInventory,
+    HistoryDependencyLandscape,
+    HistoryInterfaceInventory,
     HistoryModuleConcept,
     HistoryRenderedSection,
     HistoryRenderManifest,
@@ -249,6 +253,14 @@ def _capsule_map(
     return {capsule.capsule_id: capsule for capsule in capsules}
 
 
+def _algorithm_enrichment_map(
+    enrichments: list[HistoryAlgorithmCapsuleEnrichment] | None,
+) -> dict[str, HistoryAlgorithmCapsuleEnrichment]:
+    if enrichments is None:
+        return {}
+    return {enrichment.capsule_id: enrichment for enrichment in enrichments}
+
+
 def _dependency_entry_map(
     inventory: HistoryDependencyInventory,
 ) -> dict[str, HistoryDependencyEntry]:
@@ -271,12 +283,21 @@ def _artifact_paths_for_section(
     algorithm_capsule_ids: list[str],
     capsule_index: HistoryAlgorithmCapsuleIndex,
     uses_semantic_context: bool = False,
+    algorithm_capsule_enrichment_index: (
+        HistoryAlgorithmCapsuleEnrichmentIndex | None
+    ) = None,
+    uses_interface_inventory: bool = False,
+    uses_dependency_landscape: bool = False,
 ) -> list[Path]:
     paths = [Path("checkpoint_model.json"), Path("section_outline.json")]
     if dependency_ids:
         paths.append(Path("dependencies.json"))
     if uses_semantic_context:
         paths.append(Path("semantic_context_map.json"))
+    if uses_interface_inventory:
+        paths.append(Path("interface_inventory.json"))
+    if uses_dependency_landscape:
+        paths.append(Path("dependency_landscape.json"))
     if algorithm_capsule_ids:
         paths.append(Path("algorithm_capsules") / "index.json")
         capsule_paths = {
@@ -285,6 +306,16 @@ def _artifact_paths_for_section(
             if entry.capsule_id in set(algorithm_capsule_ids)
         }
         paths.extend(sorted(capsule_paths, key=lambda item: item.as_posix()))
+        if algorithm_capsule_enrichment_index is not None:
+            paths.append(Path("algorithm_capsules_enriched") / "index.json")
+            enriched_capsule_paths = {
+                Path("algorithm_capsules_enriched") / entry.artifact_path
+                for entry in algorithm_capsule_enrichment_index.capsules
+                if entry.capsule_id in set(algorithm_capsule_ids)
+            }
+            paths.extend(
+                sorted(enriched_capsule_paths, key=lambda item: item.as_posix())
+            )
     return _stable_unique_paths(paths)
 
 
@@ -430,16 +461,21 @@ def _render_subsystems_modules(
 def _render_algorithms_core_logic(
     capsules: list[HistoryAlgorithmCapsule],
     modules_by_id: dict[str, HistoryModuleConcept],
+    enrichment_by_id: dict[str, HistoryAlgorithmCapsuleEnrichment] | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
     rendered_capsule_ids: list[str] = []
+    enrichment_by_id = enrichment_by_id or {}
     for capsule in sorted(capsules, key=lambda item: item.capsule_id):
+        enrichment = enrichment_by_id.get(capsule.capsule_id)
         rendered_capsule_ids.append(capsule.capsule_id)
         lines.append(f"### {capsule.title}")
         lines.append("")
         subheading_count += 1
         bullets = [f"Scope: {capsule.scope_kind} `{capsule.scope_path.as_posix()}`."]
+        if enrichment is not None:
+            _paragraph(lines, enrichment.purpose)
         if capsule.related_subsystem_ids:
             bullets.append(
                 "Related subsystems: "
@@ -503,6 +539,22 @@ def _render_algorithms_core_logic(
                 + "; ".join(f"{item.text}" for item in capsule.assumptions)
                 + "."
             )
+        if enrichment is not None:
+            bullets.append(enrichment.phase_flow_summary)
+            if enrichment.invariants:
+                bullets.append(
+                    "Invariants: "
+                    + "; ".join(item.text for item in enrichment.invariants)
+                    + "."
+                )
+            if enrichment.tradeoffs:
+                bullets.append(
+                    "Tradeoffs: "
+                    + "; ".join(
+                        f"{item.title}: {item.summary}" for item in enrichment.tradeoffs
+                    )
+                    + "."
+                )
         _bullet_list(lines, bullets)
     if not capsules:
         _paragraph(lines, "No algorithm capsules were emitted for this checkpoint.")
@@ -511,6 +563,7 @@ def _render_algorithms_core_logic(
 
 def _render_dependency_section(
     entries: list[HistoryDependencyEntry],
+    dependency_landscape: HistoryDependencyLandscape | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
@@ -521,6 +574,14 @@ def _render_dependency_section(
             f"{_ecosystem_summary(entries)}."
         ),
     )
+    if dependency_landscape is not None and dependency_landscape.project_roles:
+        _bullet_list(
+            lines,
+            [
+                f"{role.title}: {role.summary}"
+                for role in dependency_landscape.project_roles[:4]
+            ],
+        )
     rendered_dependency_ids: list[str] = []
     for entry in entries:
         rendered_dependency_ids.append(entry.dependency_id)
@@ -536,6 +597,7 @@ def _render_build_infrastructure(
     *,
     active_dependencies: list[HistoryDependencyConcept],
     entries: list[HistoryDependencyEntry],
+    dependency_landscape: HistoryDependencyLandscape | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
@@ -543,6 +605,14 @@ def _render_build_infrastructure(
         lines,
         "The current build and development infrastructure is defined through the active build-source concepts and their documented tooling dependencies.",
     )
+    if dependency_landscape is not None and dependency_landscape.clusters:
+        _bullet_list(
+            lines,
+            [
+                f"{cluster.title}: {cluster.summary}"
+                for cluster in dependency_landscape.clusters[:4]
+            ],
+        )
     build_sources = [
         dependency
         for dependency in active_dependencies
@@ -580,9 +650,11 @@ def _render_build_infrastructure(
 
 def _render_strategy_variants(
     capsules: list[HistoryAlgorithmCapsule],
+    enrichment_by_id: dict[str, HistoryAlgorithmCapsuleEnrichment] | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
+    enrichment_by_id = enrichment_by_id or {}
     rendered_capsule_ids = [
         capsule.capsule_id for capsule in capsules if capsule.variant_names
     ]
@@ -593,13 +665,26 @@ def _render_strategy_variants(
         lines.append(f"### {capsule.title}")
         lines.append("")
         subheading_count += 1
-        _paragraph(
-            lines,
-            (
-                f"The current algorithm cluster exposes variant names "
-                f"{', '.join(f'`{name}`' for name in capsule.variant_names)} within scope `{capsule.scope_path.as_posix()}`."
-            ),
-        )
+        enrichment = enrichment_by_id.get(capsule.capsule_id)
+        if enrichment is not None and enrichment.variant_relationships:
+            _paragraph(
+                lines,
+                (
+                    "The current algorithm cluster exposes these variant relationships: "
+                    + "; ".join(
+                        relationship.summary
+                        for relationship in enrichment.variant_relationships
+                    )
+                ),
+            )
+        else:
+            _paragraph(
+                lines,
+                (
+                    f"The current algorithm cluster exposes variant names "
+                    f"{', '.join(f'`{name}`' for name in capsule.variant_names)} within scope `{capsule.scope_path.as_posix()}`."
+                ),
+            )
     if not rendered_capsule_ids:
         _paragraph(lines, "No variant families were identified for this checkpoint.")
     return lines, rendered_capsule_ids, [], subheading_count
@@ -675,9 +760,71 @@ def _render_interfaces(
     *,
     semantic_context_map: HistorySemanticContextMap,
     modules_by_id: dict[str, HistoryModuleConcept],
+    interface_inventory: HistoryInterfaceInventory | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
+    if interface_inventory is not None:
+        for inventory_interface in sorted(
+            interface_inventory.interfaces,
+            key=lambda item: item.interface_id,
+        ):
+            lines.append(f"### {inventory_interface.title}")
+            lines.append("")
+            subheading_count += 1
+            _paragraph(lines, inventory_interface.summary)
+            bullets = [f"Kind: `{inventory_interface.kind}`."]
+            if inventory_interface.provider_subsystem_ids:
+                bullets.append(
+                    "Providers: "
+                    + ", ".join(
+                        f"`{item}`"
+                        for item in inventory_interface.provider_subsystem_ids
+                    )
+                    + "."
+                )
+            if inventory_interface.consumer_context_node_ids:
+                bullets.append(
+                    "Consumers: "
+                    + ", ".join(
+                        f"`{item}`"
+                        for item in inventory_interface.consumer_context_node_ids
+                    )
+                    + "."
+                )
+            if inventory_interface.related_module_ids:
+                bullets.append(
+                    "Linked modules: "
+                    + ", ".join(
+                        (
+                            f"`{modules_by_id[module_id].path.as_posix()}`"
+                            if module_id in modules_by_id
+                            else f"`{module_id}`"
+                        )
+                        for module_id in inventory_interface.related_module_ids
+                    )
+                    + "."
+                )
+            if inventory_interface.responsibilities:
+                bullets.append(
+                    "Responsibilities: "
+                    + "; ".join(
+                        responsibility.summary
+                        for responsibility in inventory_interface.responsibilities
+                    )
+                    + "."
+                )
+            if inventory_interface.cross_module_contracts:
+                bullets.append(
+                    "Cross-module contracts: "
+                    + "; ".join(
+                        contract.summary
+                        for contract in inventory_interface.cross_module_contracts
+                    )
+                    + "."
+                )
+            _bullet_list(lines, bullets)
+        return lines, [], [], subheading_count
     for interface in sorted(
         semantic_context_map.interfaces,
         key=lambda item: item.interface_id,
@@ -809,11 +956,17 @@ def _render_section_content(
     capsule_index: HistoryAlgorithmCapsuleIndex,
     capsules: list[HistoryAlgorithmCapsule],
     semantic_context_map: HistorySemanticContextMap | None = None,
+    algorithm_capsule_enrichments: (
+        list[HistoryAlgorithmCapsuleEnrichment] | None
+    ) = None,
+    interface_inventory: HistoryInterfaceInventory | None = None,
+    dependency_landscape: HistoryDependencyLandscape | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     active_subsystems = _active_subsystems(checkpoint_model)
     active_modules = _active_modules(checkpoint_model)
     active_dependencies = _active_dependencies(checkpoint_model)
     modules_by_id, modules_by_subsystem = _module_map(active_modules)
+    enrichment_by_id = _algorithm_enrichment_map(algorithm_capsule_enrichments)
 
     if section.section_id == "introduction":
         return _render_introduction(
@@ -834,12 +987,18 @@ def _render_section_content(
         return _render_interfaces(
             semantic_context_map=semantic_context_map,
             modules_by_id=modules_by_id,
+            interface_inventory=interface_inventory,
         )
     if section.section_id == "algorithms_core_logic":
-        return _render_algorithms_core_logic(capsules, modules_by_id)
+        return _render_algorithms_core_logic(
+            capsules,
+            modules_by_id,
+            enrichment_by_id,
+        )
     if section.section_id == "dependencies":
         return _render_dependency_section(
-            _dependency_entries_for_target(dependency_inventory, "dependencies")
+            _dependency_entries_for_target(dependency_inventory, "dependencies"),
+            dependency_landscape=dependency_landscape,
         )
     if section.section_id == "build_development_infrastructure":
         return _render_build_infrastructure(
@@ -848,9 +1007,10 @@ def _render_section_content(
                 dependency_inventory,
                 "build_development_infrastructure",
             ),
+            dependency_landscape=dependency_landscape,
         )
     if section.section_id == "strategy_variants_design_alternatives":
-        return _render_strategy_variants(capsules)
+        return _render_strategy_variants(capsules, enrichment_by_id)
     if section.section_id in _TOKEN_SETS:
         return _render_token_section(
             section_id=section.section_id,
@@ -875,7 +1035,15 @@ def render_checkpoint_markdown(
     dependency_inventory: HistoryDependencyInventory,
     capsule_index: HistoryAlgorithmCapsuleIndex,
     capsules: list[HistoryAlgorithmCapsule],
+    algorithm_capsule_enrichment_index: (
+        HistoryAlgorithmCapsuleEnrichmentIndex | None
+    ) = None,
+    algorithm_capsule_enrichments: (
+        list[HistoryAlgorithmCapsuleEnrichment] | None
+    ) = None,
     semantic_context_map: HistorySemanticContextMap | None = None,
+    interface_inventory: HistoryInterfaceInventory | None = None,
+    dependency_landscape: HistoryDependencyLandscape | None = None,
 ) -> tuple[str, HistoryRenderManifest]:
     """Render deterministic checkpoint markdown and its debug manifest."""
 
@@ -916,6 +1084,9 @@ def render_checkpoint_markdown(
             capsule_index=capsule_index,
             capsules=capsules,
             semantic_context_map=semantic_context_map,
+            algorithm_capsule_enrichments=algorithm_capsule_enrichments,
+            interface_inventory=interface_inventory,
+            dependency_landscape=dependency_landscape,
         )
         lines.extend(section_lines)
         if section_lines and section_lines[-1] != "":
@@ -951,8 +1122,26 @@ def render_checkpoint_markdown(
                     dependency_ids=manifest_dependencies,
                     algorithm_capsule_ids=manifest_capsules,
                     capsule_index=capsule_index,
+                    algorithm_capsule_enrichment_index=(
+                        algorithm_capsule_enrichment_index
+                        if section.section_id
+                        in {
+                            "algorithms_core_logic",
+                            "strategy_variants_design_alternatives",
+                        }
+                        else None
+                    ),
                     uses_semantic_context=section.section_id
                     in {"system_context", "interfaces"},
+                    uses_interface_inventory=(
+                        section.section_id == "interfaces"
+                        and interface_inventory is not None
+                    ),
+                    uses_dependency_landscape=(
+                        section.section_id
+                        in {"dependencies", "build_development_infrastructure"}
+                        and dependency_landscape is not None
+                    ),
                 ),
                 subheading_count=subheading_count,
             )
