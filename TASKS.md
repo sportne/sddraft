@@ -633,15 +633,15 @@ its own internal phases.
 `Dependencies:` History Phases 10-13.
 `Completion Criteria:` The tool can draft higher-quality checkpoint docs and review/repair them before final output.
 
-- [ ] **H14-01**  
+- [x] **H14-01**  
   `Outcome:` Add section-scoped LLM drafting for the final checkpoint document.  
   `Definition of Done:` `checkpoint.md` prose is generated from structured evidence packs and section plans rather than only fixed templates.
 
-- [ ] **H14-02**  
+- [x] **H14-02**  
   `Outcome:` Add LLM-assisted document review after rendering.  
   `Definition of Done:` The tool emits a structured critique artifact covering coherence, omissions, unsupported claims, redundancy, and weak prose.
 
-- [ ] **H14-03**  
+- [x] **H14-03**  
   `Outcome:` Add targeted rewrite/repair loops driven by the review artifact.  
   `Definition of Done:` The tool can revise only weak sections instead of regenerating the entire document blindly.
 

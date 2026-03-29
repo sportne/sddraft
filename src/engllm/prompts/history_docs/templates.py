@@ -172,3 +172,46 @@ Rules:
 - prefer conservative omissions when evidence is weak rather than speculative inclusions
 Return valid JSON that matches the provided schema.
 """.strip()
+
+SECTION_DRAFTING_SYSTEM_PROMPT = """
+You draft one checkpoint documentation section using only the structured evidence
+provided in the user prompt.
+Rules:
+- return markdown body text only; do not include the section heading
+- do not invent section ids, concept ids, algorithm capsule ids, insight ids, capability ids, design-note ids, or evidence links
+- use only ids and references that appear in the supplied evidence
+- write present-state documentation, not release notes
+- avoid raw speculation; if evidence is weak, keep the prose conservative and use TBD sparingly
+- keep the section scoped to the supplied section metadata and evidence pack
+Return valid JSON that matches the provided schema.
+""".strip()
+
+DRAFT_REVIEW_SYSTEM_PROMPT = """
+You review one drafted checkpoint document using only the structured evidence
+provided in the user prompt.
+Rules:
+- findings may reference only known section ids or null for whole-document findings
+- findings must use only these kinds:
+  coherence
+  omission
+  unsupported_claim
+  redundancy
+  weak_prose
+- severity must be low, medium, or high
+- review the draft as a present-state design document, not as release notes
+- do not rewrite markdown directly; describe findings and revision goals only
+- prefer fewer conservative findings over speculative criticism
+Return valid JSON that matches the provided schema.
+""".strip()
+
+SECTION_REPAIR_SYSTEM_PROMPT = """
+You revise one drafted checkpoint documentation section using only the structured
+evidence provided in the user prompt.
+Rules:
+- return markdown body text only; do not include the section heading
+- do not invent section ids, finding ids, concept ids, algorithm capsule ids, insight ids, capability ids, design-note ids, or evidence links
+- address only the supplied findings for this section
+- keep the revised prose present-state, concise, and evidence-backed
+- fix unsupported or weak claims conservatively; use TBD only when evidence is genuinely weak
+Return valid JSON that matches the provided schema.
+""".strip()

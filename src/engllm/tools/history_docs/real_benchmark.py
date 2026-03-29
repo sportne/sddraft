@@ -31,6 +31,8 @@ from engllm.tools.history_docs.benchmark import (
     run_history_docs_benchmark_suite,
     semantic_history_docs_benchmark_variant,
     semantic_structure_context_benchmark_variant,
+    semantic_structure_context_llm_draft_benchmark_variant,
+    semantic_structure_context_llm_repair_benchmark_variant,
 )
 from engllm.tools.history_docs.models import (
     HistoryDocsBenchmarkCase,
@@ -328,7 +330,13 @@ def build_promotion_gate_report(
 ) -> HistoryDocsPromotionGateReport:
     """Build a deterministic promotion-gate report from suite artifacts."""
 
-    variant_ids = ["baseline", "semantic-clustering", "semantic-structure-context"]
+    variant_ids = [
+        "baseline",
+        "semantic-clustering",
+        "semantic-structure-context",
+        "semantic-structure-context-llm-draft",
+        "semantic-structure-context-llm-repair",
+    ]
     quality_reports_by_variant: dict[str, list[HistoryDocsQualityReport]] = {
         variant_id: [] for variant_id in variant_ids
     }
@@ -387,10 +395,11 @@ def build_promotion_gate_report(
 
     semantic_reports = quality_reports_by_variant["semantic-clustering"]
     context_reports = quality_reports_by_variant["semantic-structure-context"]
-
     semantic_wins_against_baseline = 0
     context_wins_against_baseline = 0
     context_wins_against_semantic = 0
+    draft_wins_against_context = 0
+    repair_wins_against_context = 0
     for case in cases:
         comparison_report = _load_comparison_report(
             benchmark_comparison_report_path(
@@ -412,6 +421,22 @@ def build_promotion_gate_report(
             elif pair == ("semantic-clustering", "semantic-structure-context"):
                 context_wins_against_semantic += (
                     comparison.preferred_variant_id == "semantic-structure-context"
+                )
+            elif pair == (
+                "semantic-structure-context",
+                "semantic-structure-context-llm-draft",
+            ):
+                draft_wins_against_context += (
+                    comparison.preferred_variant_id
+                    == "semantic-structure-context-llm-draft"
+                )
+            elif pair == (
+                "semantic-structure-context",
+                "semantic-structure-context-llm-repair",
+            ):
+                repair_wins_against_context += (
+                    comparison.preferred_variant_id
+                    == "semantic-structure-context-llm-repair"
                 )
 
     semantic_reasons: list[str] = []
@@ -503,6 +528,88 @@ def build_promotion_gate_report(
             "Semantic structure plus context met all promotion-gate thresholds."
         )
 
+    draft_reasons: list[str] = []
+    draft_pass = True
+    draft_delta = round(
+        average_score_by_variant["semantic-structure-context-llm-draft"]
+        - average_score_by_variant["semantic-structure-context"],
+        3,
+    )
+    if draft_delta < 0.25:
+        draft_pass = False
+        draft_reasons.append(
+            f"Average score delta vs semantic-structure-context was {draft_delta}, below the 0.25 gate."
+        )
+    if draft_wins_against_context < 3:
+        draft_pass = False
+        draft_reasons.append(
+            f"LLM draft won {draft_wins_against_context}/5 comparisons against semantic-structure-context."
+        )
+    if (
+        failed_build_or_evaluation_count_by_variant[
+            "semantic-structure-context-llm-draft"
+        ]
+        > failed_build_or_evaluation_count_by_variant["semantic-structure-context"]
+    ):
+        draft_pass = False
+        draft_reasons.append(
+            "LLM draft increased failed builds/evaluations relative to semantic-structure-context."
+        )
+    if (
+        unsupported_claim_risk_totals["semantic-structure-context-llm-draft"]
+        > unsupported_claim_risk_totals["semantic-structure-context"]
+    ):
+        draft_pass = False
+        draft_reasons.append(
+            "LLM draft increased unsupported-claim risk relative to semantic-structure-context."
+        )
+    if validation_error_count_by_variant["semantic-structure-context-llm-draft"] > 0:
+        draft_pass = False
+        draft_reasons.append("LLM draft produced validation errors.")
+    if draft_pass:
+        draft_reasons.append("LLM draft met all promotion-gate thresholds.")
+
+    repair_reasons: list[str] = []
+    repair_pass = True
+    repair_delta = round(
+        average_score_by_variant["semantic-structure-context-llm-repair"]
+        - average_score_by_variant["semantic-structure-context"],
+        3,
+    )
+    if repair_delta < 0.25:
+        repair_pass = False
+        repair_reasons.append(
+            f"Average score delta vs semantic-structure-context was {repair_delta}, below the 0.25 gate."
+        )
+    if repair_wins_against_context < 3:
+        repair_pass = False
+        repair_reasons.append(
+            f"LLM repair won {repair_wins_against_context}/5 comparisons against semantic-structure-context."
+        )
+    if (
+        failed_build_or_evaluation_count_by_variant[
+            "semantic-structure-context-llm-repair"
+        ]
+        > failed_build_or_evaluation_count_by_variant["semantic-structure-context"]
+    ):
+        repair_pass = False
+        repair_reasons.append(
+            "LLM repair increased failed builds/evaluations relative to semantic-structure-context."
+        )
+    if (
+        unsupported_claim_risk_totals["semantic-structure-context-llm-repair"]
+        > unsupported_claim_risk_totals["semantic-structure-context"]
+    ):
+        repair_pass = False
+        repair_reasons.append(
+            "LLM repair increased unsupported-claim risk relative to semantic-structure-context."
+        )
+    if validation_error_count_by_variant["semantic-structure-context-llm-repair"] > 0:
+        repair_pass = False
+        repair_reasons.append("LLM repair produced validation errors.")
+    if repair_pass:
+        repair_reasons.append("LLM repair met all promotion-gate thresholds.")
+
     return HistoryDocsPromotionGateReport(
         suite_id=suite_id,
         provider=provider,
@@ -528,6 +635,20 @@ def build_promotion_gate_report(
                 baseline_variant_ids=["baseline", "semantic-clustering"],
                 passed=context_pass,
                 reasons=context_reasons,
+            ),
+            HistoryDocsPromotionGateVerdict(
+                phase_id="H14-01",
+                candidate_variant_id="semantic-structure-context-llm-draft",
+                baseline_variant_ids=["semantic-structure-context"],
+                passed=draft_pass,
+                reasons=draft_reasons,
+            ),
+            HistoryDocsPromotionGateVerdict(
+                phase_id="H14",
+                candidate_variant_id="semantic-structure-context-llm-repair",
+                baseline_variant_ids=["semantic-structure-context"],
+                passed=repair_pass,
+                reasons=repair_reasons,
             ),
         ],
     )
@@ -561,6 +682,8 @@ def run_real_repo_history_docs_benchmark_suite(
             baseline_history_docs_benchmark_variant(),
             semantic_history_docs_benchmark_variant(),
             semantic_structure_context_benchmark_variant(),
+            semantic_structure_context_llm_draft_benchmark_variant(),
+            semantic_structure_context_llm_repair_benchmark_variant(),
         ],
         llm_client_factory=create_llm_client,
         progress_callback=lambda message: print(message, flush=True),

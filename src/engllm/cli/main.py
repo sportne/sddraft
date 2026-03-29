@@ -428,6 +428,24 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Dependency landscape: {result.dependency_landscape_path}")
     if result.dependencies_artifact_path is not None:
         print(f"Dependencies: {result.dependencies_artifact_path}")
+    if result.section_drafts_path is not None:
+        print(f"Section drafts: {result.section_drafts_path}")
+    if result.checkpoint_draft_markdown_path is not None:
+        print(f"Draft markdown: {result.checkpoint_draft_markdown_path}")
+    if result.render_manifest_draft_path is not None:
+        print(f"Draft render manifest: {result.render_manifest_draft_path}")
+    if result.validation_report_draft_path is not None:
+        print(f"Draft validation report: {result.validation_report_draft_path}")
+    if result.draft_review_path is not None:
+        print(f"Draft review: {result.draft_review_path}")
+    if result.section_repairs_path is not None:
+        print(f"Section repairs: {result.section_repairs_path}")
+    if result.checkpoint_repaired_markdown_path is not None:
+        print(f"Repaired markdown: {result.checkpoint_repaired_markdown_path}")
+    if result.render_manifest_repaired_path is not None:
+        print(f"Repaired render manifest: {result.render_manifest_repaired_path}")
+    if result.validation_report_repaired_path is not None:
+        print(f"Repaired validation report: {result.validation_report_repaired_path}")
     if result.checkpoint_markdown_path is not None:
         print(f"Checkpoint markdown: {result.checkpoint_markdown_path}")
     if result.render_manifest_path is not None:

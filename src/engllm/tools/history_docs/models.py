@@ -185,6 +185,9 @@ HistoryAlgorithmCapsuleEnrichmentStatus = Literal[
 HistoryInterfaceInventoryStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistoryDependencyLandscapeStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistorySectionPlanningStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryDraftStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryDraftReviewStatus = Literal["scored", "heuristic_only", "llm_failed"]
+HistoryRepairStatus = Literal["scored", "heuristic_only", "llm_failed"]
 HistoryIntervalInsightKind = Literal[
     "subsystem_change",
     "interface_change",
@@ -973,6 +976,113 @@ class HistoryRenderManifest(DomainModel):
     sections: list[HistoryRenderedSection] = Field(default_factory=list)
 
 
+HistoryDraftReviewFindingKind = Literal[
+    "coherence",
+    "omission",
+    "unsupported_claim",
+    "redundancy",
+    "weak_prose",
+]
+HistoryDraftReviewSeverity = Literal["low", "medium", "high"]
+
+
+class HistorySectionDraft(DomainModel):
+    """One section-scoped H14 draft body."""
+
+    section_id: HistorySectionPlanId
+    markdown_body: str
+    supporting_concept_ids: list[str] = Field(default_factory=list)
+    supporting_algorithm_capsule_ids: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_capability_ids: list[str] = Field(default_factory=list)
+    source_design_note_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySectionDraftArtifact(DomainModel):
+    """Checkpoint-scoped H14-01 draft artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryDraftStatus
+    sections: list[HistorySectionDraft] = Field(default_factory=list)
+
+
+class HistoryDraftReviewFinding(DomainModel):
+    """One document-review finding for a shadow draft."""
+
+    finding_id: str
+    kind: HistoryDraftReviewFindingKind
+    severity: HistoryDraftReviewSeverity
+    section_id: str | None = None
+    summary: str
+    revision_goal: str
+
+
+class HistoryDraftReview(DomainModel):
+    """Checkpoint-scoped H14-02 review artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryDraftReviewStatus
+    strengths: list[str] = Field(default_factory=list)
+    findings: list[HistoryDraftReviewFinding] = Field(default_factory=list)
+    recommended_repair_section_ids: list[HistorySectionPlanId] = Field(
+        default_factory=list
+    )
+
+
+class HistorySectionRepair(DomainModel):
+    """One section-scoped H14-03 repair body."""
+
+    section_id: HistorySectionPlanId
+    revised_markdown_body: str
+    addressed_finding_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistorySectionRepairArtifact(DomainModel):
+    """Checkpoint-scoped H14-03 repair artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    evaluation_status: HistoryRepairStatus
+    sections: list[HistorySectionRepair] = Field(default_factory=list)
+
+
+class HistorySectionDraftJudgment(DomainModel):
+    """Structured H14-01 section draft response."""
+
+    markdown_body: str
+    supporting_concept_ids: list[str] = Field(default_factory=list)
+    supporting_algorithm_capsule_ids: list[str] = Field(default_factory=list)
+    source_insight_ids: list[str] = Field(default_factory=list)
+    source_capability_ids: list[str] = Field(default_factory=list)
+    source_design_note_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
+class HistoryDraftReviewJudgment(DomainModel):
+    """Structured H14-02 document review response."""
+
+    strengths: list[str] = Field(default_factory=list)
+    findings: list[HistoryDraftReviewFinding] = Field(default_factory=list)
+    recommended_repair_section_ids: list[HistorySectionPlanId] = Field(
+        default_factory=list
+    )
+
+
+class HistorySectionRepairJudgment(DomainModel):
+    """Structured H14-03 section repair response."""
+
+    revised_markdown_body: str
+    addressed_finding_ids: list[str] = Field(default_factory=list)
+    evidence_links: list[HistoryEvidenceLink] = Field(default_factory=list)
+
+
 class HistoryValidationFinding(DomainModel):
     """One deterministic validation finding for a rendered checkpoint."""
 
@@ -1584,6 +1694,15 @@ class HistoryBuildResult(DomainModel):
     section_outline_llm_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
     dependencies_artifact_path: Path | None = None
+    section_drafts_path: Path | None = None
+    checkpoint_draft_markdown_path: Path | None = None
+    render_manifest_draft_path: Path | None = None
+    validation_report_draft_path: Path | None = None
+    draft_review_path: Path | None = None
+    section_repairs_path: Path | None = None
+    checkpoint_repaired_markdown_path: Path | None = None
+    render_manifest_repaired_path: Path | None = None
+    validation_report_repaired_path: Path | None = None
     checkpoint_markdown_path: Path | None = None
     render_manifest_path: Path | None = None
     validation_report_path: Path | None = None
@@ -1608,6 +1727,9 @@ class HistoryBuildResult(DomainModel):
     interface_inventory_status: HistoryInterfaceInventoryStatus | None = None
     dependency_landscape_status: HistoryDependencyLandscapeStatus | None = None
     section_planning_status: HistorySectionPlanningStatus | None = None
+    draft_status: HistoryDraftStatus | None = None
+    draft_review_status: HistoryDraftReviewStatus | None = None
+    repair_status: HistoryRepairStatus | None = None
     context_node_count: int = 0
     interface_candidate_count: int = 0
     subsystem_change_count: int = 0
@@ -1638,6 +1760,14 @@ class HistoryBuildResult(DomainModel):
     rendered_section_count: int = 0
     validation_error_count: int = 0
     validation_warning_count: int = 0
+    draft_section_count: int = 0
+    repaired_section_count: int = 0
+    draft_review_finding_count: int = 0
+    draft_review_recommended_section_count: int = 0
+    draft_validation_error_count: int = 0
+    draft_validation_warning_count: int = 0
+    repaired_validation_error_count: int = 0
+    repaired_validation_warning_count: int = 0
 
 
 __all__ = [
@@ -1704,6 +1834,13 @@ __all__ = [
     "HistoryDependencySummaryStatus",
     "HistoryDependencyUsagePattern",
     "HistoryDependencyWarning",
+    "HistoryDraftReview",
+    "HistoryDraftReviewFinding",
+    "HistoryDraftReviewFindingKind",
+    "HistoryDraftReviewJudgment",
+    "HistoryDraftReviewSeverity",
+    "HistoryDraftReviewStatus",
+    "HistoryDraftStatus",
     "HistoryEvidenceKind",
     "HistoryEvidenceLink",
     "HistoryDeltaEvidenceLink",
@@ -1729,6 +1866,7 @@ __all__ = [
     "HistoryRationaleClueSourceKind",
     "HistoryRenderManifest",
     "HistoryRenderedSection",
+    "HistoryRepairStatus",
     "HistorySemanticCheckpointCandidate",
     "HistorySemanticCheckpointEvaluationStatus",
     "HistorySemanticCheckpointJudgment",
@@ -1754,6 +1892,9 @@ __all__ = [
     "HistorySystemContextNode",
     "HistorySystemContextNodeKind",
     "HistorySectionDepth",
+    "HistorySectionDraft",
+    "HistorySectionDraftArtifact",
+    "HistorySectionDraftJudgment",
     "HistorySectionId",
     "HistorySectionKind",
     "HistorySectionOutline",
@@ -1761,6 +1902,9 @@ __all__ = [
     "HistorySectionPlan",
     "HistorySectionPlanId",
     "HistorySectionPlanStatus",
+    "HistorySectionRepair",
+    "HistorySectionRepairArtifact",
+    "HistorySectionRepairJudgment",
     "HistorySectionSignalKind",
     "HistorySectionState",
     "HistorySnapshotStructuralModel",

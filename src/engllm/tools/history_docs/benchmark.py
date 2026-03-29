@@ -24,6 +24,7 @@ from engllm.llm.base import LLMClient, StructuredGenerationRequest
 from engllm.llm.factory import create_llm_client
 from engllm.prompts.history_docs.builders import build_history_docs_quality_judge_prompt
 from engllm.tools.history_docs.build import build_history_docs_checkpoint
+from engllm.tools.history_docs.draft_review import summarize_draft_review
 from engllm.tools.history_docs.models import (
     HistoryAlgorithmCapsuleEnrichment,
     HistoryAlgorithmCapsuleEnrichmentIndex,
@@ -44,10 +45,13 @@ from engllm.tools.history_docs.models import (
     HistoryDocsRubricDimension,
     HistoryDocsRubricScore,
     HistoryDocsVariantComparison,
+    HistoryDraftReview,
     HistoryInterfaceInventory,
     HistoryLLMSectionOutline,
     HistoryRenderManifest,
+    HistorySectionDraftArtifact,
     HistorySectionPlanId,
+    HistorySectionRepairArtifact,
     HistorySemanticContextMap,
     HistoryValidationReport,
 )
@@ -125,6 +129,11 @@ class _LoadedBenchmarkArtifacts:
     algorithm_capsule_enrichments: list[HistoryAlgorithmCapsuleEnrichment] | None = None
     interface_inventory: HistoryInterfaceInventory | None = None
     dependency_landscape: HistoryDependencyLandscape | None = None
+    section_drafts: HistorySectionDraftArtifact | None = None
+    draft_validation_report: HistoryValidationReport | None = None
+    repaired_validation_report: HistoryValidationReport | None = None
+    draft_review: HistoryDraftReview | None = None
+    section_repairs: HistorySectionRepairArtifact | None = None
 
 
 def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
@@ -939,6 +948,82 @@ def semantic_structure_context_h13_full_benchmark_variant(
     )
 
 
+def semantic_structure_context_llm_draft_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the H14-01 draft benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            narrative_render_mode="llm_draft",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-llm-draft",
+        runner=_run,
+    )
+
+
+def semantic_structure_context_llm_repair_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the full H14 draft-review-repair benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            narrative_render_mode="llm_repair",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-llm-repair",
+        runner=_run,
+    )
+
+
 def _empty_rubric_scores() -> list[HistoryDocsRubricScore]:
     return [
         HistoryDocsRubricScore(
@@ -978,6 +1063,19 @@ def _load_benchmark_artifacts(
         "section_outline_llm_path",
         None,
     )
+    section_drafts_path = getattr(build_result, "section_drafts_path", None)
+    validation_report_draft_path = getattr(
+        build_result,
+        "validation_report_draft_path",
+        None,
+    )
+    validation_report_repaired_path = getattr(
+        build_result,
+        "validation_report_repaired_path",
+        None,
+    )
+    draft_review_path = getattr(build_result, "draft_review_path", None)
+    section_repairs_path = getattr(build_result, "section_repairs_path", None)
     if (
         checkpoint_model_path is None
         or render_manifest_path is None
@@ -1051,6 +1149,41 @@ def _load_benchmark_artifacts(
             if dependency_landscape_path is None
             else HistoryDependencyLandscape.model_validate_json(
                 Path(dependency_landscape_path).read_text(encoding="utf-8")
+            )
+        ),
+        section_drafts=(
+            None
+            if section_drafts_path is None
+            else HistorySectionDraftArtifact.model_validate_json(
+                Path(section_drafts_path).read_text(encoding="utf-8")
+            )
+        ),
+        draft_validation_report=(
+            None
+            if validation_report_draft_path is None
+            else HistoryValidationReport.model_validate_json(
+                Path(validation_report_draft_path).read_text(encoding="utf-8")
+            )
+        ),
+        repaired_validation_report=(
+            None
+            if validation_report_repaired_path is None
+            else HistoryValidationReport.model_validate_json(
+                Path(validation_report_repaired_path).read_text(encoding="utf-8")
+            )
+        ),
+        draft_review=(
+            None
+            if draft_review_path is None
+            else HistoryDraftReview.model_validate_json(
+                Path(draft_review_path).read_text(encoding="utf-8")
+            )
+        ),
+        section_repairs=(
+            None
+            if section_repairs_path is None
+            else HistorySectionRepairArtifact.model_validate_json(
+                Path(section_repairs_path).read_text(encoding="utf-8")
             )
         ),
         section_outline_llm=(
@@ -1304,6 +1437,47 @@ def evaluate_history_docs_quality(
                     "semantic-structure-context-h13-full",
                 }
                 else None
+            ),
+            section_drafts=(
+                artifacts.section_drafts
+                if variant_id
+                in {
+                    "semantic-structure-context-llm-draft",
+                    "semantic-structure-context-llm-repair",
+                }
+                else None
+            ),
+            draft_validation_report=(
+                artifacts.draft_validation_report
+                if variant_id
+                in {
+                    "semantic-structure-context-llm-draft",
+                    "semantic-structure-context-llm-repair",
+                }
+                else None
+            ),
+            repaired_validation_report=(
+                artifacts.repaired_validation_report
+                if variant_id == "semantic-structure-context-llm-repair"
+                else None
+            ),
+            draft_review_summary=(
+                None
+                if artifacts.draft_review is None
+                or variant_id
+                not in {
+                    "semantic-structure-context-llm-draft",
+                    "semantic-structure-context-llm-repair",
+                }
+                else summarize_draft_review(artifacts.draft_review)
+            ),
+            repaired_section_ids=(
+                []
+                if artifacts.section_repairs is None
+                or variant_id != "semantic-structure-context-llm-repair"
+                else [
+                    section.section_id for section in artifacts.section_repairs.sections
+                ]
             ),
         )
         response = llm_client.generate_structured(
@@ -1572,6 +1746,8 @@ __all__ = [
     "semantic_structure_context_enriched_model_benchmark_variant",
     "semantic_structure_context_h13_full_benchmark_variant",
     "semantic_structure_context_interface_inventory_benchmark_variant",
+    "semantic_structure_context_llm_draft_benchmark_variant",
+    "semantic_structure_context_llm_repair_benchmark_variant",
     "semantic_structure_context_llm_section_planning_benchmark_variant",
     "semantic_structure_context_benchmark_variant",
     "semantic_history_docs_benchmark_variant",

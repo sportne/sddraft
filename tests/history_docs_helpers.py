@@ -555,6 +555,177 @@ def validation_report_path(
     )
 
 
+def section_drafts_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-01 section-drafts path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "section_drafts_llm.json"
+    )
+
+
+def checkpoint_draft_markdown_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-01 draft markdown path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "checkpoint_draft_llm.md"
+    )
+
+
+def render_manifest_draft_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-01 draft render-manifest path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "render_manifest_draft_llm.json"
+    )
+
+
+def validation_report_draft_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-01 draft validation-report path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "validation_report_draft_llm.json"
+    )
+
+
+def draft_review_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-02 draft-review path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "draft_review.json"
+    )
+
+
+def section_repairs_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-03 section-repairs path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "section_repairs_llm.json"
+    )
+
+
+def checkpoint_repaired_markdown_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-03 repaired markdown path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "checkpoint_repaired_llm.md"
+    )
+
+
+def render_manifest_repaired_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-03 repaired render-manifest path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "render_manifest_repaired_llm.json"
+    )
+
+
+def validation_report_repaired_path(
+    output_root: Path,
+    workspace_id: str,
+    checkpoint_id: str,
+) -> Path:
+    """Return the tool-scoped H14-03 repaired validation-report path."""
+
+    return (
+        output_root
+        / "workspaces"
+        / workspace_id
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / checkpoint_id
+        / "validation_report_repaired_llm.json"
+    )
+
+
 def benchmark_suite_manifest_path(output_root: Path, suite_id: str) -> Path:
     """Return the H10 suite manifest path for one benchmark run."""
 

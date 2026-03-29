@@ -83,6 +83,10 @@ from engllm.tools.history_docs.dependency_landscape import (
     build_dependency_landscape,
     dependency_landscape_path,
 )
+from engllm.tools.history_docs.draft_review import (
+    build_draft_review,
+    draft_review_path,
+)
 from engllm.tools.history_docs.interface_inventory import (
     build_interface_inventory,
     interface_inventory_path,
@@ -104,6 +108,13 @@ from engllm.tools.history_docs.render import (
     render_manifest_path,
     write_checkpoint_markdown,
 )
+from engllm.tools.history_docs.section_drafting_llm import (
+    build_section_drafts,
+    checkpoint_draft_markdown_path,
+    render_manifest_draft_path,
+    section_drafts_path,
+    validation_report_draft_path,
+)
 from engllm.tools.history_docs.section_outline import (
     build_section_outline,
     section_outline_path,
@@ -113,6 +124,13 @@ from engllm.tools.history_docs.section_planning_llm import (
     build_section_planning_scaffold,
     link_section_planning_outline_to_scaffold,
     section_outline_llm_path,
+)
+from engllm.tools.history_docs.section_repair_llm import (
+    build_section_repairs,
+    checkpoint_repaired_markdown_path,
+    render_manifest_repaired_path,
+    section_repairs_path,
+    validation_report_repaired_path,
 )
 from engllm.tools.history_docs.semantic_context import (
     build_semantic_context_map,
@@ -382,6 +400,7 @@ def build_history_docs_checkpoint(
     algorithm_capsule_mode: Literal["baseline", "enriched"] = "baseline",
     interface_render_mode: Literal["baseline", "inventory"] = "baseline",
     dependency_render_mode: Literal["baseline", "landscape"] = "baseline",
+    narrative_render_mode: Literal["baseline", "llm_draft", "llm_repair"] = "baseline",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -1065,6 +1084,184 @@ def build_history_docs_checkpoint(
             f"{validation_report.error_count} error(s); see {validation_report_artifact_path}"
         )
 
+    _progress(
+        progress_callback,
+        "history-docs: drafting shadow LLM section narratives",
+    )
+    section_drafts_artifact_path = section_drafts_path(history_tool_root, checkpoint_id)
+    checkpoint_draft_markdown_artifact_path = checkpoint_draft_markdown_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    render_manifest_draft_artifact_path = render_manifest_draft_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    validation_report_draft_artifact_path = validation_report_draft_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    draft_artifact, draft_markdown, draft_render_manifest = build_section_drafts(
+        checkpoint_model=checkpoint_model,
+        section_outline=authoritative_section_outline,
+        render_manifest=render_manifest,
+        baseline_markdown=checkpoint_markdown,
+        interval_interpretation=interval_interpretation,
+        checkpoint_model_enrichment=checkpoint_model_enrichment,
+        dependency_inventory=dependency_inventory,
+        capsule_index=algorithm_capsule_index,
+        capsules=algorithm_capsules,
+        semantic_context_map=(
+            semantic_context_map
+            if experimental_section_mode == "semantic_context"
+            else None
+        ),
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+        algorithm_capsule_enrichment_index=algorithm_capsule_enrichment_index,
+        algorithm_capsule_enrichments=algorithm_capsule_enrichments,
+        interface_inventory=(
+            interface_inventory if interface_render_mode == "inventory" else None
+        ),
+        dependency_landscape=(
+            dependency_landscape if dependency_render_mode == "landscape" else None
+        ),
+    )
+    write_json_model(section_drafts_artifact_path, draft_artifact)
+    write_checkpoint_markdown(
+        checkpoint_draft_markdown_artifact_path,
+        draft_markdown,
+    )
+    write_json_model(render_manifest_draft_artifact_path, draft_render_manifest)
+    draft_validation_report = validate_checkpoint_render(
+        checkpoint_dir=checkpoint_root,
+        checkpoint_model=checkpoint_model,
+        section_outline=authoritative_section_outline,
+        dependency_inventory=dependency_inventory,
+        capsule_index=algorithm_capsule_index,
+        markdown=draft_markdown,
+        render_manifest=draft_render_manifest,
+        markdown_filename="checkpoint_draft_llm.md",
+        render_manifest_filename="render_manifest_draft_llm.json",
+    )
+    write_json_model(
+        validation_report_draft_artifact_path,
+        draft_validation_report,
+    )
+
+    _progress(
+        progress_callback,
+        "history-docs: reviewing shadow LLM draft",
+    )
+    draft_review_artifact_path = draft_review_path(history_tool_root, checkpoint_id)
+    draft_review = build_draft_review(
+        checkpoint_model=checkpoint_model,
+        draft_artifact=draft_artifact,
+        draft_markdown=draft_markdown,
+        draft_validation_report=draft_validation_report,
+        semantic_context_map=(
+            semantic_context_map
+            if experimental_section_mode == "semantic_context"
+            else None
+        ),
+        checkpoint_model_enrichment=checkpoint_model_enrichment,
+        llm_client=llm_client,
+        model_name=project_config.llm.model_name,
+        temperature=project_config.llm.temperature,
+    )
+    write_json_model(draft_review_artifact_path, draft_review)
+
+    _progress(
+        progress_callback,
+        "history-docs: repairing shadow LLM draft sections",
+    )
+    section_repairs_artifact_path = section_repairs_path(
+        history_tool_root, checkpoint_id
+    )
+    checkpoint_repaired_markdown_artifact_path = checkpoint_repaired_markdown_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    render_manifest_repaired_artifact_path = render_manifest_repaired_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    validation_report_repaired_artifact_path = validation_report_repaired_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    repair_artifact, repaired_markdown, repaired_render_manifest = (
+        build_section_repairs(
+            checkpoint_model=checkpoint_model,
+            section_outline=authoritative_section_outline,
+            draft_artifact=draft_artifact,
+            draft_review=draft_review,
+            draft_markdown=draft_markdown,
+            draft_render_manifest=draft_render_manifest,
+            interval_interpretation=interval_interpretation,
+            checkpoint_model_enrichment=checkpoint_model_enrichment,
+            dependency_inventory=dependency_inventory,
+            capsule_index=algorithm_capsule_index,
+            capsules=algorithm_capsules,
+            semantic_context_map=(
+                semantic_context_map
+                if experimental_section_mode == "semantic_context"
+                else None
+            ),
+            llm_client=llm_client,
+            model_name=project_config.llm.model_name,
+            temperature=project_config.llm.temperature,
+            algorithm_capsule_enrichment_index=algorithm_capsule_enrichment_index,
+            algorithm_capsule_enrichments=algorithm_capsule_enrichments,
+            interface_inventory=(
+                interface_inventory if interface_render_mode == "inventory" else None
+            ),
+            dependency_landscape=(
+                dependency_landscape if dependency_render_mode == "landscape" else None
+            ),
+        )
+    )
+    write_json_model(section_repairs_artifact_path, repair_artifact)
+    write_checkpoint_markdown(
+        checkpoint_repaired_markdown_artifact_path,
+        repaired_markdown,
+    )
+    write_json_model(
+        render_manifest_repaired_artifact_path,
+        repaired_render_manifest,
+    )
+    repaired_validation_report = validate_checkpoint_render(
+        checkpoint_dir=checkpoint_root,
+        checkpoint_model=checkpoint_model,
+        section_outline=authoritative_section_outline,
+        dependency_inventory=dependency_inventory,
+        capsule_index=algorithm_capsule_index,
+        markdown=repaired_markdown,
+        render_manifest=repaired_render_manifest,
+        markdown_filename="checkpoint_repaired_llm.md",
+        render_manifest_filename="render_manifest_repaired_llm.json",
+    )
+    write_json_model(
+        validation_report_repaired_artifact_path,
+        repaired_validation_report,
+    )
+
+    authoritative_markdown_path = checkpoint_markdown_artifact_path
+    authoritative_render_manifest_path = render_manifest_artifact_path
+    authoritative_validation_report_path = validation_report_artifact_path
+    authoritative_validation_report = validation_report
+    if narrative_render_mode == "llm_draft":
+        authoritative_markdown_path = checkpoint_draft_markdown_artifact_path
+        authoritative_render_manifest_path = render_manifest_draft_artifact_path
+        authoritative_validation_report_path = validation_report_draft_artifact_path
+        authoritative_validation_report = draft_validation_report
+    elif narrative_render_mode == "llm_repair":
+        authoritative_markdown_path = checkpoint_repaired_markdown_artifact_path
+        authoritative_render_manifest_path = render_manifest_repaired_artifact_path
+        authoritative_validation_report_path = validation_report_repaired_artifact_path
+        authoritative_validation_report = repaired_validation_report
+
     retired_concept_count = (
         sum(
             concept.lifecycle_status == "retired"
@@ -1107,9 +1304,18 @@ def build_history_docs_checkpoint(
         section_outline_llm_path=section_outline_llm_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
         dependencies_artifact_path=dependencies_artifact_path,
-        checkpoint_markdown_path=checkpoint_markdown_artifact_path,
-        render_manifest_path=render_manifest_artifact_path,
-        validation_report_path=validation_report_artifact_path,
+        section_drafts_path=section_drafts_artifact_path,
+        checkpoint_draft_markdown_path=checkpoint_draft_markdown_artifact_path,
+        render_manifest_draft_path=render_manifest_draft_artifact_path,
+        validation_report_draft_path=validation_report_draft_artifact_path,
+        draft_review_path=draft_review_artifact_path,
+        section_repairs_path=section_repairs_artifact_path,
+        checkpoint_repaired_markdown_path=checkpoint_repaired_markdown_artifact_path,
+        render_manifest_repaired_path=render_manifest_repaired_artifact_path,
+        validation_report_repaired_path=validation_report_repaired_artifact_path,
+        checkpoint_markdown_path=authoritative_markdown_path,
+        render_manifest_path=authoritative_render_manifest_path,
+        validation_report_path=authoritative_validation_report_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -1134,6 +1340,9 @@ def build_history_docs_checkpoint(
         interface_inventory_status=interface_inventory.evaluation_status,
         dependency_landscape_status=dependency_landscape.evaluation_status,
         section_planning_status=section_outline_llm.evaluation_status,
+        draft_status=draft_artifact.evaluation_status,
+        draft_review_status=draft_review.evaluation_status,
+        repair_status=repair_artifact.evaluation_status,
         context_node_count=len(semantic_context_map.context_nodes),
         interface_candidate_count=len(semantic_context_map.interfaces),
         subsystem_change_count=len(interval_delta_model.subsystem_changes),
@@ -1174,6 +1383,16 @@ def build_history_docs_checkpoint(
             dependency_inventory
         ),
         rendered_section_count=len(render_manifest.sections),
-        validation_error_count=validation_report.error_count,
-        validation_warning_count=validation_report.warning_count,
+        validation_error_count=authoritative_validation_report.error_count,
+        validation_warning_count=authoritative_validation_report.warning_count,
+        draft_section_count=len(draft_artifact.sections),
+        repaired_section_count=len(repair_artifact.sections),
+        draft_review_finding_count=len(draft_review.findings),
+        draft_review_recommended_section_count=len(
+            draft_review.recommended_repair_section_ids
+        ),
+        draft_validation_error_count=draft_validation_report.error_count,
+        draft_validation_warning_count=draft_validation_report.warning_count,
+        repaired_validation_error_count=repaired_validation_report.error_count,
+        repaired_validation_warning_count=repaired_validation_report.warning_count,
     )

@@ -9,10 +9,13 @@ from engllm.prompts.history_docs.templates import (
     CHECKPOINT_MODEL_ENRICHMENT_SYSTEM_PROMPT,
     DEPENDENCY_LANDSCAPE_SYSTEM_PROMPT,
     DEPENDENCY_SUMMARY_SYSTEM_PROMPT,
+    DRAFT_REVIEW_SYSTEM_PROMPT,
     HISTORY_DOCS_QUALITY_JUDGE_SYSTEM_PROMPT,
     INTERFACE_INVENTORY_SYSTEM_PROMPT,
     INTERVAL_INTERPRETATION_SYSTEM_PROMPT,
+    SECTION_DRAFTING_SYSTEM_PROMPT,
     SECTION_PLANNING_LLM_SYSTEM_PROMPT,
+    SECTION_REPAIR_SYSTEM_PROMPT,
     SEMANTIC_CHECKPOINT_PLANNER_SYSTEM_PROMPT,
     SEMANTIC_CONTEXT_SYSTEM_PROMPT,
     SEMANTIC_STRUCTURE_SYSTEM_PROMPT,
@@ -28,6 +31,7 @@ from engllm.tools.history_docs.models import (
     HistoryInterfaceInventory,
     HistoryLLMSectionOutline,
     HistoryRenderManifest,
+    HistorySectionDraftArtifact,
     HistorySemanticContextMap,
     HistoryValidationReport,
 )
@@ -123,6 +127,70 @@ def build_dependency_landscape_prompt(
     return DEPENDENCY_LANDSCAPE_SYSTEM_PROMPT, user_prompt
 
 
+def build_section_drafting_prompt(
+    *,
+    checkpoint_context: dict[str, object],
+    section_metadata: dict[str, object],
+    supporting_evidence: dict[str, object],
+) -> tuple[str, str]:
+    """Return prompts for one H14-01 section drafting request."""
+
+    user_prompt = (
+        "Draft one checkpoint documentation section using only the supplied "
+        "structured evidence.\n"
+        f"Checkpoint Context:\n{_json(checkpoint_context)}\n"
+        f"Section Metadata:\n{_json(section_metadata)}\n"
+        f"Supporting Evidence:\n{_json(supporting_evidence)}\n"
+    )
+    return SECTION_DRAFTING_SYSTEM_PROMPT, user_prompt
+
+
+def build_draft_review_prompt(
+    *,
+    checkpoint_context: dict[str, object],
+    draft_summary: dict[str, object],
+    validation_summary: dict[str, object],
+    evidence_summary: dict[str, object],
+    markdown: str,
+) -> tuple[str, str]:
+    """Return prompts for one H14-02 draft review request."""
+
+    user_prompt = (
+        "Review this drafted checkpoint document using only the supplied "
+        "structured evidence.\n"
+        f"Checkpoint Context:\n{_json(checkpoint_context)}\n"
+        f"Draft Summary:\n{_json(draft_summary)}\n"
+        f"Validation Summary:\n{_json(validation_summary)}\n"
+        f"Evidence Summary:\n{_json(evidence_summary)}\n"
+        "Draft Markdown:\n"
+        f"{markdown}\n"
+    )
+    return DRAFT_REVIEW_SYSTEM_PROMPT, user_prompt
+
+
+def build_section_repair_prompt(
+    *,
+    checkpoint_context: dict[str, object],
+    section_metadata: dict[str, object],
+    findings: list[dict[str, object]],
+    supporting_evidence: dict[str, object],
+    original_markdown_body: str,
+) -> tuple[str, str]:
+    """Return prompts for one H14-03 section repair request."""
+
+    user_prompt = (
+        "Repair one drafted checkpoint documentation section using only the "
+        "supplied structured evidence.\n"
+        f"Checkpoint Context:\n{_json(checkpoint_context)}\n"
+        f"Section Metadata:\n{_json(section_metadata)}\n"
+        f"Section Findings:\n{_json(findings)}\n"
+        f"Supporting Evidence:\n{_json(supporting_evidence)}\n"
+        "Original Draft Body:\n"
+        f"{original_markdown_body}\n"
+    )
+    return SECTION_REPAIR_SYSTEM_PROMPT, user_prompt
+
+
 def build_history_docs_quality_judge_prompt(
     *,
     case: HistoryDocsBenchmarkCase,
@@ -141,6 +209,11 @@ def build_history_docs_quality_judge_prompt(
     ) = None,
     interface_inventory: HistoryInterfaceInventory | None = None,
     dependency_landscape: HistoryDependencyLandscape | None = None,
+    section_drafts: HistorySectionDraftArtifact | None = None,
+    draft_validation_report: HistoryValidationReport | None = None,
+    repaired_validation_report: HistoryValidationReport | None = None,
+    draft_review_summary: dict[str, object] | None = None,
+    repaired_section_ids: list[str] | None = None,
 ) -> tuple[str, str]:
     """Return prompts for one H10 single-document quality evaluation."""
 
@@ -351,6 +424,37 @@ def build_history_docs_quality_judge_prompt(
             ],
         }
     )
+    draft_summary: dict[str, object] = (
+        {"evaluation_status": None, "section_count": 0, "section_ids": []}
+        if section_drafts is None
+        else {
+            "evaluation_status": section_drafts.evaluation_status,
+            "section_count": len(section_drafts.sections),
+            "section_ids": [section.section_id for section in section_drafts.sections],
+        }
+    )
+    draft_validation_summary: dict[str, int | None] = (
+        {"error_count": None, "warning_count": None}
+        if draft_validation_report is None
+        else {
+            "error_count": draft_validation_report.error_count,
+            "warning_count": draft_validation_report.warning_count,
+        }
+    )
+    repaired_validation_summary: dict[str, int | None] = (
+        {"error_count": None, "warning_count": None}
+        if repaired_validation_report is None
+        else {
+            "error_count": repaired_validation_report.error_count,
+            "warning_count": repaired_validation_report.warning_count,
+        }
+    )
+    draft_review_compact = draft_review_summary or {
+        "evaluation_status": None,
+        "finding_counts_by_kind": {},
+        "finding_counts_by_severity": {},
+        "recommended_repair_section_ids": [],
+    }
     validation_summary = {
         "error_count": validation_report.error_count,
         "warning_count": validation_report.warning_count,
@@ -377,6 +481,11 @@ def build_history_docs_quality_judge_prompt(
         f"Algorithm Enrichment Summary:\n{_json(algorithm_enrichment_summary)}\n"
         f"Interface Inventory Summary:\n{_json(interface_inventory_summary)}\n"
         f"Dependency Landscape Summary:\n{_json(dependency_landscape_summary)}\n"
+        f"Draft Summary:\n{_json(draft_summary)}\n"
+        f"Draft Validation Summary:\n{_json(draft_validation_summary)}\n"
+        f"Draft Review Summary:\n{_json(draft_review_compact)}\n"
+        f"Repaired Validation Summary:\n{_json(repaired_validation_summary)}\n"
+        f"Repaired Section IDs:\n{_json(repaired_section_ids or [])}\n"
         f"Rendered Sections:\n{_json(render_sections)}\n"
         f"Validation Summary:\n{_json(validation_summary)}\n"
         "Checkpoint Markdown:\n"

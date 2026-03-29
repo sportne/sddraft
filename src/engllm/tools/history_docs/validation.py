@@ -563,6 +563,8 @@ def validate_checkpoint_render(
     capsule_index: HistoryAlgorithmCapsuleIndex,
     markdown: str,
     render_manifest: HistoryRenderManifest,
+    markdown_filename: str = "checkpoint.md",
+    render_manifest_filename: str = "render_manifest.json",
 ) -> HistoryValidationReport:
     """Validate final checkpoint markdown against structured render artifacts."""
 
@@ -623,16 +625,22 @@ def validate_checkpoint_render(
     )
     error_count = sum(finding.severity == "error" for finding in findings)
     warning_count = sum(finding.severity == "warning" for finding in findings)
-    return HistoryValidationReport(
+    report = HistoryValidationReport(
         checkpoint_id=checkpoint_model.checkpoint_id,
         target_commit=checkpoint_model.target_commit,
         previous_checkpoint_commit=checkpoint_model.previous_checkpoint_commit,
-        markdown_path=Path("checkpoint.md"),
-        render_manifest_path=Path("render_manifest.json"),
+        markdown_path=Path(markdown_filename),
+        render_manifest_path=Path(render_manifest_filename),
         error_count=error_count,
         warning_count=warning_count,
         findings=findings,
     )
+    for finding in report.findings:
+        if finding.artifact_path == Path("checkpoint.md"):
+            finding.artifact_path = Path(markdown_filename)
+        elif finding.artifact_path == Path("render_manifest.json"):
+            finding.artifact_path = Path(render_manifest_filename)
+    return report
 
 
 __all__ = [

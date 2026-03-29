@@ -232,9 +232,11 @@ def test_promotion_gate_report_is_deterministic_and_uses_three_way_comparisons(
 
     for case in cases:
         for variant_id, score in (
-            ("baseline", 3),
-            ("semantic-clustering", 4),
-            ("semantic-structure-context", 5),
+            ("baseline", 1),
+            ("semantic-clustering", 2),
+            ("semantic-structure-context", 3),
+            ("semantic-structure-context-llm-draft", 4),
+            ("semantic-structure-context-llm-repair", 5),
         ):
             report = HistoryDocsQualityReport(
                 case_id=case.manifest.case_id,
@@ -315,6 +317,70 @@ def test_promotion_gate_report_is_deterministic_and_uses_three_way_comparisons(
                     overall_delta=1.0,
                     preferred_variant_id="semantic-structure-context",
                 ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="baseline",
+                    candidate_variant_id="semantic-structure-context-llm-draft",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=1,
+                            candidate_score=4,
+                            delta=3,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=3.0,
+                    preferred_variant_id="semantic-structure-context-llm-draft",
+                ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="baseline",
+                    candidate_variant_id="semantic-structure-context-llm-repair",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=1,
+                            candidate_score=5,
+                            delta=4,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=4.0,
+                    preferred_variant_id="semantic-structure-context-llm-repair",
+                ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="semantic-structure-context",
+                    candidate_variant_id="semantic-structure-context-llm-draft",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=3,
+                            candidate_score=4,
+                            delta=1,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=1.0,
+                    preferred_variant_id="semantic-structure-context-llm-draft",
+                ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="semantic-structure-context",
+                    candidate_variant_id="semantic-structure-context-llm-repair",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=3,
+                            candidate_score=5,
+                            delta=2,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=2.0,
+                    preferred_variant_id="semantic-structure-context-llm-repair",
+                ),
             ],
         )
         comparison_path = benchmark.benchmark_comparison_report_path(
@@ -338,12 +404,20 @@ def test_promotion_gate_report_is_deterministic_and_uses_three_way_comparisons(
     )
 
     assert gate_report.average_score_by_variant == {
-        "baseline": 3.0,
-        "semantic-clustering": 4.0,
-        "semantic-structure-context": 5.0,
+        "baseline": 1.0,
+        "semantic-clustering": 2.0,
+        "semantic-structure-context": 3.0,
+        "semantic-structure-context-llm-draft": 4.0,
+        "semantic-structure-context-llm-repair": 5.0,
     }
     assert gate_report.win_counts_by_variant["semantic-clustering"] == 5
     assert gate_report.win_counts_by_variant["semantic-structure-context"] == 5
+    assert (
+        gate_report.win_counts_by_variant["semantic-structure-context-llm-draft"] == 5
+    )
+    assert (
+        gate_report.win_counts_by_variant["semantic-structure-context-llm-repair"] == 5
+    )
     assert all(verdict.passed for verdict in gate_report.gate_verdicts)
 
 
@@ -419,6 +493,36 @@ def test_promotion_gate_report_records_failure_reasons(
                 unsupported_claim_risks=[],
                 tbd_overuse=False,
             ),
+            HistoryDocsQualityReport(
+                case_id=case.manifest.case_id,
+                variant_id="semantic-structure-context-llm-draft",
+                checkpoint_id=f"checkpoint::{case.manifest.case_id}::draft",
+                build_failed=False,
+                evaluation_status="scored",
+                validation_error_count=1,
+                validation_warning_count=0,
+                rubric_scores=_rubric_scores(2),
+                overall_score=2.0,
+                strengths=[],
+                weaknesses=["Draft variant underperformed."],
+                unsupported_claim_risks=["draft risk"],
+                tbd_overuse=False,
+            ),
+            HistoryDocsQualityReport(
+                case_id=case.manifest.case_id,
+                variant_id="semantic-structure-context-llm-repair",
+                checkpoint_id=f"checkpoint::{case.manifest.case_id}::repair",
+                build_failed=False,
+                evaluation_status="llm_failed",
+                validation_error_count=0,
+                validation_warning_count=0,
+                rubric_scores=_rubric_scores(1),
+                overall_score=1.0,
+                strengths=[],
+                weaknesses=["Repair variant failed to score cleanly."],
+                unsupported_claim_risks=["repair risk"],
+                tbd_overuse=False,
+            ),
         ]
         for report in reports:
             quality_path = benchmark.benchmark_quality_report_path(
@@ -483,6 +587,70 @@ def test_promotion_gate_report_records_failure_reasons(
                     overall_delta=-1.0,
                     preferred_variant_id="semantic-clustering",
                 ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="baseline",
+                    candidate_variant_id="semantic-structure-context-llm-draft",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=4,
+                            candidate_score=2,
+                            delta=-2,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=-2.0,
+                    preferred_variant_id="baseline",
+                ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="baseline",
+                    candidate_variant_id="semantic-structure-context-llm-repair",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=4,
+                            candidate_score=1,
+                            delta=-3,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=-3.0,
+                    preferred_variant_id="baseline",
+                ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="semantic-structure-context",
+                    candidate_variant_id="semantic-structure-context-llm-draft",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=2,
+                            candidate_score=2,
+                            delta=0,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=0.0,
+                    preferred_variant_id="semantic-structure-context",
+                ),
+                HistoryDocsVariantComparison(
+                    case_id=case.manifest.case_id,
+                    baseline_variant_id="semantic-structure-context",
+                    candidate_variant_id="semantic-structure-context-llm-repair",
+                    per_dimension_deltas=[
+                        HistoryDocsRubricDelta(
+                            dimension=dimension,
+                            baseline_score=2,
+                            candidate_score=1,
+                            delta=-1,
+                        )
+                        for dimension in _DIMENSIONS
+                    ],
+                    overall_delta=-1.0,
+                    preferred_variant_id="semantic-structure-context",
+                ),
             ],
         )
         comparison_path = benchmark.benchmark_comparison_report_path(
@@ -507,6 +675,8 @@ def test_promotion_gate_report_records_failure_reasons(
 
     semantic_verdict = gate_report.gate_verdicts[0]
     context_verdict = gate_report.gate_verdicts[1]
+    draft_verdict = gate_report.gate_verdicts[2]
+    repair_verdict = gate_report.gate_verdicts[3]
 
     assert semantic_verdict.passed is False
     assert any("below the 0.25 gate" in reason for reason in semantic_verdict.reasons)
@@ -534,3 +704,22 @@ def test_promotion_gate_report_records_failure_reasons(
     assert any(
         "worse than semantic clustering" in reason for reason in context_verdict.reasons
     )
+    assert draft_verdict.passed is False
+    assert any("below the 0.25 gate" in reason for reason in draft_verdict.reasons)
+    assert any(
+        "comparisons against semantic-structure-context" in reason
+        for reason in draft_verdict.reasons
+    )
+    assert any("unsupported-claim risk" in reason for reason in draft_verdict.reasons)
+    assert any("validation errors" in reason for reason in draft_verdict.reasons)
+
+    assert repair_verdict.passed is False
+    assert any("below the 0.25 gate" in reason for reason in repair_verdict.reasons)
+    assert any(
+        "comparisons against semantic-structure-context" in reason
+        for reason in repair_verdict.reasons
+    )
+    assert any(
+        "failed builds/evaluations" in reason for reason in repair_verdict.reasons
+    )
+    assert any("unsupported-claim risk" in reason for reason in repair_verdict.reasons)
