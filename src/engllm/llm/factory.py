@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from engllm.domain.errors import LLMError
 from engllm.domain.models import LLMConfig
+from engllm.llm.anthropic import AnthropicLLMClient
 from engllm.llm.base import LLMClient
 from engllm.llm.gemini import GeminiLLMClient
+from engllm.llm.grok import GrokLLMClient
 from engllm.llm.mock import MockLLMClient
 from engllm.llm.ollama import OllamaLLMClient
+from engllm.llm.openai import OpenAILLMClient
 
 
 def create_llm_client(
@@ -26,5 +29,11 @@ def create_llm_client(
         return GeminiLLMClient(model_name=resolved_model)
     if resolved_provider == "ollama":
         return OllamaLLMClient(model_name=resolved_model)
+    if resolved_provider == "anthropic":
+        return AnthropicLLMClient(model_name=resolved_model)
+    if resolved_provider == "grok":
+        return GrokLLMClient(model_name=resolved_model)
+    if resolved_provider == "openai":
+        return OpenAILLMClient(model_name=resolved_model)
 
     raise LLMError(f"Unsupported LLM provider '{resolved_provider}'")

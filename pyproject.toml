@@ -30,8 +30,17 @@ dev = [
   "pytest==9.0.2",
   "pytest-cov==7.0.0",
 ]
+anthropic = [
+  "anthropic>=0.46.0,<1.0",
+]
 gemini = [
   "google-genai>=1.67.0,<2.0",
+]
+grok = [
+  "openai>=1.0.0,<2.0",
+]
+openai = [
+  "openai>=1.0.0,<2.0",
 ]
 
 [project.scripts]

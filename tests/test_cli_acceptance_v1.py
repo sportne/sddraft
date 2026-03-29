@@ -7,7 +7,10 @@ import urllib.error
 from pathlib import Path
 
 from engllm.cli.main import main
+from engllm.llm import anthropic as anthropic_module
+from engllm.llm import grok as grok_module
 from engllm.llm import ollama as ollama_module
+from engllm.llm import openai as openai_module
 
 
 def _write_file(path: Path, content: str) -> Path:
@@ -279,3 +282,131 @@ def test_cli_acceptance_ollama_provider_unreachable_error(
     assert rc == 2
     output = capsys.readouterr().out
     assert "Cannot connect to Ollama" in output
+
+
+def test_cli_acceptance_openai_provider_missing_config_error(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    project_path, csc_paths, _ = _write_project_files(
+        tmp_path, include_second_csc=False
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class _FakeOpenAIResponses:
+        def parse(self, **_kwargs):
+            raise AssertionError("parse should not run when api key is missing")
+
+    class _FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.responses = _FakeOpenAIResponses()
+
+    monkeypatch.setattr(openai_module, "OpenAI", _FakeOpenAI)
+
+    rc = main(
+        [
+            "sdd",
+            "generate",
+            "--config",
+            str(project_path),
+            "--target",
+            str(csc_paths[0]),
+            "--repo-root",
+            str(tmp_path),
+            "--provider",
+            "openai",
+            "--model",
+            "gpt-4.1-mini",
+        ]
+    )
+    assert rc == 2
+    output = capsys.readouterr().out
+    assert "OPENAI_API_KEY is not configured" in output
+
+
+def test_cli_acceptance_anthropic_provider_missing_config_error(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    project_path, csc_paths, _ = _write_project_files(
+        tmp_path, include_second_csc=False
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    class _FakeAnthropicMessages:
+        def create(self, **_kwargs):
+            raise AssertionError("create should not run when api key is missing")
+
+    class _FakeAnthropic:
+        def __init__(self, **_kwargs):
+            self.messages = _FakeAnthropicMessages()
+
+    monkeypatch.setattr(anthropic_module, "Anthropic", _FakeAnthropic)
+
+    rc = main(
+        [
+            "sdd",
+            "generate",
+            "--config",
+            str(project_path),
+            "--target",
+            str(csc_paths[0]),
+            "--repo-root",
+            str(tmp_path),
+            "--provider",
+            "anthropic",
+            "--model",
+            "claude-3-5-sonnet-latest",
+        ]
+    )
+    assert rc == 2
+    output = capsys.readouterr().out
+    assert "ANTHROPIC_API_KEY is not configured" in output
+
+
+def test_cli_acceptance_grok_provider_missing_config_error(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    project_path, csc_paths, _ = _write_project_files(
+        tmp_path, include_second_csc=False
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+
+    class _FakeGrokCompletions:
+        def parse(self, **_kwargs):
+            raise AssertionError("parse should not run when api key is missing")
+
+    class _FakeGrokBeta:
+        def __init__(self) -> None:
+            self.chat = type(
+                "_FakeChat",
+                (),
+                {"completions": _FakeGrokCompletions()},
+            )()
+
+    class _FakeGrokOpenAI:
+        def __init__(self, **_kwargs):
+            self.beta = _FakeGrokBeta()
+
+    monkeypatch.setattr(grok_module, "OpenAI", _FakeGrokOpenAI)
+
+    rc = main(
+        [
+            "sdd",
+            "generate",
+            "--config",
+            str(project_path),
+            "--target",
+            str(csc_paths[0]),
+            "--repo-root",
+            str(tmp_path),
+            "--provider",
+            "grok",
+            "--model",
+            "grok-4-fast",
+        ]
+    )
+    assert rc == 2
+    output = capsys.readouterr().out
+    assert "XAI_API_KEY is not configured" in output
