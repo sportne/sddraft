@@ -708,6 +708,7 @@ def semantic_structure_context_benchmark_variant(
             workspace_id=workspace_id,
             subsystem_grouping_mode="semantic",
             experimental_section_mode="semantic_context",
+            narrative_render_mode="targeted_llm_rewrite",
             llm_client_override=(
                 None
                 if llm_client_builder is None

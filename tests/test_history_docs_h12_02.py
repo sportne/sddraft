@@ -243,6 +243,7 @@ def test_internal_enriched_mode_updates_checkpoint_model_and_markdown(
         repo_root=repo_root,
         checkpoint_commit=commits["head"],
         previous_checkpoint_commit=commits["base"],
+        narrative_render_mode="baseline",
         llm_client_override=_InjectingEnrichmentClient(payload),
     )
     enriched = build_history_docs_checkpoint(
@@ -252,6 +253,7 @@ def test_internal_enriched_mode_updates_checkpoint_model_and_markdown(
         previous_checkpoint_commit=commits["base"],
         workspace_id="repo-enriched",
         checkpoint_model_enrichment_mode="enriched",
+        narrative_render_mode="baseline",
         llm_client_override=_InjectingEnrichmentClient(payload),
     )
 

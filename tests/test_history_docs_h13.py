@@ -450,6 +450,7 @@ def test_h13_internal_modes_change_markdown(
         previous_checkpoint_commit=commits["base"],
         subsystem_grouping_mode="semantic",
         experimental_section_mode="semantic_context",
+        narrative_render_mode="baseline",
         llm_client_override=client,
     )
     enriched_algorithms = build_history_docs_checkpoint(
@@ -461,6 +462,7 @@ def test_h13_internal_modes_change_markdown(
         subsystem_grouping_mode="semantic",
         experimental_section_mode="semantic_context",
         algorithm_capsule_mode="enriched",
+        narrative_render_mode="baseline",
         llm_client_override=client,
     )
     interface_variant = build_history_docs_checkpoint(
@@ -472,6 +474,7 @@ def test_h13_internal_modes_change_markdown(
         subsystem_grouping_mode="semantic",
         experimental_section_mode="semantic_context",
         interface_render_mode="inventory",
+        narrative_render_mode="baseline",
         llm_client_override=client,
     )
     dependency_variant = build_history_docs_checkpoint(
@@ -483,6 +486,7 @@ def test_h13_internal_modes_change_markdown(
         subsystem_grouping_mode="semantic",
         experimental_section_mode="semantic_context",
         dependency_render_mode="landscape",
+        narrative_render_mode="baseline",
         llm_client_override=client,
     )
 
@@ -813,6 +817,7 @@ def test_valid_h13_payloads_score_and_render(
         algorithm_capsule_mode="enriched",
         interface_render_mode="inventory",
         dependency_render_mode="landscape",
+        narrative_render_mode="baseline",
         llm_client_override=_ValidH13Client(valid_payload),
     )
 

@@ -446,6 +446,7 @@ dependencies = ["requests>=2"]
         project_config=sample_project_config,
         repo_root=repo_root,
         checkpoint_commit=second_commit,
+        narrative_render_mode="baseline",
     )
     report_path = validation_report_path(
         sample_project_config.workspace.output_root,

@@ -410,7 +410,7 @@ def build_history_docs_checkpoint(
     dependency_render_mode: Literal["baseline", "landscape"] = "baseline",
     narrative_render_mode: Literal[
         "baseline", "llm_draft", "llm_repair", "targeted_llm_rewrite"
-    ] = "baseline",
+    ] = "targeted_llm_rewrite",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -1400,29 +1400,43 @@ def build_history_docs_checkpoint(
         targeted_rewrite_validation_report,
     )
 
-    authoritative_markdown_path = checkpoint_markdown_artifact_path
-    authoritative_render_manifest_path = render_manifest_artifact_path
-    authoritative_validation_report_path = validation_report_artifact_path
+    authoritative_markdown = checkpoint_markdown
+    authoritative_render_manifest = render_manifest
     authoritative_validation_report = validation_report
     if narrative_render_mode == "llm_draft":
-        authoritative_markdown_path = checkpoint_draft_markdown_artifact_path
-        authoritative_render_manifest_path = render_manifest_draft_artifact_path
-        authoritative_validation_report_path = validation_report_draft_artifact_path
+        authoritative_markdown = draft_markdown
+        authoritative_render_manifest = draft_render_manifest
         authoritative_validation_report = draft_validation_report
     elif narrative_render_mode == "llm_repair":
-        authoritative_markdown_path = checkpoint_repaired_markdown_artifact_path
-        authoritative_render_manifest_path = render_manifest_repaired_artifact_path
-        authoritative_validation_report_path = validation_report_repaired_artifact_path
+        authoritative_markdown = repaired_markdown
+        authoritative_render_manifest = repaired_render_manifest
         authoritative_validation_report = repaired_validation_report
     elif narrative_render_mode == "targeted_llm_rewrite":
-        authoritative_markdown_path = checkpoint_targeted_rewrite_markdown_artifact_path
-        authoritative_render_manifest_path = (
-            render_manifest_targeted_rewrite_artifact_path
-        )
-        authoritative_validation_report_path = (
-            validation_report_targeted_rewrite_artifact_path
-        )
+        authoritative_markdown = targeted_rewrite_markdown
+        authoritative_render_manifest = targeted_rewrite_manifest
         authoritative_validation_report = targeted_rewrite_validation_report
+
+    if narrative_render_mode != "baseline":
+        write_checkpoint_markdown(
+            checkpoint_markdown_artifact_path,
+            authoritative_markdown,
+        )
+        write_json_model(
+            render_manifest_artifact_path,
+            authoritative_render_manifest,
+        )
+        write_json_model(
+            validation_report_artifact_path,
+            authoritative_validation_report,
+        )
+        if (
+            narrative_render_mode == "targeted_llm_rewrite"
+            and authoritative_validation_report.error_count > 0
+        ):
+            raise ValidationError(
+                "History-docs validation failed with "
+                f"{authoritative_validation_report.error_count} error(s); see {validation_report_artifact_path}"
+            )
 
     retired_concept_count = (
         sum(
@@ -1486,9 +1500,9 @@ def build_history_docs_checkpoint(
         validation_report_targeted_rewrite_path=(
             validation_report_targeted_rewrite_artifact_path
         ),
-        checkpoint_markdown_path=authoritative_markdown_path,
-        render_manifest_path=authoritative_render_manifest_path,
-        validation_report_path=authoritative_validation_report_path,
+        checkpoint_markdown_path=checkpoint_markdown_artifact_path,
+        render_manifest_path=render_manifest_artifact_path,
+        validation_report_path=validation_report_artifact_path,
         file_count=len(scan_result.files),
         symbol_count=len(scan_result.symbol_summaries),
         subsystem_count=len(subsystem_candidates),
@@ -1556,7 +1570,7 @@ def build_history_docs_checkpoint(
         dependency_summary_failure_count=_count_dependency_summary_failures(
             dependency_inventory
         ),
-        rendered_section_count=len(render_manifest.sections),
+        rendered_section_count=len(authoritative_render_manifest.sections),
         validation_error_count=authoritative_validation_report.error_count,
         validation_warning_count=authoritative_validation_report.warning_count,
         draft_section_count=len(draft_artifact.sections),

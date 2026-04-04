@@ -82,10 +82,12 @@ from tests.history_docs_helpers import (
     draft_review_path,
     init_repo,
     render_manifest_draft_path,
+    render_manifest_path,
     render_manifest_repaired_path,
     section_drafts_path,
     section_repairs_path,
     validation_report_draft_path,
+    validation_report_path,
     validation_report_repaired_path,
     write_project_config,
 )
@@ -664,10 +666,22 @@ def test_targeted_rewrite_keeps_dependency_sections_deterministic(
 
     assert (
         result.checkpoint_markdown_path
+        == checkpoint_markdown_path(
+            sample_project_config.workspace.output_root,
+            "repo-h14-targeted",
+            result.checkpoint_id,
+        )
+    )
+    assert (
+        result.checkpoint_targeted_rewrite_markdown_path
         == build_checkpoint_targeted_rewrite_markdown_path(
             tool_root,
             result.checkpoint_id,
         )
+    )
+    assert (
+        result.checkpoint_targeted_rewrite_markdown_path.read_text(encoding="utf-8")
+        == targeted_markdown
     )
     assert "### requests" in targeted_markdown
     assert targeted_markdown.count("### requests") == 1
@@ -699,6 +713,13 @@ def test_h14_shadow_artifacts_are_written_and_baseline_remains_authoritative(
         sample_project_config.workspace.output_root,
         repo_root.name,
         result.checkpoint_id,
+    )
+    assert result.checkpoint_targeted_rewrite_markdown_path is not None
+    assert (
+        result.checkpoint_markdown_path.read_text(encoding="utf-8")
+        == result.checkpoint_targeted_rewrite_markdown_path.read_text(
+            encoding="utf-8"
+        )
     )
     assert result.section_drafts_path == section_drafts_path(
         sample_project_config.workspace.output_root,
@@ -741,6 +762,7 @@ def test_invalid_draft_payload_falls_back_to_exact_baseline_copy(
         previous_checkpoint_commit=commits["base"],
         subsystem_grouping_mode="semantic",
         experimental_section_mode="semantic_context",
+        narrative_render_mode="baseline",
         llm_client_override=_InvalidDraftClient(),
     )
 
@@ -801,13 +823,27 @@ def test_internal_llm_repair_mode_switches_authoritative_outputs(
         ).read_text(encoding="utf-8")
     )
 
-    assert result.checkpoint_markdown_path == repaired_path
-    assert result.render_manifest_path == render_manifest_repaired_path(
+    canonical_path = checkpoint_markdown_path(
         sample_project_config.workspace.output_root,
         "repo-h14-repair",
         result.checkpoint_id,
     )
-    assert result.validation_report_path == validation_report_repaired_path(
+    assert result.checkpoint_markdown_path == canonical_path
+    assert canonical_path.read_text(encoding="utf-8") == repaired_markdown
+    assert result.render_manifest_path == render_manifest_path(
+        sample_project_config.workspace.output_root,
+        "repo-h14-repair",
+        result.checkpoint_id,
+    )
+    assert (
+        result.render_manifest_path.read_text(encoding="utf-8")
+        == render_manifest_repaired_path(
+            sample_project_config.workspace.output_root,
+            "repo-h14-repair",
+            result.checkpoint_id,
+        ).read_text(encoding="utf-8")
+    )
+    assert result.validation_report_path == validation_report_path(
         sample_project_config.workspace.output_root,
         "repo-h14-repair",
         result.checkpoint_id,

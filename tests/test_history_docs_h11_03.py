@@ -366,6 +366,7 @@ def test_semantic_context_experimental_variant_renders_system_context_and_interf
         checkpoint_commit=target,
         subsystem_grouping_mode="semantic",
         experimental_section_mode="semantic_context",
+        narrative_render_mode="baseline",
         llm_client_override=semantic_client,
     )
 

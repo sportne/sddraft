@@ -632,6 +632,7 @@ its own internal phases.
 `Why:` H8-H9 currently produce structurally sound but often flat documentation.
 `Dependencies:` History Phases 10-13.
 `Completion Criteria:` The tool can draft higher-quality checkpoint docs and review/repair them before final output.
+`Promotion Status:` `semantic-structure-context-targeted-rewrite` cleared both fixture and real-repo benchmark gates on 2026-04-04 and is now the default public `engllm history-docs build` narrative path. The full-document H14 draft/review/repair pipeline remains available as shadow artifacts.
 
 - [x] **H14-01**  
   `Outcome:` Add section-scoped LLM drafting for the final checkpoint document.  
@@ -647,15 +648,15 @@ its own internal phases.
 
 #### H14 Promotion Hardening Follow-Ups
 
-- [ ] **H14-F1**  
+- [x] **H14-F1**
   `Outcome:` Remove weak dependency/tooling fallback prose from the targeted-rewrite candidate when a repo has no documented third-party dependency inventory.  
-  `Definition of Done:` Targeted-rewrite outputs for repos like `kleuw` stop emitting `TBD`-shaped build-tool blurbs and instead render concise, deterministic “no documented direct dependencies / development tooling inferred from build sources only” prose that preserves present-state tone.
+  `Definition of Done:` Targeted-rewrite outputs for repos like `kleuw` stop emitting `TBD`-shaped build-tool blurbs and instead use package-level dependency knowledge for the general description when repository evidence is thin, while keeping project-specific usage conservative and explicitly evidence-gated.
 
 - [ ] **H14-F2**  
   `Outcome:` Add a maturity gate so targeted rewrites do not replace already-strong subsystem catalogs with thinner generic summaries.  
   `Definition of Done:` For large helper-library repos like `cpp-helper-libs`, targeted rewrite preserves the baseline’s stronger subsystem/module coverage when rewrite evidence quality is low, and only layers relational explanation where it adds value.
 
-- [ ] **H14-F3**  
+- [x] **H14-F3**
   `Outcome:` Tighten targeted architecture/system-context rewriting so mature repos keep concrete boundary signals and representative interfaces.  
   `Definition of Done:` Targeted rewrites retain high-value anchors such as representative modules, boundary-facing surfaces, and subsystem relationships, while still avoiding count-heavy prose.
 

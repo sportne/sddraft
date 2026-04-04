@@ -378,6 +378,7 @@ def test_semantic_grouping_mode_rewires_checkpoint_model_and_rendering(
         repo_root=repo_root,
         checkpoint_commit=target,
         subsystem_grouping_mode="semantic",
+        narrative_render_mode="baseline",
         llm_client_override=semantic_client,
     )
 
