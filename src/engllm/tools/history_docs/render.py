@@ -417,7 +417,13 @@ def _shadow_dependency_paragraphs(
     project_usage = shadow_entry.project_usage_description
     if shadow_entry.project_usage_basis == "tbd":
         project_usage = "Project-specific usage is not strongly evidenced by the current manifests and import signals."
-    return (shadow_entry.general_description, project_usage)
+    general_description = shadow_entry.general_description
+    if shadow_entry.general_description_basis == "package_general_knowledge":
+        general_description = (
+            f"{general_description} "
+            "This general description is based on package-level knowledge rather than repository-specific evidence."
+        )
+    return (general_description, project_usage)
 
 
 def _render_introduction(
@@ -767,7 +773,7 @@ def _render_build_infrastructure(
             lines,
             "This grouped tooling summary covers low-evidence support packages"
             + ecosystem_text
-            + " that shape the current developer workflow.",
+            + " that shape the current developer workflow. General package descriptions here are based on package-level knowledge when repository evidence is thin.",
         )
         package_summaries = []
         for shadow_group_entry in grouped_entries:

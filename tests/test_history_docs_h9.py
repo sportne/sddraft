@@ -686,6 +686,87 @@ def test_render_checkpoint_markdown_groups_tooling_without_package_subsections()
     assert "TBD -" not in markdown
 
 
+def test_render_checkpoint_markdown_marks_package_knowledge_provenance_for_dependency_blurbs() -> (
+    None
+):
+    checkpoint_model = _checkpoint_model()
+    inventory = HistoryDependencyInventory(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        entries=[
+            HistoryDependencyEntry(
+                dependency_id="dependency::python::requests",
+                display_name="requests",
+                normalized_name="requests",
+                ecosystem="python",
+                source_manifest_paths=[Path("pyproject.toml")],
+                source_dependency_concept_ids=["dependency-source::pyproject.toml"],
+                scope_roles=["runtime"],
+                section_target="dependencies",
+                general_description="TBD",
+                project_usage_description="TBD",
+            )
+        ],
+    )
+    outline = HistorySectionOutline(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        sections=[
+            HistorySectionPlan(
+                section_id="dependencies",
+                title="Dependencies",
+                kind="core",
+                status="included",
+                confidence_score=80,
+                evidence_score=8,
+                depth="standard",
+            )
+        ],
+    )
+    shadow = HistoryDependencyNarrativeShadow(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        entries=[
+            HistoryDependencyNarrativeShadowEntry(
+                dependency_id="dependency::python::requests",
+                display_name="requests",
+                ecosystem="python",
+                section_target="dependencies",
+                scope_roles=["runtime"],
+                render_style="standard",
+                general_description="requests is a Python HTTP client library commonly used for outbound web requests.",
+                general_description_basis="package_general_knowledge",
+                project_usage_description="Project-specific usage is not strongly evidenced by the current manifests and import signals.",
+                project_usage_basis="tbd",
+            )
+        ],
+    )
+
+    markdown, _render_manifest = render_checkpoint_markdown(
+        workspace_id="repo",
+        checkpoint_model=checkpoint_model,
+        section_outline=outline,
+        dependency_inventory=inventory,
+        capsule_index=HistoryAlgorithmCapsuleIndex(
+            checkpoint_id="2024-01-01-abc1234",
+            target_commit="abc1234deadbeef",
+            capsules=[],
+        ),
+        capsules=[],
+        dependency_narratives_shadow=shadow,
+    )
+
+    assert "### requests" in markdown
+    assert (
+        "This general description is based on package-level knowledge rather than repository-specific evidence."
+        in markdown
+    )
+    assert (
+        "Project-specific usage is not strongly evidenced by the current manifests and import signals."
+        in markdown
+    )
+
+
 def test_build_history_docs_checkpoint_h9_raises_validation_error_with_report_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

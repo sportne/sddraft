@@ -14,11 +14,16 @@ from engllm.tools.history_docs.models import (
 )
 
 _GENERAL_KNOWLEDGE_BY_NAME: dict[str, str] = {
+    "black": "black is a Python code formatter that rewrites source files into a consistent style.",
+    "isort": "isort is a Python import-sorting tool used to keep import blocks consistent and ordered.",
+    "mypy": "mypy is a Python static type checker used to validate typed code paths.",
     "requests": "requests is a Python HTTP client library commonly used for outbound web requests.",
     "pydantic": "pydantic is a Python data validation and settings library centered on typed models.",
     "pytest": "pytest is a Python test runner and assertion framework.",
+    "pytest-cov": "pytest-cov is a pytest plugin used to collect and report test coverage.",
     "react": "react is a JavaScript library for building component-based user interfaces.",
     "eslint": "eslint is a JavaScript and TypeScript linting tool.",
+    "ruff": "ruff is a Python linter and formatter used to enforce style and catch static issues quickly.",
 }
 _GENERAL_KNOWLEDGE_BY_TOKEN: list[tuple[str, str]] = [
     (
@@ -64,13 +69,27 @@ def _clean_shadow_text(value: str) -> str:
     if not text:
         return "TBD"
     lowered = text.lower()
+    if lowered == "tbd" or lowered == "tbd.":
+        return "TBD"
     if lowered.startswith("tbd - "):
         candidate = text[6:].strip()
         return candidate or "TBD"
     if lowered.startswith("tbd:"):
         candidate = text[4:].strip()
         return candidate or "TBD"
+    if lowered.startswith("tbd."):
+        candidate = text[4:].strip()
+        return candidate or "TBD"
     return text
+
+
+def _starts_with_tbd_marker(value: str) -> bool:
+    lowered = value.strip().lower()
+    return (
+        lowered == "tbd"
+        or lowered == "tbd."
+        or lowered.startswith(("tbd - ", "tbd:", "tbd."))
+    )
 
 
 def _package_general_knowledge(entry: HistoryDependencyEntry) -> str:
@@ -111,29 +130,44 @@ def _subsystem_text(
     return ", ".join(labels)
 
 
+def _module_text(
+    module_ids: list[str],
+    module_display_names: dict[str, str],
+) -> str:
+    labels: list[str] = []
+    for module_id in module_ids[:4]:
+        label = module_display_names.get(module_id) or module_id.removeprefix(
+            "module::"
+        )
+        labels.append(f"`{label}`")
+    return ", ".join(labels)
+
+
+def _has_strong_project_usage_evidence(entry: HistoryDependencyEntry) -> bool:
+    return bool(entry.usage_signals or entry.related_module_ids)
+
+
 def _build_shadow_entry(
     entry: HistoryDependencyEntry,
     *,
     subsystem_display_names: dict[str, str],
+    module_display_names: dict[str, str],
 ) -> HistoryDependencyNarrativeShadowEntry:
     cleaned_general = _clean_shadow_text(entry.general_description)
     general_basis = entry.general_description_basis
     if cleaned_general == "TBD":
         cleaned_general = _package_general_knowledge(entry)
         general_basis = "package_general_knowledge"
-    elif entry.general_description.strip().lower().startswith(("tbd - ", "tbd:")):
+    elif _starts_with_tbd_marker(entry.general_description):
         general_basis = "package_general_knowledge"
+        cleaned_general = _package_general_knowledge(entry)
     elif general_basis == "tbd":
         general_basis = "project_evidence"
 
     cleaned_project_usage = _clean_shadow_text(entry.project_usage_description)
     project_basis = entry.project_usage_basis
     if cleaned_project_usage == "TBD":
-        if (
-            entry.usage_signals
-            or entry.related_module_ids
-            or entry.related_subsystem_ids
-        ):
+        if _has_strong_project_usage_evidence(entry):
             evidence_parts: list[str] = []
             if entry.usage_signals:
                 evidence_parts.append(
@@ -143,8 +177,9 @@ def _build_shadow_entry(
             if entry.related_module_ids:
                 evidence_parts.append(
                     "linked modules: "
-                    + ", ".join(
-                        f"`{module_id}`" for module_id in entry.related_module_ids[:4]
+                    + _module_text(
+                        entry.related_module_ids,
+                        module_display_names,
                     )
                 )
             if entry.related_subsystem_ids:
@@ -161,13 +196,17 @@ def _build_shadow_entry(
             cleaned_project_usage = "Project-specific usage is not strongly evidenced by the current manifests and import signals."
             project_basis = "tbd"
     elif project_basis == "tbd":
-        project_basis = "project_evidence"
+        if _has_strong_project_usage_evidence(entry):
+            project_basis = "project_evidence"
+        else:
+            cleaned_project_usage = "Project-specific usage is not strongly evidenced by the current manifests and import signals."
+            project_basis = "tbd"
 
     render_style: HistoryDependencyNarrativeRenderStyle = "standard"
     group_title = None
     if (
         entry.section_target == "build_development_infrastructure"
-        and project_basis == "tbd"
+        and not _has_strong_project_usage_evidence(entry)
         and any(role in _GROUPABLE_ROLES for role in entry.scope_roles)
     ):
         render_style = "grouped_tooling"
@@ -200,15 +239,18 @@ def build_dependency_narratives_shadow(
     previous_checkpoint_commit: str | None,
     entries: list[HistoryDependencyEntry],
     subsystem_display_names: dict[str, str] | None = None,
+    module_display_names: dict[str, str] | None = None,
 ) -> HistoryDependencyNarrativeShadow:
     """Build the shadow dependency narrative artifact deterministically."""
 
     resolved_subsystem_display_names = subsystem_display_names or {}
+    resolved_module_display_names = module_display_names or {}
     shadow_entries = sorted(
         (
             _build_shadow_entry(
                 entry,
                 subsystem_display_names=resolved_subsystem_display_names,
+                module_display_names=resolved_module_display_names,
             )
             for entry in entries
         ),

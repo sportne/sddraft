@@ -966,6 +966,11 @@ def build_history_docs_checkpoint(
             for subsystem in checkpoint_model.subsystems
             if subsystem.lifecycle_status == "active"
         },
+        module_display_names={
+            module.concept_id: module.path.as_posix()
+            for module in checkpoint_model.modules
+            if module.lifecycle_status == "active"
+        },
     )
     write_json_model(
         dependency_narratives_shadow_artifact_path,

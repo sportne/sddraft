@@ -645,6 +645,24 @@ its own internal phases.
   `Outcome:` Add targeted rewrite/repair loops driven by the review artifact.  
   `Definition of Done:` The tool can revise only weak sections instead of regenerating the entire document blindly.
 
+#### H14 Promotion Hardening Follow-Ups
+
+- [ ] **H14-F1**  
+  `Outcome:` Remove weak dependency/tooling fallback prose from the targeted-rewrite candidate when a repo has no documented third-party dependency inventory.  
+  `Definition of Done:` Targeted-rewrite outputs for repos like `kleuw` stop emitting `TBD`-shaped build-tool blurbs and instead render concise, deterministic “no documented direct dependencies / development tooling inferred from build sources only” prose that preserves present-state tone.
+
+- [ ] **H14-F2**  
+  `Outcome:` Add a maturity gate so targeted rewrites do not replace already-strong subsystem catalogs with thinner generic summaries.  
+  `Definition of Done:` For large helper-library repos like `cpp-helper-libs`, targeted rewrite preserves the baseline’s stronger subsystem/module coverage when rewrite evidence quality is low, and only layers relational explanation where it adds value.
+
+- [ ] **H14-F3**  
+  `Outcome:` Tighten targeted architecture/system-context rewriting so mature repos keep concrete boundary signals and representative interfaces.  
+  `Definition of Done:` Targeted rewrites retain high-value anchors such as representative modules, boundary-facing surfaces, and subsystem relationships, while still avoiding count-heavy prose.
+
+- [ ] **H14-F4**  
+  `Outcome:` Add real-repo regression tests and benchmark checks for the two current losing targeted-rewrite cases.  
+  `Definition of Done:` Fixture or synthetic regressions cover the `kleuw` dependency/TBD failure mode and the `cpp-helper-libs` helper-library over-generalization failure mode before the candidate is promoted.
+
 ### History Phase 15 — Future Extensions
 
 `Objective:` Capture non-blocking future directions without mixing them into the LLM-focused implementation arc.

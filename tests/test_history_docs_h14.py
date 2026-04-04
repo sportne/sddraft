@@ -520,8 +520,9 @@ def test_dependency_narratives_shadow_normalizes_tbd_prefixes() -> None:
     entry = shadow.entries[0]
     assert not entry.general_description.startswith("TBD")
     assert not entry.project_usage_description.startswith("TBD")
-    assert entry.project_usage_description == (
-        "exact call sites are not strongly evidenced."
+    assert (
+        entry.project_usage_description
+        == "Project-specific usage is not strongly evidenced by the current manifests and import signals."
     )
 
 
@@ -533,6 +534,9 @@ def test_dependency_narratives_shadow_uses_subsystem_labels_in_fallback_usage() 
         subsystem_display_names={
             "subsystem::src::api": "API",
             "subsystem::web::frontend": "Frontend",
+        },
+        module_display_names={
+            "module::src/kleuw/pytest_plugin.py": "src/kleuw/pytest_plugin.py",
         },
         entries=[
             HistoryDependencyEntry(
@@ -546,6 +550,8 @@ def test_dependency_narratives_shadow_uses_subsystem_labels_in_fallback_usage() 
                 section_target="build_development_infrastructure",
                 general_description="pytest is a Python test runner and assertion framework.",
                 project_usage_description="TBD",
+                related_module_ids=["module::src/kleuw/pytest_plugin.py"],
+                usage_signals=["src/kleuw/pytest_plugin.py imports pytest"],
                 related_subsystem_ids=[
                     "subsystem::src::api",
                     "subsystem::web::frontend",
@@ -556,8 +562,52 @@ def test_dependency_narratives_shadow_uses_subsystem_labels_in_fallback_usage() 
 
     assert len(shadow.entries) == 1
     entry = shadow.entries[0]
-    assert entry.project_usage_description == ("linked subsystems: `API`, `Frontend`.")
+    assert (
+        entry.project_usage_description
+        == "Observed usage signals include `src/kleuw/pytest_plugin.py imports pytest`; linked modules: `src/kleuw/pytest_plugin.py`; linked subsystems: `API`, `Frontend`."
+    )
     assert "subsystem::" not in entry.project_usage_description
+    assert "module::" not in entry.project_usage_description
+
+
+def test_dependency_narratives_shadow_groups_tooling_when_only_subsystem_links_exist() -> (
+    None
+):
+    shadow = build_dependency_narratives_shadow(
+        checkpoint_id="cp-1",
+        target_commit="deadbeef",
+        previous_checkpoint_commit=None,
+        subsystem_display_names={
+            "semantic-subsystem::src::kleuw": "Kleuw",
+        },
+        entries=[
+            HistoryDependencyEntry(
+                dependency_id="dependency::python::ruff",
+                display_name="ruff",
+                normalized_name="ruff",
+                ecosystem="python",
+                source_manifest_paths=[Path("pyproject.toml")],
+                source_dependency_concept_ids=["dependency-source::pyproject.toml"],
+                scope_roles=["development"],
+                section_target="build_development_infrastructure",
+                general_description="TBD. The evidence does not provide a general description of the dependency.",
+                project_usage_description="TBD. The evidence does not specify how the project uses this dependency.",
+                related_subsystem_ids=["semantic-subsystem::src::kleuw"],
+            )
+        ],
+    )
+
+    assert len(shadow.entries) == 1
+    entry = shadow.entries[0]
+    assert entry.render_style == "grouped_tooling"
+    assert entry.group_title == "Project Python Development Tooling"
+    assert entry.general_description.startswith("ruff is a Python linter and formatter")
+    assert entry.general_description_basis == "package_general_knowledge"
+    assert (
+        entry.project_usage_description
+        == "Project-specific usage is not strongly evidenced by the current manifests and import signals."
+    )
+    assert entry.project_usage_basis == "tbd"
 
 
 def test_build_writes_quality_recovery_shadow_artifacts(tmp_path: Path) -> None:
