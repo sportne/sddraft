@@ -664,13 +664,10 @@ def test_targeted_rewrite_keeps_dependency_sections_deterministic(
         / "history_docs"
     )
 
-    assert (
-        result.checkpoint_markdown_path
-        == checkpoint_markdown_path(
-            sample_project_config.workspace.output_root,
-            "repo-h14-targeted",
-            result.checkpoint_id,
-        )
+    assert result.checkpoint_markdown_path == checkpoint_markdown_path(
+        sample_project_config.workspace.output_root,
+        "repo-h14-targeted",
+        result.checkpoint_id,
     )
     assert (
         result.checkpoint_targeted_rewrite_markdown_path
@@ -715,12 +712,9 @@ def test_h14_shadow_artifacts_are_written_and_baseline_remains_authoritative(
         result.checkpoint_id,
     )
     assert result.checkpoint_targeted_rewrite_markdown_path is not None
-    assert (
-        result.checkpoint_markdown_path.read_text(encoding="utf-8")
-        == result.checkpoint_targeted_rewrite_markdown_path.read_text(
-            encoding="utf-8"
-        )
-    )
+    assert result.checkpoint_markdown_path.read_text(
+        encoding="utf-8"
+    ) == result.checkpoint_targeted_rewrite_markdown_path.read_text(encoding="utf-8")
     assert result.section_drafts_path == section_drafts_path(
         sample_project_config.workspace.output_root,
         repo_root.name,
@@ -835,13 +829,14 @@ def test_internal_llm_repair_mode_switches_authoritative_outputs(
         "repo-h14-repair",
         result.checkpoint_id,
     )
-    assert (
-        result.render_manifest_path.read_text(encoding="utf-8")
-        == render_manifest_repaired_path(
-            sample_project_config.workspace.output_root,
-            "repo-h14-repair",
-            result.checkpoint_id,
-        ).read_text(encoding="utf-8")
+    assert result.render_manifest_path.read_text(
+        encoding="utf-8"
+    ) == render_manifest_repaired_path(
+        sample_project_config.workspace.output_root,
+        "repo-h14-repair",
+        result.checkpoint_id,
+    ).read_text(
+        encoding="utf-8"
     )
     assert result.validation_report_path == validation_report_path(
         sample_project_config.workspace.output_root,
