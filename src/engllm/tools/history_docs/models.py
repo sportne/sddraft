@@ -93,6 +93,12 @@ HistoryDependencySectionTarget = Literal[
 ]
 HistoryDependencySourceKind = Literal["primary", "lockfile", "metadata"]
 HistoryDependencySummaryStatus = Literal["documented", "tbd", "llm_failed"]
+HistoryDependencyDescriptionBasis = Literal[
+    "package_general_knowledge",
+    "project_evidence",
+    "tbd",
+]
+HistoryDependencyNarrativeRenderStyle = Literal["standard", "grouped_tooling"]
 HistorySectionId = Literal[
     "introduction",
     "architectural_overview",
@@ -152,6 +158,9 @@ HistoryValidationCheckId = Literal[
     "weak_core_section",
     "weak_optional_section",
     "dependency_summary_tbd",
+    "raw_internal_id_leak",
+    "contradictory_tbd_phrase",
+    "empty_grouped_tooling_stub",
     "algorithm_capsule_thin",
 ]
 HistorySemanticCheckpointSignalKind = Literal[
@@ -725,6 +734,8 @@ class HistoryDependencySummary(DomainModel):
 
     general_description: str
     project_usage_description: str
+    general_description_basis: HistoryDependencyDescriptionBasis = "tbd"
+    project_usage_basis: HistoryDependencyDescriptionBasis = "tbd"
     uncertainty: list[str] = Field(default_factory=list)
     confidence: float = 0.0
 
@@ -746,6 +757,8 @@ class HistoryDependencyEntry(DomainModel):
     usage_signals: list[str] = Field(default_factory=list)
     general_description: str = "TBD"
     project_usage_description: str = "TBD"
+    general_description_basis: HistoryDependencyDescriptionBasis = "tbd"
+    project_usage_basis: HistoryDependencyDescriptionBasis = "tbd"
     uncertainty: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     summary_status: HistoryDependencySummaryStatus = "tbd"
@@ -759,6 +772,36 @@ class HistoryDependencyInventory(DomainModel):
     previous_checkpoint_commit: str | None = None
     entries: list[HistoryDependencyEntry] = Field(default_factory=list)
     warnings: list[HistoryDependencyWarning] = Field(default_factory=list)
+
+
+class HistoryDependencyNarrativeShadowEntry(DomainModel):
+    """Shadow dependency narrative with separated general and project evidence."""
+
+    dependency_id: str
+    display_name: str
+    ecosystem: str
+    section_target: HistoryDependencySectionTarget
+    scope_roles: list[HistoryDependencyRole] = Field(default_factory=list)
+    render_style: HistoryDependencyNarrativeRenderStyle = "standard"
+    group_title: str | None = None
+    general_description: str = "TBD"
+    general_description_basis: HistoryDependencyDescriptionBasis = "tbd"
+    project_usage_description: str = "TBD"
+    project_usage_basis: HistoryDependencyDescriptionBasis = "tbd"
+    uncertainty: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    related_subsystem_ids: list[str] = Field(default_factory=list)
+    related_module_ids: list[str] = Field(default_factory=list)
+    usage_signals: list[str] = Field(default_factory=list)
+
+
+class HistoryDependencyNarrativeShadow(DomainModel):
+    """Checkpoint-scoped shadow dependency prose artifact."""
+
+    checkpoint_id: str
+    target_commit: str
+    previous_checkpoint_commit: str | None = None
+    entries: list[HistoryDependencyNarrativeShadowEntry] = Field(default_factory=list)
 
 
 class HistoryInterfaceResponsibility(DomainModel):
@@ -1032,6 +1075,7 @@ class HistoryDraftReview(DomainModel):
     recommended_repair_section_ids: list[HistorySectionPlanId] = Field(
         default_factory=list
     )
+    unrepairable_notes: list[str] = Field(default_factory=list)
 
 
 class HistorySectionRepair(DomainModel):
@@ -1690,6 +1734,7 @@ class HistoryBuildResult(DomainModel):
     algorithm_capsule_enrichment_index_path: Path | None = None
     interface_inventory_path: Path | None = None
     dependency_landscape_path: Path | None = None
+    dependency_narratives_shadow_path: Path | None = None
     section_outline_path: Path | None = None
     section_outline_llm_path: Path | None = None
     algorithm_capsule_index_path: Path | None = None
@@ -1703,6 +1748,10 @@ class HistoryBuildResult(DomainModel):
     checkpoint_repaired_markdown_path: Path | None = None
     render_manifest_repaired_path: Path | None = None
     validation_report_repaired_path: Path | None = None
+    targeted_section_rewrites_path: Path | None = None
+    checkpoint_targeted_rewrite_markdown_path: Path | None = None
+    render_manifest_targeted_rewrite_path: Path | None = None
+    validation_report_targeted_rewrite_path: Path | None = None
     checkpoint_markdown_path: Path | None = None
     render_manifest_path: Path | None = None
     validation_report_path: Path | None = None
@@ -1726,6 +1775,7 @@ class HistoryBuildResult(DomainModel):
     ) = None
     interface_inventory_status: HistoryInterfaceInventoryStatus | None = None
     dependency_landscape_status: HistoryDependencyLandscapeStatus | None = None
+    dependency_narrative_count: int = 0
     section_planning_status: HistorySectionPlanningStatus | None = None
     draft_status: HistoryDraftStatus | None = None
     draft_review_status: HistoryDraftReviewStatus | None = None
@@ -1768,6 +1818,9 @@ class HistoryBuildResult(DomainModel):
     draft_validation_warning_count: int = 0
     repaired_validation_error_count: int = 0
     repaired_validation_warning_count: int = 0
+    targeted_rewrite_section_count: int = 0
+    targeted_rewrite_validation_error_count: int = 0
+    targeted_rewrite_validation_warning_count: int = 0
 
 
 __all__ = [
@@ -1822,7 +1875,11 @@ __all__ = [
     "HistoryDependencyDeclaration",
     "HistoryDependencyEntry",
     "HistoryDependencyConcept",
+    "HistoryDependencyDescriptionBasis",
     "HistoryDependencyInventory",
+    "HistoryDependencyNarrativeRenderStyle",
+    "HistoryDependencyNarrativeShadow",
+    "HistoryDependencyNarrativeShadowEntry",
     "HistoryDependencyLandscape",
     "HistoryDependencyLandscapeJudgment",
     "HistoryDependencyLandscapeStatus",

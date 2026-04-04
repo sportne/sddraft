@@ -27,6 +27,7 @@ from engllm.tools.history_docs.models import (
     HistoryCheckpointModelEnrichment,
     HistoryDependencyEntry,
     HistoryDependencyLandscape,
+    HistoryDependencyNarrativeShadow,
     HistoryDocsBenchmarkCase,
     HistoryInterfaceInventory,
     HistoryLLMSectionOutline,
@@ -209,9 +210,12 @@ def build_history_docs_quality_judge_prompt(
     ) = None,
     interface_inventory: HistoryInterfaceInventory | None = None,
     dependency_landscape: HistoryDependencyLandscape | None = None,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
     section_drafts: HistorySectionDraftArtifact | None = None,
+    targeted_section_rewrites: HistorySectionDraftArtifact | None = None,
     draft_validation_report: HistoryValidationReport | None = None,
     repaired_validation_report: HistoryValidationReport | None = None,
+    targeted_rewrite_validation_report: HistoryValidationReport | None = None,
     draft_review_summary: dict[str, object] | None = None,
     repaired_section_ids: list[str] | None = None,
 ) -> tuple[str, str]:
@@ -424,6 +428,24 @@ def build_history_docs_quality_judge_prompt(
             ],
         }
     )
+    dependency_narrative_summary: dict[str, object] = (
+        {"entry_count": 0, "grouped_tooling_count": 0, "general_basis_counts": {}}
+        if dependency_narratives_shadow is None
+        else {
+            "entry_count": len(dependency_narratives_shadow.entries),
+            "grouped_tooling_count": sum(
+                entry.render_style == "grouped_tooling"
+                for entry in dependency_narratives_shadow.entries
+            ),
+            "general_basis_counts": {
+                basis: sum(
+                    entry.general_description_basis == basis
+                    for entry in dependency_narratives_shadow.entries
+                )
+                for basis in ("package_general_knowledge", "project_evidence", "tbd")
+            },
+        }
+    )
     draft_summary: dict[str, object] = (
         {"evaluation_status": None, "section_count": 0, "section_ids": []}
         if section_drafts is None
@@ -431,6 +453,17 @@ def build_history_docs_quality_judge_prompt(
             "evaluation_status": section_drafts.evaluation_status,
             "section_count": len(section_drafts.sections),
             "section_ids": [section.section_id for section in section_drafts.sections],
+        }
+    )
+    targeted_rewrite_summary: dict[str, object] = (
+        {"evaluation_status": None, "section_count": 0, "section_ids": []}
+        if targeted_section_rewrites is None
+        else {
+            "evaluation_status": targeted_section_rewrites.evaluation_status,
+            "section_count": len(targeted_section_rewrites.sections),
+            "section_ids": [
+                section.section_id for section in targeted_section_rewrites.sections
+            ],
         }
     )
     draft_validation_summary: dict[str, int | None] = (
@@ -447,6 +480,14 @@ def build_history_docs_quality_judge_prompt(
         else {
             "error_count": repaired_validation_report.error_count,
             "warning_count": repaired_validation_report.warning_count,
+        }
+    )
+    targeted_rewrite_validation_summary: dict[str, int | None] = (
+        {"error_count": None, "warning_count": None}
+        if targeted_rewrite_validation_report is None
+        else {
+            "error_count": targeted_rewrite_validation_report.error_count,
+            "warning_count": targeted_rewrite_validation_report.warning_count,
         }
     )
     draft_review_compact = draft_review_summary or {
@@ -481,10 +522,13 @@ def build_history_docs_quality_judge_prompt(
         f"Algorithm Enrichment Summary:\n{_json(algorithm_enrichment_summary)}\n"
         f"Interface Inventory Summary:\n{_json(interface_inventory_summary)}\n"
         f"Dependency Landscape Summary:\n{_json(dependency_landscape_summary)}\n"
+        f"Dependency Narrative Summary:\n{_json(dependency_narrative_summary)}\n"
         f"Draft Summary:\n{_json(draft_summary)}\n"
+        f"Targeted Rewrite Summary:\n{_json(targeted_rewrite_summary)}\n"
         f"Draft Validation Summary:\n{_json(draft_validation_summary)}\n"
         f"Draft Review Summary:\n{_json(draft_review_compact)}\n"
         f"Repaired Validation Summary:\n{_json(repaired_validation_summary)}\n"
+        f"Targeted Rewrite Validation Summary:\n{_json(targeted_rewrite_validation_summary)}\n"
         f"Repaired Section IDs:\n{_json(repaired_section_ids or [])}\n"
         f"Rendered Sections:\n{_json(render_sections)}\n"
         f"Validation Summary:\n{_json(validation_summary)}\n"

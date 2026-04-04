@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from engllm.tools.history_docs.models import (
     HistoryAlgorithmCapsuleIndex,
     HistoryCheckpointModel,
     HistoryDependencyInventory,
+    HistoryDependencyNarrativeShadow,
     HistoryRenderManifest,
     HistorySectionOutline,
     HistoryValidationCheckId,
@@ -35,6 +37,10 @@ _FILLER_LINES = {
     "No strong design-note anchors were identified for this checkpoint.",
     "No explicit limitation or constraint signals were identified for this checkpoint.",
 }
+_RAW_INTERNAL_ID_RE = re.compile(
+    r"\b(?:subsystem|module|interface|context_node)::[A-Za-z0-9_.:/-]+\b"
+)
+_CONTRADICTORY_TBD_RE = re.compile(r"^\s*TBD\s*-\s*\S")
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,11 +336,19 @@ def _validate_dependency_subsections(
     markdown_sections: list[_SectionBlock],
     render_manifest: HistoryRenderManifest,
     dependency_inventory: HistoryDependencyInventory,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
 ) -> list[HistoryValidationFinding]:
     findings: list[HistoryValidationFinding] = []
     dependency_entries = {
         entry.dependency_id: entry for entry in dependency_inventory.entries
     }
+    grouped_dependency_ids = set()
+    if dependency_narratives_shadow is not None:
+        grouped_dependency_ids = {
+            entry.dependency_id
+            for entry in dependency_narratives_shadow.entries
+            if entry.render_style == "grouped_tooling"
+        }
     markdown_by_title = {section.title: section for section in markdown_sections}
     dependency_sections = {
         "dependencies",
@@ -350,6 +364,25 @@ def _validate_dependency_subsections(
         for dependency_id in rendered_section.dependency_ids:
             entry = dependency_entries.get(dependency_id)
             if entry is None:
+                continue
+            if (
+                rendered_section.section_id == "build_development_infrastructure"
+                and dependency_id in grouped_dependency_ids
+            ):
+                if entry.display_name not in "\n".join(section_block.body_lines):
+                    findings.append(
+                        _finding(
+                            check_id="empty_grouped_tooling_stub",
+                            severity="warning",
+                            message=(
+                                f"Grouped tooling dependency {entry.display_name!r} is missing "
+                                "from the rendered grouped summary."
+                            ),
+                            section_id=rendered_section.section_id,
+                            artifact_path=Path("checkpoint.md"),
+                            reference=dependency_id,
+                        )
+                    )
                 continue
             matches = _matching_subheadings(section_block, entry.display_name)
             if len(matches) != 1:
@@ -408,6 +441,38 @@ def _validate_dependency_subsections(
                     )
                     break
 
+    return findings
+
+
+def _validate_quality_recovery_prose(
+    markdown_lines: list[str],
+) -> list[HistoryValidationFinding]:
+    findings: list[HistoryValidationFinding] = []
+    for index, line in enumerate(markdown_lines, start=1):
+        if _RAW_INTERNAL_ID_RE.search(line):
+            findings.append(
+                _finding(
+                    check_id="raw_internal_id_leak",
+                    severity="error",
+                    message="Rendered markdown leaked a raw internal identifier.",
+                    artifact_path=Path("checkpoint.md"),
+                    reference=line.strip(),
+                    line_number=index,
+                )
+            )
+        if _CONTRADICTORY_TBD_RE.search(line):
+            findings.append(
+                _finding(
+                    check_id="contradictory_tbd_phrase",
+                    severity="warning",
+                    message=(
+                        "Rendered markdown mixes a TBD prefix with a factual sentence."
+                    ),
+                    artifact_path=Path("checkpoint.md"),
+                    reference=line.strip(),
+                    line_number=index,
+                )
+            )
     return findings
 
 
@@ -563,6 +628,7 @@ def validate_checkpoint_render(
     capsule_index: HistoryAlgorithmCapsuleIndex,
     markdown: str,
     render_manifest: HistoryRenderManifest,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
     markdown_filename: str = "checkpoint.md",
     render_manifest_filename: str = "render_manifest.json",
 ) -> HistoryValidationReport:
@@ -596,9 +662,11 @@ def validate_checkpoint_render(
             markdown_sections=markdown_sections,
             render_manifest=render_manifest,
             dependency_inventory=dependency_inventory,
+            dependency_narratives_shadow=dependency_narratives_shadow,
         )
     )
     findings.extend(_validate_release_note_phrases(markdown_lines))
+    findings.extend(_validate_quality_recovery_prose(markdown_lines))
     findings.extend(
         _validate_filler_lines(
             markdown_sections=markdown_sections,

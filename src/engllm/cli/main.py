@@ -426,6 +426,11 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Interface inventory: {result.interface_inventory_path}")
     if result.dependency_landscape_path is not None:
         print(f"Dependency landscape: {result.dependency_landscape_path}")
+    if result.dependency_narratives_shadow_path is not None:
+        print(
+            "Dependency narratives shadow: "
+            f"{result.dependency_narratives_shadow_path}"
+        )
     if result.dependencies_artifact_path is not None:
         print(f"Dependencies: {result.dependencies_artifact_path}")
     if result.section_drafts_path is not None:
@@ -446,6 +451,23 @@ def _run_history_docs_build(args: argparse.Namespace) -> int:
         print(f"Repaired render manifest: {result.render_manifest_repaired_path}")
     if result.validation_report_repaired_path is not None:
         print(f"Repaired validation report: {result.validation_report_repaired_path}")
+    if result.targeted_section_rewrites_path is not None:
+        print(f"Targeted section rewrites: {result.targeted_section_rewrites_path}")
+    if result.checkpoint_targeted_rewrite_markdown_path is not None:
+        print(
+            "Targeted rewrite markdown: "
+            f"{result.checkpoint_targeted_rewrite_markdown_path}"
+        )
+    if result.render_manifest_targeted_rewrite_path is not None:
+        print(
+            "Targeted rewrite render manifest: "
+            f"{result.render_manifest_targeted_rewrite_path}"
+        )
+    if result.validation_report_targeted_rewrite_path is not None:
+        print(
+            "Targeted rewrite validation report: "
+            f"{result.validation_report_targeted_rewrite_path}"
+        )
     if result.checkpoint_markdown_path is not None:
         print(f"Checkpoint markdown: {result.checkpoint_markdown_path}")
     if result.render_manifest_path is not None:

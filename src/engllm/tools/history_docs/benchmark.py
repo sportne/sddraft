@@ -32,6 +32,7 @@ from engllm.tools.history_docs.models import (
     HistoryCheckpointModel,
     HistoryCheckpointModelEnrichment,
     HistoryDependencyLandscape,
+    HistoryDependencyNarrativeShadow,
     HistoryDocsBenchmarkCase,
     HistoryDocsBenchmarkCaseComparisonReport,
     HistoryDocsBenchmarkCaseReportRef,
@@ -134,6 +135,9 @@ class _LoadedBenchmarkArtifacts:
     repaired_validation_report: HistoryValidationReport | None = None
     draft_review: HistoryDraftReview | None = None
     section_repairs: HistorySectionRepairArtifact | None = None
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None
+    targeted_section_rewrites: HistorySectionDraftArtifact | None = None
+    targeted_rewrite_validation_report: HistoryValidationReport | None = None
 
 
 def _progress(progress_callback: ProgressCallback | None, message: str) -> None:
@@ -1024,6 +1028,46 @@ def semantic_structure_context_llm_repair_benchmark_variant(
     )
 
 
+def semantic_structure_context_targeted_rewrite_benchmark_variant(
+    *,
+    llm_client_builder: (
+        Callable[
+            [PreparedHistoryDocsBenchmarkCase],
+            LLMClient | None,
+        ]
+        | None
+    ) = None,
+) -> HistoryDocsBenchmarkVariant:
+    """Return the targeted quality-recovery benchmark variant."""
+
+    def _run(
+        prepared_case: PreparedHistoryDocsBenchmarkCase,
+        workspace_id: str,
+    ) -> HistoryBuildResult:
+        return build_history_docs_checkpoint(
+            project_config=prepared_case.manifest.project_config,
+            repo_root=prepared_case.repo_root,
+            checkpoint_commit=prepared_case.manifest.target_commit,
+            previous_checkpoint_commit=prepared_case.manifest.previous_checkpoint_commit,
+            workspace_id=workspace_id,
+            subsystem_grouping_mode="semantic",
+            experimental_section_mode="semantic_context",
+            interface_render_mode="inventory",
+            dependency_render_mode="landscape",
+            narrative_render_mode="targeted_llm_rewrite",
+            llm_client_override=(
+                None
+                if llm_client_builder is None
+                else llm_client_builder(prepared_case)
+            ),
+        )
+
+    return HistoryDocsBenchmarkVariant(
+        variant_id="semantic-structure-context-targeted-rewrite",
+        runner=_run,
+    )
+
+
 def _empty_rubric_scores() -> list[HistoryDocsRubricScore]:
     return [
         HistoryDocsRubricScore(
@@ -1064,6 +1108,11 @@ def _load_benchmark_artifacts(
         None,
     )
     section_drafts_path = getattr(build_result, "section_drafts_path", None)
+    dependency_narratives_shadow_path = getattr(
+        build_result,
+        "dependency_narratives_shadow_path",
+        None,
+    )
     validation_report_draft_path = getattr(
         build_result,
         "validation_report_draft_path",
@@ -1076,6 +1125,16 @@ def _load_benchmark_artifacts(
     )
     draft_review_path = getattr(build_result, "draft_review_path", None)
     section_repairs_path = getattr(build_result, "section_repairs_path", None)
+    targeted_section_rewrites_path = getattr(
+        build_result,
+        "targeted_section_rewrites_path",
+        None,
+    )
+    validation_report_targeted_rewrite_path = getattr(
+        build_result,
+        "validation_report_targeted_rewrite_path",
+        None,
+    )
     if (
         checkpoint_model_path is None
         or render_manifest_path is None
@@ -1151,6 +1210,13 @@ def _load_benchmark_artifacts(
                 Path(dependency_landscape_path).read_text(encoding="utf-8")
             )
         ),
+        dependency_narratives_shadow=(
+            None
+            if dependency_narratives_shadow_path is None
+            else HistoryDependencyNarrativeShadow.model_validate_json(
+                Path(dependency_narratives_shadow_path).read_text(encoding="utf-8")
+            )
+        ),
         section_drafts=(
             None
             if section_drafts_path is None
@@ -1177,6 +1243,22 @@ def _load_benchmark_artifacts(
             if draft_review_path is None
             else HistoryDraftReview.model_validate_json(
                 Path(draft_review_path).read_text(encoding="utf-8")
+            )
+        ),
+        targeted_section_rewrites=(
+            None
+            if targeted_section_rewrites_path is None
+            else HistorySectionDraftArtifact.model_validate_json(
+                Path(targeted_section_rewrites_path).read_text(encoding="utf-8")
+            )
+        ),
+        targeted_rewrite_validation_report=(
+            None
+            if validation_report_targeted_rewrite_path is None
+            else HistoryValidationReport.model_validate_json(
+                Path(validation_report_targeted_rewrite_path).read_text(
+                    encoding="utf-8"
+                )
             )
         ),
         section_repairs=(
@@ -1435,7 +1517,13 @@ def evaluate_history_docs_quality(
                 in {
                     "semantic-structure-context-dependency-landscape",
                     "semantic-structure-context-h13-full",
+                    "semantic-structure-context-targeted-rewrite",
                 }
+                else None
+            ),
+            dependency_narratives_shadow=(
+                artifacts.dependency_narratives_shadow
+                if variant_id == "semantic-structure-context-targeted-rewrite"
                 else None
             ),
             section_drafts=(
@@ -1447,6 +1535,11 @@ def evaluate_history_docs_quality(
                 }
                 else None
             ),
+            targeted_section_rewrites=(
+                artifacts.targeted_section_rewrites
+                if variant_id == "semantic-structure-context-targeted-rewrite"
+                else None
+            ),
             draft_validation_report=(
                 artifacts.draft_validation_report
                 if variant_id
@@ -1454,6 +1547,11 @@ def evaluate_history_docs_quality(
                     "semantic-structure-context-llm-draft",
                     "semantic-structure-context-llm-repair",
                 }
+                else None
+            ),
+            targeted_rewrite_validation_report=(
+                artifacts.targeted_rewrite_validation_report
+                if variant_id == "semantic-structure-context-targeted-rewrite"
                 else None
             ),
             repaired_validation_report=(
@@ -1749,6 +1847,7 @@ __all__ = [
     "semantic_structure_context_llm_draft_benchmark_variant",
     "semantic_structure_context_llm_repair_benchmark_variant",
     "semantic_structure_context_llm_section_planning_benchmark_variant",
+    "semantic_structure_context_targeted_rewrite_benchmark_variant",
     "semantic_structure_context_benchmark_variant",
     "semantic_history_docs_benchmark_variant",
     "validate_benchmark_focus_coverage",

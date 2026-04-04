@@ -725,3 +725,41 @@ def test_h14_variants_run_through_benchmark_suite(
         cases[0].manifest.case_id,
         "semantic-structure-context-llm-repair",
     ).exists()
+
+
+def test_targeted_rewrite_variant_runs_through_benchmark_suite(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "artifacts"
+    cases = benchmark.build_default_history_docs_benchmark_cases(
+        base_root=tmp_path / "repos",
+        output_root=output_root,
+    )
+
+    suite_report = benchmark.run_history_docs_benchmark_suite(
+        suite_id="quality-recovery-variants",
+        output_root=output_root,
+        cases=cases,
+        variant_runners=[
+            benchmark.semantic_structure_context_benchmark_variant(),
+            benchmark.semantic_structure_context_targeted_rewrite_benchmark_variant(),
+        ],
+        llm_client_factory=lambda config: MockLLMClient(
+            canned={
+                HistoryDocsQualityJudgmentEnvelope.__name__: _canned_quality_payload(
+                    score=4
+                )
+            }
+        ),
+    )
+
+    assert suite_report.variant_ids == [
+        "semantic-structure-context",
+        "semantic-structure-context-targeted-rewrite",
+    ]
+    assert benchmark_quality_report_path(
+        output_root,
+        "quality-recovery-variants",
+        cases[0].manifest.case_id,
+        "semantic-structure-context-targeted-rewrite",
+    ).exists()

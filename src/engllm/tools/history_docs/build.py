@@ -83,6 +83,10 @@ from engllm.tools.history_docs.dependency_landscape import (
     build_dependency_landscape,
     dependency_landscape_path,
 )
+from engllm.tools.history_docs.dependency_narratives_shadow import (
+    build_dependency_narratives_shadow,
+    dependency_narratives_shadow_path,
+)
 from engllm.tools.history_docs.draft_review import (
     build_draft_review,
     draft_review_path,
@@ -111,9 +115,13 @@ from engllm.tools.history_docs.render import (
 from engllm.tools.history_docs.section_drafting_llm import (
     build_section_drafts,
     checkpoint_draft_markdown_path,
+    checkpoint_targeted_rewrite_markdown_path,
     render_manifest_draft_path,
+    render_manifest_targeted_rewrite_path,
     section_drafts_path,
+    targeted_section_rewrites_path,
     validation_report_draft_path,
+    validation_report_targeted_rewrite_path,
 )
 from engllm.tools.history_docs.section_outline import (
     build_section_outline,
@@ -400,7 +408,9 @@ def build_history_docs_checkpoint(
     algorithm_capsule_mode: Literal["baseline", "enriched"] = "baseline",
     interface_render_mode: Literal["baseline", "inventory"] = "baseline",
     dependency_render_mode: Literal["baseline", "landscape"] = "baseline",
-    narrative_render_mode: Literal["baseline", "llm_draft", "llm_repair"] = "baseline",
+    narrative_render_mode: Literal[
+        "baseline", "llm_draft", "llm_repair", "targeted_llm_rewrite"
+    ] = "baseline",
     llm_client_override: LLMClient | None = None,
 ) -> HistoryBuildResult:
     """Persist checkpoint manifests plus H2-H9 history-docs artifacts."""
@@ -931,8 +941,36 @@ def build_history_docs_checkpoint(
         history_tool_root,
         checkpoint_id,
     )
+    dependency_narratives_shadow_artifact_path = dependency_narratives_shadow_path(
+        history_tool_root,
+        checkpoint_id,
+    )
     write_json_model(dependencies_artifact_path, dependency_inventory)
     write_json_model(checkpoint_model_artifact_path, checkpoint_model)
+
+    _progress(
+        progress_callback,
+        "history-docs: building shadow dependency narratives",
+    )
+    dependency_narratives_shadow = build_dependency_narratives_shadow(
+        checkpoint_id=checkpoint_id,
+        target_commit=target_metadata.sha,
+        previous_checkpoint_commit=resolved_previous,
+        entries=dependency_inventory.entries,
+        subsystem_display_names={
+            subsystem.concept_id: (
+                subsystem.display_name
+                or subsystem.group_path.as_posix()
+                or subsystem.source_root.as_posix()
+            )
+            for subsystem in checkpoint_model.subsystems
+            if subsystem.lifecycle_status == "active"
+        },
+    )
+    write_json_model(
+        dependency_narratives_shadow_artifact_path,
+        dependency_narratives_shadow,
+    )
 
     _progress(
         progress_callback,
@@ -1052,6 +1090,11 @@ def build_history_docs_checkpoint(
         dependency_landscape=(
             dependency_landscape if dependency_render_mode == "landscape" else None
         ),
+        dependency_narratives_shadow=(
+            dependency_narratives_shadow
+            if narrative_render_mode == "targeted_llm_rewrite"
+            else None
+        ),
     )
     write_checkpoint_markdown(
         checkpoint_markdown_artifact_path,
@@ -1075,6 +1118,11 @@ def build_history_docs_checkpoint(
         capsule_index=algorithm_capsule_index,
         markdown=checkpoint_markdown,
         render_manifest=render_manifest,
+        dependency_narratives_shadow=(
+            dependency_narratives_shadow
+            if narrative_render_mode == "targeted_llm_rewrite"
+            else None
+        ),
     )
     write_json_model(validation_report_artifact_path, validation_report)
 
@@ -1247,6 +1295,106 @@ def build_history_docs_checkpoint(
         repaired_validation_report,
     )
 
+    _progress(
+        progress_callback,
+        "history-docs: building targeted shadow rewrites for weak sections",
+    )
+    targeted_section_rewrites_artifact_path = targeted_section_rewrites_path(
+        history_tool_root,
+        checkpoint_id,
+    )
+    checkpoint_targeted_rewrite_markdown_artifact_path = (
+        checkpoint_targeted_rewrite_markdown_path(history_tool_root, checkpoint_id)
+    )
+    render_manifest_targeted_rewrite_artifact_path = (
+        render_manifest_targeted_rewrite_path(history_tool_root, checkpoint_id)
+    )
+    validation_report_targeted_rewrite_artifact_path = (
+        validation_report_targeted_rewrite_path(history_tool_root, checkpoint_id)
+    )
+    targeted_rewrite_baseline_markdown, targeted_rewrite_manifest = (
+        render_checkpoint_markdown(
+            workspace_id=resolved_workspace_id,
+            checkpoint_model=checkpoint_model,
+            section_outline=authoritative_section_outline,
+            dependency_inventory=dependency_inventory,
+            capsule_index=algorithm_capsule_index,
+            capsules=algorithm_capsules,
+            algorithm_capsule_enrichment_index=(
+                algorithm_capsule_enrichment_index
+                if algorithm_capsule_mode == "enriched"
+                else None
+            ),
+            algorithm_capsule_enrichments=(
+                algorithm_capsule_enrichments
+                if algorithm_capsule_mode == "enriched"
+                else None
+            ),
+            semantic_context_map=(
+                semantic_context_map
+                if experimental_section_mode == "semantic_context"
+                else None
+            ),
+            interface_inventory=interface_inventory,
+            dependency_landscape=dependency_landscape,
+            dependency_narratives_shadow=dependency_narratives_shadow,
+        )
+    )
+    targeted_rewrite_artifact, targeted_rewrite_markdown, targeted_rewrite_manifest = (
+        build_section_drafts(
+            checkpoint_model=checkpoint_model,
+            section_outline=authoritative_section_outline,
+            render_manifest=targeted_rewrite_manifest,
+            baseline_markdown=targeted_rewrite_baseline_markdown,
+            interval_interpretation=interval_interpretation,
+            checkpoint_model_enrichment=checkpoint_model_enrichment,
+            dependency_inventory=dependency_inventory,
+            capsule_index=algorithm_capsule_index,
+            capsules=algorithm_capsules,
+            semantic_context_map=(
+                semantic_context_map
+                if experimental_section_mode == "semantic_context"
+                else None
+            ),
+            llm_client=llm_client,
+            model_name=project_config.llm.model_name,
+            temperature=project_config.llm.temperature,
+            algorithm_capsule_enrichment_index=algorithm_capsule_enrichment_index,
+            algorithm_capsule_enrichments=algorithm_capsule_enrichments,
+            interface_inventory=interface_inventory,
+            dependency_landscape=dependency_landscape,
+            targeted_rewrite_only=True,
+        )
+    )
+    write_json_model(
+        targeted_section_rewrites_artifact_path,
+        targeted_rewrite_artifact,
+    )
+    write_checkpoint_markdown(
+        checkpoint_targeted_rewrite_markdown_artifact_path,
+        targeted_rewrite_markdown,
+    )
+    write_json_model(
+        render_manifest_targeted_rewrite_artifact_path,
+        targeted_rewrite_manifest,
+    )
+    targeted_rewrite_validation_report = validate_checkpoint_render(
+        checkpoint_dir=checkpoint_root,
+        checkpoint_model=checkpoint_model,
+        section_outline=authoritative_section_outline,
+        dependency_inventory=dependency_inventory,
+        capsule_index=algorithm_capsule_index,
+        markdown=targeted_rewrite_markdown,
+        render_manifest=targeted_rewrite_manifest,
+        dependency_narratives_shadow=dependency_narratives_shadow,
+        markdown_filename="checkpoint_targeted_rewrite_llm.md",
+        render_manifest_filename="render_manifest_targeted_rewrite_llm.json",
+    )
+    write_json_model(
+        validation_report_targeted_rewrite_artifact_path,
+        targeted_rewrite_validation_report,
+    )
+
     authoritative_markdown_path = checkpoint_markdown_artifact_path
     authoritative_render_manifest_path = render_manifest_artifact_path
     authoritative_validation_report_path = validation_report_artifact_path
@@ -1261,6 +1409,15 @@ def build_history_docs_checkpoint(
         authoritative_render_manifest_path = render_manifest_repaired_artifact_path
         authoritative_validation_report_path = validation_report_repaired_artifact_path
         authoritative_validation_report = repaired_validation_report
+    elif narrative_render_mode == "targeted_llm_rewrite":
+        authoritative_markdown_path = checkpoint_targeted_rewrite_markdown_artifact_path
+        authoritative_render_manifest_path = (
+            render_manifest_targeted_rewrite_artifact_path
+        )
+        authoritative_validation_report_path = (
+            validation_report_targeted_rewrite_artifact_path
+        )
+        authoritative_validation_report = targeted_rewrite_validation_report
 
     retired_concept_count = (
         sum(
@@ -1300,6 +1457,7 @@ def build_history_docs_checkpoint(
         ),
         interface_inventory_path=interface_inventory_artifact_path,
         dependency_landscape_path=dependency_landscape_artifact_path,
+        dependency_narratives_shadow_path=dependency_narratives_shadow_artifact_path,
         section_outline_path=section_outline_artifact_path,
         section_outline_llm_path=section_outline_llm_artifact_path,
         algorithm_capsule_index_path=algorithm_capsule_index_artifact_path,
@@ -1313,6 +1471,16 @@ def build_history_docs_checkpoint(
         checkpoint_repaired_markdown_path=checkpoint_repaired_markdown_artifact_path,
         render_manifest_repaired_path=render_manifest_repaired_artifact_path,
         validation_report_repaired_path=validation_report_repaired_artifact_path,
+        targeted_section_rewrites_path=targeted_section_rewrites_artifact_path,
+        checkpoint_targeted_rewrite_markdown_path=(
+            checkpoint_targeted_rewrite_markdown_artifact_path
+        ),
+        render_manifest_targeted_rewrite_path=(
+            render_manifest_targeted_rewrite_artifact_path
+        ),
+        validation_report_targeted_rewrite_path=(
+            validation_report_targeted_rewrite_artifact_path
+        ),
         checkpoint_markdown_path=authoritative_markdown_path,
         render_manifest_path=authoritative_render_manifest_path,
         validation_report_path=authoritative_validation_report_path,
@@ -1339,6 +1507,7 @@ def build_history_docs_checkpoint(
         ),
         interface_inventory_status=interface_inventory.evaluation_status,
         dependency_landscape_status=dependency_landscape.evaluation_status,
+        dependency_narrative_count=len(dependency_narratives_shadow.entries),
         section_planning_status=section_outline_llm.evaluation_status,
         draft_status=draft_artifact.evaluation_status,
         draft_review_status=draft_review.evaluation_status,
@@ -1395,4 +1564,11 @@ def build_history_docs_checkpoint(
         draft_validation_warning_count=draft_validation_report.warning_count,
         repaired_validation_error_count=repaired_validation_report.error_count,
         repaired_validation_warning_count=repaired_validation_report.warning_count,
+        targeted_rewrite_section_count=len(targeted_rewrite_artifact.sections),
+        targeted_rewrite_validation_error_count=(
+            targeted_rewrite_validation_report.error_count
+        ),
+        targeted_rewrite_validation_warning_count=(
+            targeted_rewrite_validation_report.warning_count
+        ),
     )

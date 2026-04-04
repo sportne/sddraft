@@ -19,8 +19,12 @@ from engllm.tools.history_docs.models import (
     HistoryDependencyConcept,
     HistoryDependencyEntry,
     HistoryDependencyInventory,
+    HistoryDependencyNarrativeShadow,
+    HistoryDependencyNarrativeShadowEntry,
     HistoryEvidenceLink,
     HistoryModuleConcept,
+    HistoryRenderedSection,
+    HistoryRenderManifest,
     HistorySectionOutline,
     HistorySectionPlan,
     HistorySectionState,
@@ -459,6 +463,227 @@ dependencies = ["requests>=2"]
     assert any(
         finding.check_id == "dependency_summary_tbd" for finding in report.findings
     )
+
+
+def test_validate_checkpoint_render_flags_internal_id_leaks_and_contradictory_tbd() -> (
+    None
+):
+    outline = _section_outline()
+    inventory = _dependency_inventory()
+    manifest = HistoryRenderManifest(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        markdown_path=Path("checkpoint.md"),
+        sections=[
+            HistoryRenderedSection(
+                section_id="dependencies",
+                title="Dependencies",
+                order=1,
+                kind="core",
+                dependency_ids=["dependency::python::requests"],
+                source_artifact_paths=[Path("dependencies.json")],
+                subheading_count=1,
+            )
+        ],
+    )
+    markdown = (
+        "# Example Documentation\n\n"
+        "## Dependencies\n\n"
+        "### requests\n\n"
+        "TBD - requests is an HTTP client library.\n\n"
+        "Project-specific usage is not strongly evidenced.\n\n"
+        "- subsystem::src::core\n"
+    )
+    report = validate_checkpoint_render(
+        checkpoint_dir=Path("."),
+        checkpoint_model=_checkpoint_model(),
+        section_outline=outline,
+        dependency_inventory=inventory,
+        capsule_index=HistoryAlgorithmCapsuleIndex(
+            checkpoint_id="2024-01-01-abc1234",
+            target_commit="abc1234deadbeef",
+            capsules=[],
+        ),
+        markdown=markdown,
+        render_manifest=manifest,
+    )
+    assert any(f.check_id == "contradictory_tbd_phrase" for f in report.findings)
+    assert any(f.check_id == "raw_internal_id_leak" for f in report.findings)
+
+
+def test_validate_checkpoint_render_allows_grouped_tooling_shadow_entries() -> None:
+    checkpoint_model = _checkpoint_model()
+    inventory = HistoryDependencyInventory(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        entries=[
+            HistoryDependencyEntry(
+                dependency_id="dependency::python::pytest",
+                display_name="pytest",
+                normalized_name="pytest",
+                ecosystem="python",
+                source_manifest_paths=[Path("pyproject.toml")],
+                source_dependency_concept_ids=["dependency-source::pyproject.toml"],
+                scope_roles=["test"],
+                section_target="build_development_infrastructure",
+                general_description="pytest is a Python test runner.",
+                project_usage_description="Project-specific usage is not strongly evidenced.",
+            )
+        ],
+    )
+    outline = HistorySectionOutline(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        sections=[
+            HistorySectionPlan(
+                section_id="build_development_infrastructure",
+                title="Build and Development Infrastructure",
+                kind="core",
+                status="included",
+                confidence_score=80,
+                evidence_score=8,
+                depth="standard",
+            )
+        ],
+    )
+    markdown = (
+        "# Example Documentation\n\n"
+        "## Build and Development Infrastructure\n\n"
+        "### Python Test Tooling\n\n"
+        "This grouped tooling summary covers low-evidence support packages.\n\n"
+        "- `pytest`: pytest is a Python test runner. Project-specific usage is not strongly evidenced.\n"
+    )
+    manifest = HistoryRenderManifest(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        markdown_path=Path("checkpoint.md"),
+        sections=[
+            HistoryRenderedSection(
+                section_id="build_development_infrastructure",
+                title="Build and Development Infrastructure",
+                order=1,
+                kind="core",
+                dependency_ids=["dependency::python::pytest"],
+                source_artifact_paths=[Path("dependency_narratives_shadow.json")],
+                subheading_count=1,
+            )
+        ],
+    )
+    shadow = HistoryDependencyNarrativeShadow(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        entries=[
+            HistoryDependencyNarrativeShadowEntry(
+                dependency_id="dependency::python::pytest",
+                display_name="pytest",
+                ecosystem="python",
+                section_target="build_development_infrastructure",
+                scope_roles=["test"],
+                render_style="grouped_tooling",
+                group_title="Python Test Tooling",
+                general_description="pytest is a Python test runner.",
+                general_description_basis="package_general_knowledge",
+                project_usage_description="Project-specific usage is not strongly evidenced.",
+                project_usage_basis="tbd",
+            )
+        ],
+    )
+    report = validate_checkpoint_render(
+        checkpoint_dir=Path("."),
+        checkpoint_model=checkpoint_model,
+        section_outline=outline,
+        dependency_inventory=inventory,
+        capsule_index=HistoryAlgorithmCapsuleIndex(
+            checkpoint_id="2024-01-01-abc1234",
+            target_commit="abc1234deadbeef",
+            capsules=[],
+        ),
+        markdown=markdown,
+        render_manifest=manifest,
+        dependency_narratives_shadow=shadow,
+    )
+    assert not any(
+        finding.check_id == "dependency_subsection_shape_invalid"
+        for finding in report.findings
+    )
+
+
+def test_render_checkpoint_markdown_groups_tooling_without_package_subsections() -> (
+    None
+):
+    checkpoint_model = _checkpoint_model()
+    inventory = HistoryDependencyInventory(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        entries=[
+            HistoryDependencyEntry(
+                dependency_id="dependency::python::pytest",
+                display_name="pytest",
+                normalized_name="pytest",
+                ecosystem="python",
+                source_manifest_paths=[Path("pyproject.toml")],
+                source_dependency_concept_ids=["dependency-source::pyproject.toml"],
+                scope_roles=["test"],
+                section_target="build_development_infrastructure",
+                general_description="TBD: pytest is a Python test runner.",
+                project_usage_description="TBD - exact project usage is unclear.",
+            )
+        ],
+    )
+    outline = HistorySectionOutline(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        sections=[
+            HistorySectionPlan(
+                section_id="build_development_infrastructure",
+                title="Build and Development Infrastructure",
+                kind="core",
+                status="included",
+                confidence_score=80,
+                evidence_score=8,
+                depth="standard",
+            )
+        ],
+    )
+    shadow = HistoryDependencyNarrativeShadow(
+        checkpoint_id="2024-01-01-abc1234",
+        target_commit="abc1234deadbeef",
+        entries=[
+            HistoryDependencyNarrativeShadowEntry(
+                dependency_id="dependency::python::pytest",
+                display_name="pytest",
+                ecosystem="python",
+                section_target="build_development_infrastructure",
+                scope_roles=["test"],
+                render_style="grouped_tooling",
+                group_title="Python Test Tooling",
+                general_description="pytest is a Python test runner.",
+                general_description_basis="package_general_knowledge",
+                project_usage_description="Project-specific usage is not strongly evidenced by the current manifests and import signals.",
+                project_usage_basis="tbd",
+            )
+        ],
+    )
+
+    markdown, _render_manifest = render_checkpoint_markdown(
+        workspace_id="repo",
+        checkpoint_model=checkpoint_model,
+        section_outline=outline,
+        dependency_inventory=inventory,
+        capsule_index=HistoryAlgorithmCapsuleIndex(
+            checkpoint_id="2024-01-01-abc1234",
+            target_commit="abc1234deadbeef",
+            capsules=[],
+        ),
+        capsules=[],
+        dependency_narratives_shadow=shadow,
+    )
+
+    assert "### Python Test Tooling" in markdown
+    assert "`pytest`" in markdown
+    assert "### pytest" not in markdown
+    assert "TBD:" not in markdown
+    assert "TBD -" not in markdown
 
 
 def test_build_history_docs_checkpoint_h9_raises_validation_error_with_report_path(

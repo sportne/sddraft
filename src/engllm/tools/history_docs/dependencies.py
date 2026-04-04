@@ -1183,6 +1183,8 @@ def _summarize_entry(
                 update={
                     "general_description": "TBD",
                     "project_usage_description": "TBD",
+                    "general_description_basis": "tbd",
+                    "project_usage_basis": "tbd",
                     "summary_status": "tbd",
                     "uncertainty": sorted({*entry.uncertainty, warning.message}),
                     "confidence": 0.0,
@@ -1216,6 +1218,8 @@ def _summarize_entry(
                 update={
                     "general_description": "TBD",
                     "project_usage_description": "TBD",
+                    "general_description_basis": "tbd",
+                    "project_usage_basis": "tbd",
                     "summary_status": "llm_failed",
                     "uncertainty": sorted({*entry.uncertainty, warning.message}),
                     "confidence": 0.0,
@@ -1229,6 +1233,8 @@ def _summarize_entry(
             update={
                 "general_description": summary.general_description,
                 "project_usage_description": summary.project_usage_description,
+                "general_description_basis": summary.general_description_basis,
+                "project_usage_basis": summary.project_usage_basis,
                 "summary_status": "documented",
                 "uncertainty": sorted({*entry.uncertainty, *summary.uncertainty}),
                 "confidence": summary.confidence,

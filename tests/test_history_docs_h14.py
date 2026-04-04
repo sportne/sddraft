@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from engllm.cli.main import main
+from engllm.core.config.loader import load_project_config
 from engllm.llm.mock import MockLLMClient
 from engllm.prompts.history_docs.builders import (
     build_draft_review_prompt,
@@ -12,27 +13,54 @@ from engllm.prompts.history_docs.builders import (
     build_section_repair_prompt,
 )
 from engllm.tools.history_docs.build import build_history_docs_checkpoint
+from engllm.tools.history_docs.dependency_narratives_shadow import (
+    build_dependency_narratives_shadow,
+)
+from engllm.tools.history_docs.dependency_narratives_shadow import (
+    dependency_narratives_shadow_path as build_dependency_narratives_shadow_path,
+)
 from engllm.tools.history_docs.draft_review import (
     draft_review_path as build_draft_review_path,
 )
 from engllm.tools.history_docs.models import (
+    HistoryCheckpointModel,
+    HistoryDependencyEntry,
     HistoryDraftReview,
     HistoryDraftReviewJudgment,
+    HistoryEvidenceLink,
+    HistoryModuleConcept,
     HistorySectionDraftArtifact,
     HistorySectionDraftJudgment,
+    HistorySectionPlan,
     HistorySectionRepairJudgment,
+    HistorySubsystemConcept,
+)
+from engllm.tools.history_docs.section_drafting_llm import (
+    _architecture_focus,
 )
 from engllm.tools.history_docs.section_drafting_llm import (
     checkpoint_draft_markdown_path as build_checkpoint_draft_markdown_path,
 )
 from engllm.tools.history_docs.section_drafting_llm import (
+    checkpoint_targeted_rewrite_markdown_path as build_checkpoint_targeted_rewrite_markdown_path,
+)
+from engllm.tools.history_docs.section_drafting_llm import (
     render_manifest_draft_path as build_render_manifest_draft_path,
+)
+from engllm.tools.history_docs.section_drafting_llm import (
+    render_manifest_targeted_rewrite_path as build_render_manifest_targeted_rewrite_path,
 )
 from engllm.tools.history_docs.section_drafting_llm import (
     section_drafts_path as build_section_drafts_path,
 )
 from engllm.tools.history_docs.section_drafting_llm import (
+    targeted_section_rewrites_path as build_targeted_section_rewrites_path,
+)
+from engllm.tools.history_docs.section_drafting_llm import (
     validation_report_draft_path as build_validation_report_draft_path,
+)
+from engllm.tools.history_docs.section_drafting_llm import (
+    validation_report_targeted_rewrite_path as build_validation_report_targeted_rewrite_path,
 )
 from engllm.tools.history_docs.section_repair_llm import (
     checkpoint_repaired_markdown_path as build_checkpoint_repaired_markdown_path,
@@ -209,6 +237,71 @@ def test_h14_artifact_paths_are_deterministic(tmp_path: Path) -> None:
         "repo",
         "2024-02-01-abcd123",
     )
+    assert build_dependency_narratives_shadow_path(
+        tool_root,
+        "2024-02-01-abcd123",
+    ) == (
+        output_root
+        / "workspaces"
+        / "repo"
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / "2024-02-01-abcd123"
+        / "dependency_narratives_shadow.json"
+    )
+    assert build_targeted_section_rewrites_path(
+        tool_root,
+        "2024-02-01-abcd123",
+    ) == (
+        output_root
+        / "workspaces"
+        / "repo"
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / "2024-02-01-abcd123"
+        / "targeted_section_rewrites_llm.json"
+    )
+    assert build_checkpoint_targeted_rewrite_markdown_path(
+        tool_root,
+        "2024-02-01-abcd123",
+    ) == (
+        output_root
+        / "workspaces"
+        / "repo"
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / "2024-02-01-abcd123"
+        / "checkpoint_targeted_rewrite_llm.md"
+    )
+    assert build_render_manifest_targeted_rewrite_path(
+        tool_root,
+        "2024-02-01-abcd123",
+    ) == (
+        output_root
+        / "workspaces"
+        / "repo"
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / "2024-02-01-abcd123"
+        / "render_manifest_targeted_rewrite_llm.json"
+    )
+    assert build_validation_report_targeted_rewrite_path(
+        tool_root,
+        "2024-02-01-abcd123",
+    ) == (
+        output_root
+        / "workspaces"
+        / "repo"
+        / "tools"
+        / "history_docs"
+        / "checkpoints"
+        / "2024-02-01-abcd123"
+        / "validation_report_targeted_rewrite_llm.json"
+    )
 
 
 def test_h14_prompts_are_compact() -> None:
@@ -254,6 +347,9 @@ def test_h14_prompts_are_compact() -> None:
     )
 
     assert "do not invent section ids" in draft_system.lower()
+    assert "never echo raw internal identifiers" in draft_system.lower()
+    assert "roles, boundaries, and relationships" in draft_system.lower()
+    assert "do not foreground file counts" in draft_system.lower()
     assert "do not rewrite markdown directly" in review_system.lower()
     assert "address only the supplied findings" in repair_system.lower()
     assert "Architectural Overview" in draft_user
@@ -261,6 +357,274 @@ def test_h14_prompts_are_compact() -> None:
     assert "Original body." in repair_user
     assert "diff --git" not in draft_user
     assert "def fetch_state" not in draft_user
+
+
+def test_architecture_focus_emphasizes_roles_and_relationships() -> None:
+    checkpoint_model = HistoryCheckpointModel(
+        checkpoint_id="cp-1",
+        target_commit="deadbeef",
+        subsystems=[
+            HistorySubsystemConcept(
+                concept_id="subsystem::api",
+                lifecycle_status="active",
+                change_status="introduced",
+                first_seen_checkpoint="cp-1",
+                last_updated_checkpoint="cp-1",
+                source_root=Path("src"),
+                group_path=Path("api"),
+                module_ids=["module::src/api/router.py"],
+                file_count=1,
+                symbol_count=1,
+                display_name="API",
+                summary="Handles routing of API requests.",
+                evidence_links=[
+                    HistoryEvidenceLink(kind="subsystem", reference="subsystem::api")
+                ],
+            ),
+            HistorySubsystemConcept(
+                concept_id="subsystem::engine",
+                lifecycle_status="active",
+                change_status="introduced",
+                first_seen_checkpoint="cp-1",
+                last_updated_checkpoint="cp-1",
+                source_root=Path("src"),
+                group_path=Path("engine"),
+                module_ids=["module::src/engine/planner.py"],
+                file_count=1,
+                symbol_count=1,
+                display_name="Engine",
+                summary="Builds execution plans.",
+                evidence_links=[
+                    HistoryEvidenceLink(kind="subsystem", reference="subsystem::engine")
+                ],
+            ),
+            HistorySubsystemConcept(
+                concept_id="subsystem::storage",
+                lifecycle_status="active",
+                change_status="introduced",
+                first_seen_checkpoint="cp-1",
+                last_updated_checkpoint="cp-1",
+                source_root=Path("src"),
+                group_path=Path("storage"),
+                module_ids=["module::src/storage/repository.py"],
+                file_count=1,
+                symbol_count=1,
+                display_name="Storage",
+                summary="Manages state repository operations.",
+                evidence_links=[
+                    HistoryEvidenceLink(
+                        kind="subsystem", reference="subsystem::storage"
+                    )
+                ],
+            ),
+        ],
+        modules=[
+            HistoryModuleConcept(
+                concept_id="module::src/api/router.py",
+                lifecycle_status="active",
+                change_status="introduced",
+                first_seen_checkpoint="cp-1",
+                last_updated_checkpoint="cp-1",
+                path=Path("src/api/router.py"),
+                subsystem_id="subsystem::api",
+                language="python",
+                functions=["route_request"],
+            ),
+            HistoryModuleConcept(
+                concept_id="module::src/engine/planner.py",
+                lifecycle_status="active",
+                change_status="introduced",
+                first_seen_checkpoint="cp-1",
+                last_updated_checkpoint="cp-1",
+                path=Path("src/engine/planner.py"),
+                subsystem_id="subsystem::engine",
+                language="python",
+                functions=["build_plan"],
+            ),
+            HistoryModuleConcept(
+                concept_id="module::src/storage/repository.py",
+                lifecycle_status="active",
+                change_status="introduced",
+                first_seen_checkpoint="cp-1",
+                last_updated_checkpoint="cp-1",
+                path=Path("src/storage/repository.py"),
+                subsystem_id="subsystem::storage",
+                language="python",
+                classes=["StateRepository"],
+            ),
+        ],
+    )
+    section = HistorySectionPlan(
+        section_id="architectural_overview",
+        title="Architectural Overview",
+        kind="core",
+        status="included",
+        confidence_score=90,
+        evidence_score=5,
+        depth="standard",
+    )
+
+    focus = _architecture_focus(
+        section=section,
+        checkpoint_model=checkpoint_model,
+        hide_internal_ids=True,
+    )
+
+    assert focus["rewrite_goal"]
+    subsystem_profiles = focus["subsystem_profiles"]
+    assert subsystem_profiles[0]["display_name"] == "API"
+    assert subsystem_profiles[0]["architectural_role"] == "request-entry boundary"
+    assert (
+        subsystem_profiles[1]["architectural_role"] == "planning and coordination layer"
+    )
+    assert subsystem_profiles[2]["boundary_kind"] == "persistence boundary"
+    assert "concept_id" not in subsystem_profiles[0]
+    assert focus["relationship_hints"] == [
+        {
+            "from_subsystem": "API",
+            "to_subsystem": "Engine",
+            "relationship": "fronts",
+            "summary": "API presents the request-entry boundary while Engine handles downstream planning work.",
+        },
+        {
+            "from_subsystem": "Engine",
+            "to_subsystem": "Storage",
+            "relationship": "coordinates_with",
+            "summary": "Engine acts as the coordination layer while Storage provides the persistence boundary for project state.",
+        },
+    ]
+
+
+def test_dependency_narratives_shadow_normalizes_tbd_prefixes() -> None:
+    shadow = build_dependency_narratives_shadow(
+        checkpoint_id="cp-1",
+        target_commit="deadbeef",
+        previous_checkpoint_commit=None,
+        entries=[
+            HistoryDependencyEntry(
+                dependency_id="dependency::python::requests",
+                display_name="requests",
+                normalized_name="requests",
+                ecosystem="python",
+                source_manifest_paths=[Path("pyproject.toml")],
+                source_dependency_concept_ids=["dependency-source::pyproject.toml"],
+                scope_roles=["runtime"],
+                section_target="dependencies",
+                general_description="TBD: requests is used for outbound HTTP calls.",
+                project_usage_description="TBD - exact call sites are not strongly evidenced.",
+            )
+        ],
+    )
+
+    assert len(shadow.entries) == 1
+    entry = shadow.entries[0]
+    assert not entry.general_description.startswith("TBD")
+    assert not entry.project_usage_description.startswith("TBD")
+    assert entry.project_usage_description == (
+        "exact call sites are not strongly evidenced."
+    )
+
+
+def test_dependency_narratives_shadow_uses_subsystem_labels_in_fallback_usage() -> None:
+    shadow = build_dependency_narratives_shadow(
+        checkpoint_id="cp-1",
+        target_commit="deadbeef",
+        previous_checkpoint_commit=None,
+        subsystem_display_names={
+            "subsystem::src::api": "API",
+            "subsystem::web::frontend": "Frontend",
+        },
+        entries=[
+            HistoryDependencyEntry(
+                dependency_id="dependency::python::pytest",
+                display_name="pytest",
+                normalized_name="pytest",
+                ecosystem="python",
+                source_manifest_paths=[Path("pyproject.toml")],
+                source_dependency_concept_ids=["dependency-source::pyproject.toml"],
+                scope_roles=["development"],
+                section_target="build_development_infrastructure",
+                general_description="pytest is a Python test runner and assertion framework.",
+                project_usage_description="TBD",
+                related_subsystem_ids=[
+                    "subsystem::src::api",
+                    "subsystem::web::frontend",
+                ],
+            )
+        ],
+    )
+
+    assert len(shadow.entries) == 1
+    entry = shadow.entries[0]
+    assert entry.project_usage_description == ("linked subsystems: `API`, `Frontend`.")
+    assert "subsystem::" not in entry.project_usage_description
+
+
+def test_build_writes_quality_recovery_shadow_artifacts(tmp_path: Path) -> None:
+    repo_root, commits = _create_h14_repo(tmp_path)
+    output_root = tmp_path / "artifacts"
+    config_path = tmp_path / "project.yaml"
+    write_project_config(config_path, output_root, source_roots=["repo/src"])
+
+    result = build_history_docs_checkpoint(
+        project_config=load_project_config(config_path),
+        repo_root=repo_root,
+        checkpoint_commit=commits["head"],
+        previous_checkpoint_commit=commits["base"],
+        workspace_id="quality-recovery",
+    )
+
+    assert result.dependency_narratives_shadow_path is not None
+    assert result.dependency_narratives_shadow_path.exists()
+    assert result.targeted_section_rewrites_path is not None
+    assert result.targeted_section_rewrites_path.exists()
+    assert result.checkpoint_targeted_rewrite_markdown_path is not None
+    assert result.checkpoint_targeted_rewrite_markdown_path.exists()
+
+
+def test_targeted_rewrite_keeps_dependency_sections_deterministic(
+    tmp_path: Path,
+    sample_project_config,
+) -> None:
+    repo_root, commits = _create_h14_repo(tmp_path)
+    sample_project_config.workspace.output_root = tmp_path / "artifacts"
+    sample_project_config.sources.roots = [repo_root / "src"]
+
+    result = build_history_docs_checkpoint(
+        project_config=sample_project_config,
+        repo_root=repo_root,
+        checkpoint_commit=commits["head"],
+        previous_checkpoint_commit=commits["base"],
+        workspace_id="repo-h14-targeted",
+        subsystem_grouping_mode="semantic",
+        experimental_section_mode="semantic_context",
+        narrative_render_mode="targeted_llm_rewrite",
+        llm_client_override=_RepairingH14Client(),
+    )
+
+    targeted_markdown = result.checkpoint_markdown_path.read_text(encoding="utf-8")
+    targeted_validation = result.validation_report_path.read_text(encoding="utf-8")
+    tool_root = (
+        sample_project_config.workspace.output_root
+        / "workspaces"
+        / "repo-h14-targeted"
+        / "tools"
+        / "history_docs"
+    )
+
+    assert (
+        result.checkpoint_markdown_path
+        == build_checkpoint_targeted_rewrite_markdown_path(
+            tool_root,
+            result.checkpoint_id,
+        )
+    )
+    assert "### requests" in targeted_markdown
+    assert targeted_markdown.count("### requests") == 1
+    assert "TBD:" not in targeted_markdown
+    assert "TBD -" not in targeted_markdown
+    assert "dependency_subsection_shape_invalid" not in targeted_validation
+    assert "contradictory_tbd_phrase" not in targeted_validation
 
 
 def test_h14_shadow_artifacts_are_written_and_baseline_remains_authoritative(

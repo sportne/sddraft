@@ -181,8 +181,12 @@ Rules:
 - do not invent section ids, concept ids, algorithm capsule ids, insight ids, capability ids, design-note ids, or evidence links
 - use only ids and references that appear in the supplied evidence
 - write present-state documentation, not release notes
+- never echo raw internal identifiers such as subsystem::... or module::... into the prose
 - avoid raw speculation; if evidence is weak, keep the prose conservative and use TBD sparingly
 - keep the section scoped to the supplied section metadata and evidence pack
+- when architecture-focused evidence is present, explain subsystem roles, boundaries, and relationships
+- prefer one representative module or symbol over count-heavy inventory language
+- do not foreground file counts, symbol counts, or directory-shape metadata in reader-facing prose
 Return valid JSON that matches the provided schema.
 """.strip()
 
@@ -200,6 +204,7 @@ Rules:
 - severity must be low, medium, or high
 - review the draft as a present-state design document, not as release notes
 - do not rewrite markdown directly; describe findings and revision goals only
+- prefer concrete section ids for repairable findings whenever the evidence supports one
 - prefer fewer conservative findings over speculative criticism
 Return valid JSON that matches the provided schema.
 """.strip()
@@ -211,6 +216,7 @@ Rules:
 - return markdown body text only; do not include the section heading
 - do not invent section ids, finding ids, concept ids, algorithm capsule ids, insight ids, capability ids, design-note ids, or evidence links
 - address only the supplied findings for this section
+- never echo raw internal identifiers such as subsystem::... or module::... into the prose
 - keep the revised prose present-state, concise, and evidence-backed
 - fix unsupported or weak claims conservatively; use TBD only when evidence is genuinely weak
 Return valid JSON that matches the provided schema.

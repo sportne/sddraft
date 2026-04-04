@@ -6,6 +6,9 @@ from collections import Counter
 from pathlib import Path
 
 from engllm.domain.errors import RenderingError
+from engllm.tools.history_docs.dependency_narratives_shadow import (
+    grouped_tooling_entries,
+)
 from engllm.tools.history_docs.models import (
     HistoryAlgorithmCapsule,
     HistoryAlgorithmCapsuleEnrichment,
@@ -16,6 +19,8 @@ from engllm.tools.history_docs.models import (
     HistoryDependencyEntry,
     HistoryDependencyInventory,
     HistoryDependencyLandscape,
+    HistoryDependencyNarrativeShadow,
+    HistoryDependencyNarrativeShadowEntry,
     HistoryInterfaceInventory,
     HistoryModuleConcept,
     HistoryRenderedSection,
@@ -247,6 +252,12 @@ def _module_map(
     return by_id, by_subsystem
 
 
+def _subsystem_map(
+    subsystems: list[HistorySubsystemConcept],
+) -> dict[str, HistorySubsystemConcept]:
+    return {subsystem.concept_id: subsystem for subsystem in subsystems}
+
+
 def _capsule_map(
     capsules: list[HistoryAlgorithmCapsule],
 ) -> dict[str, HistoryAlgorithmCapsule]:
@@ -288,10 +299,13 @@ def _artifact_paths_for_section(
     ) = None,
     uses_interface_inventory: bool = False,
     uses_dependency_landscape: bool = False,
+    uses_dependency_narratives_shadow: bool = False,
 ) -> list[Path]:
     paths = [Path("checkpoint_model.json"), Path("section_outline.json")]
     if dependency_ids:
         paths.append(Path("dependencies.json"))
+    if uses_dependency_narratives_shadow:
+        paths.append(Path("dependency_narratives_shadow.json"))
     if uses_semantic_context:
         paths.append(Path("semantic_context_map.json"))
     if uses_interface_inventory:
@@ -346,7 +360,64 @@ def _summary_line_for_module(module: HistoryModuleConcept) -> str:
 
 def _dependency_paragraph(value: str) -> str:
     text = value.strip() or "TBD"
+    if text.lower().startswith("tbd - "):
+        text = text[6:].strip() or "TBD"
+    elif text.lower().startswith("tbd:"):
+        text = text[4:].strip() or "TBD"
     return text
+
+
+def _dependency_narrative_entry_map(
+    shadow: HistoryDependencyNarrativeShadow | None,
+) -> dict[str, HistoryDependencyNarrativeShadowEntry]:
+    if shadow is None:
+        return {}
+    return {entry.dependency_id: entry for entry in shadow.entries}
+
+
+def _module_label(
+    module_id: str, modules_by_id: dict[str, HistoryModuleConcept]
+) -> str:
+    module = modules_by_id.get(module_id)
+    if module is None:
+        return module_id
+    return module.path.as_posix()
+
+
+def _subsystem_labels(
+    subsystem_ids: list[str],
+    subsystem_by_id: dict[str, HistorySubsystemConcept],
+) -> str:
+    labels = [
+        subsystem_by_id[subsystem_id].display_name
+        or subsystem_by_id[subsystem_id].group_path.as_posix()
+        for subsystem_id in subsystem_ids
+        if subsystem_id in subsystem_by_id
+    ]
+    return ", ".join(f"`{label}`" for label in labels)
+
+
+def _context_node_titles(
+    semantic_context_map: HistorySemanticContextMap | None,
+) -> dict[str, str]:
+    if semantic_context_map is None:
+        return {}
+    return {node.node_id: node.title for node in semantic_context_map.context_nodes}
+
+
+def _shadow_dependency_paragraphs(
+    entry: HistoryDependencyEntry,
+    shadow_entry: HistoryDependencyNarrativeShadowEntry | None,
+) -> tuple[str, str]:
+    if shadow_entry is None:
+        return (
+            _dependency_paragraph(entry.general_description),
+            _dependency_paragraph(entry.project_usage_description),
+        )
+    project_usage = shadow_entry.project_usage_description
+    if shadow_entry.project_usage_basis == "tbd":
+        project_usage = "Project-specific usage is not strongly evidenced by the current manifests and import signals."
+    return (shadow_entry.general_description, project_usage)
 
 
 def _render_introduction(
@@ -461,6 +532,7 @@ def _render_subsystems_modules(
 def _render_algorithms_core_logic(
     capsules: list[HistoryAlgorithmCapsule],
     modules_by_id: dict[str, HistoryModuleConcept],
+    subsystem_by_id: dict[str, HistorySubsystemConcept],
     enrichment_by_id: dict[str, HistoryAlgorithmCapsuleEnrichment] | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
@@ -479,7 +551,7 @@ def _render_algorithms_core_logic(
         if capsule.related_subsystem_ids:
             bullets.append(
                 "Related subsystems: "
-                + ", ".join(f"`{item}`" for item in capsule.related_subsystem_ids)
+                + _subsystem_labels(capsule.related_subsystem_ids, subsystem_by_id)
                 + "."
             )
         if capsule.related_module_ids:
@@ -564,6 +636,7 @@ def _render_algorithms_core_logic(
 def _render_dependency_section(
     entries: list[HistoryDependencyEntry],
     dependency_landscape: HistoryDependencyLandscape | None = None,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
@@ -583,13 +656,18 @@ def _render_dependency_section(
             ],
         )
     rendered_dependency_ids: list[str] = []
+    shadow_entry_by_id = _dependency_narrative_entry_map(dependency_narratives_shadow)
     for entry in entries:
         rendered_dependency_ids.append(entry.dependency_id)
         lines.append(f"### {entry.display_name}")
         lines.append("")
         subheading_count += 1
-        _paragraph(lines, _dependency_paragraph(entry.general_description))
-        _paragraph(lines, _dependency_paragraph(entry.project_usage_description))
+        general_description, project_usage = _shadow_dependency_paragraphs(
+            entry,
+            shadow_entry_by_id.get(entry.dependency_id),
+        )
+        _paragraph(lines, _dependency_paragraph(general_description))
+        _paragraph(lines, _dependency_paragraph(project_usage))
     return lines, [], rendered_dependency_ids, subheading_count
 
 
@@ -598,6 +676,7 @@ def _render_build_infrastructure(
     active_dependencies: list[HistoryDependencyConcept],
     entries: list[HistoryDependencyEntry],
     dependency_landscape: HistoryDependencyLandscape | None = None,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     subheading_count = 0
@@ -638,13 +717,70 @@ def _render_build_infrastructure(
         )
 
     rendered_dependency_ids: list[str] = []
+    shadow_entry_by_id = _dependency_narrative_entry_map(dependency_narratives_shadow)
+    grouped_shadow_entries = grouped_tooling_entries(
+        dependency_narratives_shadow
+        or HistoryDependencyNarrativeShadow(
+            checkpoint_id="",
+            target_commit="",
+            previous_checkpoint_commit=None,
+            entries=[],
+        ),
+        section_target="build_development_infrastructure",
+    )
+    grouped_ids = {
+        entry.dependency_id
+        for values in grouped_shadow_entries.values()
+        for entry in values
+    }
     for entry in entries:
+        if entry.dependency_id in grouped_ids:
+            rendered_dependency_ids.append(entry.dependency_id)
+            continue
         rendered_dependency_ids.append(entry.dependency_id)
         lines.append(f"### {entry.display_name}")
         lines.append("")
         subheading_count += 1
-        _paragraph(lines, _dependency_paragraph(entry.general_description))
-        _paragraph(lines, _dependency_paragraph(entry.project_usage_description))
+        general_description, project_usage = _shadow_dependency_paragraphs(
+            entry,
+            shadow_entry_by_id.get(entry.dependency_id),
+        )
+        _paragraph(lines, _dependency_paragraph(general_description))
+        _paragraph(lines, _dependency_paragraph(project_usage))
+    for title, grouped_entries in grouped_shadow_entries.items():
+        lines.append(f"### {title}")
+        lines.append("")
+        subheading_count += 1
+        ecosystems = sorted(
+            {
+                entry.ecosystem
+                for entry in grouped_entries
+                if entry.ecosystem != "unknown"
+            }
+        )
+        ecosystem_text = (
+            f" across {', '.join(f'`{ecosystem}`' for ecosystem in ecosystems)} ecosystems"
+            if ecosystems
+            else ""
+        )
+        _paragraph(
+            lines,
+            "This grouped tooling summary covers low-evidence support packages"
+            + ecosystem_text
+            + " that shape the current developer workflow.",
+        )
+        package_summaries = []
+        for shadow_group_entry in grouped_entries:
+            shadow_entry = shadow_entry_by_id[shadow_group_entry.dependency_id]
+            package_summaries.append(
+                f"`{shadow_group_entry.display_name}` ({shadow_entry.general_description})"
+            )
+        _paragraph(
+            lines,
+            "Included packages: "
+            + ", ".join(package_summaries)
+            + ". Project-specific usage is not strongly evidenced by the current manifests and import signals.",
+        )
     return lines, [], rendered_dependency_ids, subheading_count
 
 
@@ -724,6 +860,8 @@ def _render_token_section(
 def _render_system_context(
     *,
     semantic_context_map: HistorySemanticContextMap,
+    subsystem_by_id: dict[str, HistorySubsystemConcept],
+    modules_by_id: dict[str, HistoryModuleConcept],
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
     _paragraph(
@@ -740,12 +878,17 @@ def _render_system_context(
             (
                 f"`{node.title}` ({node.kind}): {node.summary}"
                 + (
-                    f" Related subsystems: {', '.join(f'`{item}`' for item in node.related_subsystem_ids)}."
+                    f" Related subsystems: {_subsystem_labels(node.related_subsystem_ids, subsystem_by_id)}."
                     if node.related_subsystem_ids
                     else ""
                 )
                 + (
-                    f" Related modules: {', '.join(f'`{item}`' for item in node.related_module_ids[:6])}."
+                    " Related modules: "
+                    + ", ".join(
+                        f"`{_module_label(item, modules_by_id)}`"
+                        for item in node.related_module_ids[:6]
+                    )
+                    + "."
                     if node.related_module_ids
                     else ""
                 )
@@ -760,6 +903,8 @@ def _render_interfaces(
     *,
     semantic_context_map: HistorySemanticContextMap,
     modules_by_id: dict[str, HistoryModuleConcept],
+    subsystem_by_id: dict[str, HistorySubsystemConcept],
+    context_titles_by_id: dict[str, str],
     interface_inventory: HistoryInterfaceInventory | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     lines: list[str] = []
@@ -777,9 +922,9 @@ def _render_interfaces(
             if inventory_interface.provider_subsystem_ids:
                 bullets.append(
                     "Providers: "
-                    + ", ".join(
-                        f"`{item}`"
-                        for item in inventory_interface.provider_subsystem_ids
+                    + _subsystem_labels(
+                        inventory_interface.provider_subsystem_ids,
+                        subsystem_by_id,
                     )
                     + "."
                 )
@@ -787,7 +932,7 @@ def _render_interfaces(
                 bullets.append(
                     "Consumers: "
                     + ", ".join(
-                        f"`{item}`"
+                        f"`{context_titles_by_id.get(item, item)}`"
                         for item in inventory_interface.consumer_context_node_ids
                     )
                     + "."
@@ -837,13 +982,16 @@ def _render_interfaces(
         if interface.provider_subsystem_ids:
             bullets.append(
                 "Providers: "
-                + ", ".join(f"`{item}`" for item in interface.provider_subsystem_ids)
+                + _subsystem_labels(interface.provider_subsystem_ids, subsystem_by_id)
                 + "."
             )
         if interface.consumer_context_node_ids:
             bullets.append(
                 "Consumers: "
-                + ", ".join(f"`{item}`" for item in interface.consumer_context_node_ids)
+                + ", ".join(
+                    f"`{context_titles_by_id.get(item, item)}`"
+                    for item in interface.consumer_context_node_ids
+                )
                 + "."
             )
         if interface.related_module_ids:
@@ -961,11 +1109,14 @@ def _render_section_content(
     ) = None,
     interface_inventory: HistoryInterfaceInventory | None = None,
     dependency_landscape: HistoryDependencyLandscape | None = None,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
 ) -> tuple[list[str], list[str], list[str], int]:
     active_subsystems = _active_subsystems(checkpoint_model)
     active_modules = _active_modules(checkpoint_model)
     active_dependencies = _active_dependencies(checkpoint_model)
     modules_by_id, modules_by_subsystem = _module_map(active_modules)
+    subsystem_by_id = _subsystem_map(active_subsystems)
+    context_titles_by_id = _context_node_titles(semantic_context_map)
     enrichment_by_id = _algorithm_enrichment_map(algorithm_capsule_enrichments)
 
     if section.section_id == "introduction":
@@ -980,25 +1131,33 @@ def _render_section_content(
     if section.section_id == "architectural_overview":
         return _render_architectural_overview(active_subsystems)
     if section.section_id == "system_context" and semantic_context_map is not None:
-        return _render_system_context(semantic_context_map=semantic_context_map)
+        return _render_system_context(
+            semantic_context_map=semantic_context_map,
+            subsystem_by_id=subsystem_by_id,
+            modules_by_id=modules_by_id,
+        )
     if section.section_id == "subsystems_modules":
         return _render_subsystems_modules(active_subsystems, modules_by_subsystem)
     if section.section_id == "interfaces" and semantic_context_map is not None:
         return _render_interfaces(
             semantic_context_map=semantic_context_map,
             modules_by_id=modules_by_id,
+            subsystem_by_id=subsystem_by_id,
+            context_titles_by_id=context_titles_by_id,
             interface_inventory=interface_inventory,
         )
     if section.section_id == "algorithms_core_logic":
         return _render_algorithms_core_logic(
             capsules,
             modules_by_id,
+            subsystem_by_id,
             enrichment_by_id,
         )
     if section.section_id == "dependencies":
         return _render_dependency_section(
             _dependency_entries_for_target(dependency_inventory, "dependencies"),
             dependency_landscape=dependency_landscape,
+            dependency_narratives_shadow=dependency_narratives_shadow,
         )
     if section.section_id == "build_development_infrastructure":
         return _render_build_infrastructure(
@@ -1008,6 +1167,7 @@ def _render_section_content(
                 "build_development_infrastructure",
             ),
             dependency_landscape=dependency_landscape,
+            dependency_narratives_shadow=dependency_narratives_shadow,
         )
     if section.section_id == "strategy_variants_design_alternatives":
         return _render_strategy_variants(capsules, enrichment_by_id)
@@ -1044,6 +1204,7 @@ def render_checkpoint_markdown(
     semantic_context_map: HistorySemanticContextMap | None = None,
     interface_inventory: HistoryInterfaceInventory | None = None,
     dependency_landscape: HistoryDependencyLandscape | None = None,
+    dependency_narratives_shadow: HistoryDependencyNarrativeShadow | None = None,
 ) -> tuple[str, HistoryRenderManifest]:
     """Render deterministic checkpoint markdown and its debug manifest."""
 
@@ -1087,6 +1248,7 @@ def render_checkpoint_markdown(
             algorithm_capsule_enrichments=algorithm_capsule_enrichments,
             interface_inventory=interface_inventory,
             dependency_landscape=dependency_landscape,
+            dependency_narratives_shadow=dependency_narratives_shadow,
         )
         lines.extend(section_lines)
         if section_lines and section_lines[-1] != "":
@@ -1141,6 +1303,11 @@ def render_checkpoint_markdown(
                         section.section_id
                         in {"dependencies", "build_development_infrastructure"}
                         and dependency_landscape is not None
+                    ),
+                    uses_dependency_narratives_shadow=(
+                        section.section_id
+                        in {"dependencies", "build_development_infrastructure"}
+                        and dependency_narratives_shadow is not None
                     ),
                 ),
                 subheading_count=subheading_count,

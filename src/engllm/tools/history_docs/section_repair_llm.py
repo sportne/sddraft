@@ -47,6 +47,14 @@ _FINDING_KIND_PRIORITY = {
     "weak_prose": 4,
 }
 _MAX_REPAIRED_SECTIONS = 4
+_TARGETED_REPAIR_SECTION_IDS: set[HistorySectionPlanId] = {
+    "architectural_overview",
+    "system_context",
+    "subsystems_modules",
+    "interfaces",
+    "dependencies",
+    "build_development_infrastructure",
+}
 
 
 def section_repairs_path(tool_root: Path, checkpoint_id: str) -> Path:
@@ -122,11 +130,14 @@ def _select_repair_sections(
     preferred = [
         section_id
         for section_id in review.recommended_repair_section_ids
-        if section_id in grouped
+        if section_id in grouped and section_id in _TARGETED_REPAIR_SECTION_IDS
     ]
     ordered_unique: list[HistorySectionPlanId] = []
     for section_id in [*preferred, *ranked]:
-        if section_id not in ordered_unique:
+        if (
+            section_id not in ordered_unique
+            and section_id in _TARGETED_REPAIR_SECTION_IDS
+        ):
             ordered_unique.append(section_id)
     return ordered_unique[:_MAX_REPAIRED_SECTIONS]
 
